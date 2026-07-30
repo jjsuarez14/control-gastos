@@ -641,25 +641,26 @@ function buildMonthPagos(id){
   // — mismo patrón que "Enviar a Caixa"/"Enviar a TR Jofre".
   if(arrCat&&arrCat.a>0)malaraSum+=arrCat.a;
   itemsForKey('colegio',id).forEach(it=>handleTaggedItem('Colegio · '+it.l,it.tag,it.a));
+  const efectivoItems=[]; // {label, total, inc}
   itemsForKey('servicios',id).forEach(it=>{
     if(it.l==='Luz'){if(it.a>0)malaraSum+=it.a;return;}
-    if(Array.isArray(it.taskSplit)&&it.taskSplit.length){
-      let parts=it.taskSplit;
-      const sum=parts.reduce((s,x)=>s+x,0);
-      if(Math.abs(sum-it.a)>0.01){
-        // el total se editó en Servicios (línea única) — prorratear en partes iguales
-        const n=parts.length;const base=Math.round((it.a/n)*100)/100;
-        parts=parts.map((_,i)=>i===n-1?Math.round((it.a-base*(n-1))*100)/100:base);
-      }
-      parts.forEach((amt,i)=>handleTaggedItem(it.l+' ('+(i+1)+'/'+parts.length+')',it.tag,amt));
-    }else{
-      handleTaggedItem(it.l,it.tag,it.a);
-    }
+    if(it.tag==='EFECTIVO'){ if(it.a>0)efectivoItems.push({label:it.l,total:it.a,inc:it.efInc||30}); return; }
+    handleTaggedItem(it.l,it.tag,it.a);
   });
-  itemsForKey('gimnasios',id).forEach(it=>handleTaggedItem(it.l,it.tag,it.a));
-  let efectivoSum=0;
+  // Gimnasio On Air (desde agosto): se paga como tarea única de €44 en Caixa
+  // (Jofre €22 + Massiel €22). Massiel reembolsa su mitad vía Bizum, no como
+  // tarea individual. Las 2 líneas se mantienen en el detalle por si cambia.
+  {
+    const gimItems=itemsForKey('gimnasios',id);
+    const onairItems=gimItems.filter(it=>/on air/i.test(it.l||'')&&!it.tag);
+    if(onairItems.length){
+      const totalOnair=Math.round(onairItems.reduce((s,it)=>s+(it.a||0),0)*100)/100;
+      if(totalOnair>0)pushDirect('On Air Nuevo Centro ('+totalOnair+'€)','CAIXA',totalOnair);
+    }
+    gimItems.forEach(it=>{ if(!(/on air/i.test(it.l||'')&&!it.tag)) handleTaggedItem(it.l,it.tag,it.a); });
+  }
   itemsForKey('personales',id).forEach(it=>{
-    if(it.tag==='EFECTIVO'){if(it.a>0)efectivoSum+=it.a;return;}
+    if(it.tag==='EFECTIVO'){ if(it.a>0)efectivoItems.push({label:it.l,total:it.a,inc:it.efInc||10}); return; }
     handleTaggedItem(it.l,it.tag,it.a);
   });
   cuotasFor(id).forEach(c=>{
@@ -670,6 +671,19 @@ function buildMonthPagos(id){
   const renting=ahorroItems.find(x=>x.l==='Renting');
   if(renting&&renting.a>0)caixaSum+=renting.a;
   pushDirect('Renting','CAIXA',RENTING_MENSUAL);
+  // Efectivo dinámico: cada ítem (Barbería/Limpieza) genera N tareas = total/inc en la cuenta EFECTIVO;
+  // 'Retirar efectivo' (BBVA) = suma total de todo el efectivo del mes.
+  let efectivoSum=0;
+  efectivoItems.forEach(ei=>{
+    const inc=ei.inc>0?ei.inc:ei.total;
+    const nTareas=Math.max(1,Math.round(ei.total/inc));
+    for(let i=0;i<nTareas;i++){
+      const nombre=nTareas>1?(ei.label+' ('+(i+1)+'/'+nTareas+')'):ei.label;
+      pushDirect(nombre,'EFECTIVO',inc);
+    }
+    efectivoSum+=ei.total;
+  });
+  efectivoSum=Math.round(efectivoSum*100)/100;
   if(efectivoSum>0)pushDirect('Retirar efectivo','BBVA',efectivoSum,{cat:'retiro'});
   const emerg=ahorroItems.find(x=>/Fondo Emergencia/.test(x.l));
   if(emerg&&emerg.a>0)pushDirect('Enviar a TR J.A.','BBVA',emerg.a,{cat:'enviar'});
@@ -788,7 +802,7 @@ function serviciosBaseFresh(id){
     // Se ve como UNA sola línea de €60 en Servicios (y en el total de la
     // categoría); taskSplit indica que las TAREAS ("Enviar a...") sí deben
     // salir como 2 pagos independientes de €30 — solo afecta buildMonthPagos.
-    list.push({id:'svc-limp',l:'Limpieza · Hogar',a:60,d:'Variable · BBVA',tag:'BBVA',taskSplit:[30,30]});
+    list.push({id:'svc-limp',l:'Limpieza · Hogar',a:30,d:'Variable · Efectivo',tag:'EFECTIVO',efInc:30});
   }
   return list;
 }
@@ -910,6 +924,9 @@ const DET_MONTH_OVERRIDES={
       {id:'aho3',l:'Fondo Mutuo (TR Jofre)',a:100,d:'TR Jofre · confirmado'},
       {id:'aho-renting-jul',l:'Renting',a:400,d:'Caixa'}
     ],
+    ago:[
+      {id:'aho-vacaciones-ago',l:'Fondo Mutuo · Vacaciones',a:600,d:'TR Jofre · 100% (excepción agosto)'}
+    ],
     sep:[
       {id:'aho-caixa-sep',l:'Renting',a:400,d:'Caixa'},
       {id:'aho-emerg-sep',l:'Fondo Emergencia',a:150,d:'TR J.A. · 50% del resto'},
@@ -918,13 +935,18 @@ const DET_MONTH_OVERRIDES={
     ]
   },
   gimnasios:{jul:[
-    {id:'gym1',l:'Sweat · Jofre',a:65,d:'Solo Jofre · TR Jofre',tag:'TR'},
-    {id:'gym2',l:'Gym · Massiel',a:72,d:'Solo Massiel',tag:null}
+    {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · TR Jofre',tag:'TR'},
+    {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel',tag:null}
+  ],ago:[
+    {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · Caixa',tag:null},
+    {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel · Caixa · vía Bizum',tag:null}
   ]},
   colegio:{jul:[
     {id:'col1',l:'Mensualidad',a:285.50,d:'Base mensual',tag:'BBVA'},
     {id:'col-aum-jul',l:'Aumento mensualidad',a:30,d:'Julio',tag:'BBVA'},
     {id:'col4',l:'Piscina',a:40,d:'Verano',tag:'BBVA'}
+  ],ago:[
+    {id:'col-extra-ago',l:'Extraescolar',a:40,d:'Matrícula · agosto (sin mensualidad de curso)',tag:'BBVA'}
   ]},
   variables:{jul:[{id:'var-jul',l:'Compras / Varios',a:354.62,d:'Massiel €80,80 · Jofre €273,82 · detalle completo en Base 07/26',fixed:true}]}
 };
@@ -1044,8 +1066,8 @@ function recalcMonthTotals(id){
 const DET={
   serviciosBase:[{id:'svc1',l:'YouTube',a:12,d:'CLP via Massiel',tag:null,group:'suscripciones'},{id:'svc2',l:'iCloud',a:2.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc3',l:'Amazon Prime',a:4.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc4',l:'Disney+',a:6.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc5',l:'Netflix',a:6.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc-claude',l:'Claude',a:18,d:'Solo Jofre · CB',tag:'CB',group:'suscripciones',personalSplit:'jofre'},{id:'svc6',l:'DIGI · Internet',a:25.06,d:'CB',tag:'CB'},{id:'svc7',l:'TuAwa',a:29.99,d:'Filtrada',tag:'BBVA'},{id:'svc8',l:'Luz',a:71.38,d:'Variable',tag:'BBVA'}],
   colegio:[{id:'col1',l:'Mensualidad',a:285.50,d:'Base mensual',tag:'BBVA'},{id:'col2',l:'Proyecto Escolar',a:0,d:'Variable',tag:'BBVA'},{id:'col3',l:'Comedor',a:0,d:'Variable',tag:'BBVA'},{id:'col4',l:'Piscina',a:40,d:'Verano',tag:'BBVA'},{id:'col5',l:'Extraescolar',a:0,d:'Cuando aplique',tag:'BBVA'}],
-  gimnasios:[{id:'gym1',l:'Sweat · Jofre',a:80,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'},{id:'gym2',l:'Gym · Massiel',a:72,d:'Solo Massiel',tag:null,group:'massiel'}],
-  personales:[{id:'per1',l:'Barbería · Jofre',a:40,d:'Solo Jofre · Efectivo',tag:'EFECTIVO',group:'jofre'},{id:'per2',l:'Uñas · Massiel',a:33,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per3',l:'Bono Transporte · Massiel',a:21,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per5',l:'Peluquería J.A.',a:0,d:'Compartido 50/50 · se agrega cuando aplique',tag:null,group:'compartida'},{id:'per6',l:'GENUA · Fisio',a:50,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'}],
+  gimnasios:[{id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'},{id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel',tag:null,group:'massiel'}],
+  personales:[{id:'per1',l:'Barbería · Jofre',a:40,d:'Solo Jofre · Efectivo',tag:'EFECTIVO',efInc:10,group:'jofre'},{id:'per2',l:'Uñas · Massiel',a:33,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per3',l:'Bono Transporte · Massiel',a:21,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per5',l:'Peluquería J.A.',a:0,d:'Compartido 50/50 · se agrega cuando aplique',tag:null,group:'compartida'},{id:'per6',l:'GENUA · Fisio',a:50,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'}],
   remesas:[{id:'rem1',l:'Yoffre Suárez',a:125,d:'Solo Jofre'},{id:'rem2',l:'Zoraima Cueva',a:65,d:'Solo Jofre'}],
   ahorro:[{id:'aho1',l:'Fondo Emergencia (TR J.A.)',a:100,d:'TR J.A.'},{id:'aho2',l:'Inversión Hipoteca (TR)',a:140,d:'Trade Republic'},{id:'aho3',l:'Fondo Mutuo (TR Jofre)',a:160,d:'TR Jofre'},{id:'aho4',l:'Inversión Bolsa (IBKR)',a:0,d:'IBKR'}],
   variables:[{id:'var1',l:'Compartir Fam. / Varios',a:509.80,d:'Detalle completo en Base 06/26',fixed:true}]
@@ -1448,7 +1470,7 @@ function categoriaFijosDetalle(cat,id){
     if(genua&&(futuro||tareaEstaHecha(id,/^GENUA/i)))out.push({l:genua.l,a:genua.a,drill:null});
   }else if(cat==='Salud'){
     itemsForKey('gimnasios',id).filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>{
-      const patron=x.id==='gym1'?/^Sweat/i:null;
+      const patron=x.id==='gym1'?/^On Air/i:null;
       if(futuro||tareaEstaHecha(id,patron))out.push({l:x.l,a:x.a,drill:null});
     });
   }else if(cat==='Casa'){
@@ -2017,39 +2039,7 @@ function applyState(s){
   if(s.CAIXA_TDC)Object.assign(CAIXA_TDC,s.CAIXA_TDC);
   if(s.ytTCMes)Object.assign(ytTCMes,s.ytTCMes);
   if(typeof s.nominaReg==='boolean')nominaReg=s.nominaReg;
-  if(s.pagosByMonth)Object.keys(s.pagosByMonth).forEach(k=>{
-    // Fix (jul-30): antes se arrancaba de un array vacio, asumiendo que ya
-    // venia pre-poblado -- falso. Las tareas con id regenerable se guardan
-    // livianas ({id,done,amt}) confiando en que buildMonthPagos(k) aporte el
-    // resto (l/acc/cat). Sin este seed, el overlay liviano encontraba MONTH_PAGOS[k]
-    // vacio y caia al placeholder corrupto (l=id, cat:'ingreso', acc:'BBVA').
-    if(!MONTH_PAGOS[k]||!MONTH_PAGOS[k].length)MONTH_PAGOS[k]=buildMonthPagos(k);
-    s.pagosByMonth[k].forEach(sp=>{
-      let p=MONTH_PAGOS[k].find(x=>x.id===sp.id);
-      if(!p){
-        // Si el guardado trae l/acc/cat propios (item custom, guardado
-        // completo por el fix de arriba), se reconstruye tal cual -- nunca
-        // con placeholders inventados.
-        p=sp.l?{id:sp.id,l:sp.l,acc:sp.acc||'BBVA',amt:sp.amt,cat:sp.cat||'gasto',done:sp.done}:{id:sp.id,l:sp.id,acc:'BBVA',amt:sp.amt,cat:'ingreso',done:sp.done};
-        MONTH_PAGOS[k].push(p);
-      }
-      p.done=sp.done;if(sp.amt!=null)p.amt=sp.amt;
-      if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;
-    });
-  });
-  PAGOS=MONTH_PAGOS[ACTIVE_ID]||MONTH_PAGOS.jun;
-  // Deteccion de corrupcion (18-jul): antes del fix de v9.15, tareas custom
-  // podian guardarse con l=id, cat='ingreso', acc='BBVA'. El fix evita que
-  // esto vuelva a pasar, pero NO repara datos que ya hayan quedado asi
-  // guardados en Firestore antes del deploy -- el codigo no tiene forma de
-  // adivinar el label/cat/acc originales. Esto solo avisa, no corrige solo.
-  Object.keys(MONTH_PAGOS).forEach(k=>{
-    (MONTH_PAGOS[k]||[]).forEach(p=>{
-      if(p.l===p.id){
-        console.warn('[Corrupción MONTH_PAGOS] mes='+k+' id='+p.id+' -- l quedó igual al id (l:"'+p.l+'", cat:"'+p.cat+'", acc:"'+p.acc+'", amt:'+p.amt+'). Necesita corrección manual, el código no puede adivinar el valor original.');
-      }
-    });
-  });
+  // v14 (jul-30): el bloque pagosByMonth se movió al FINAL de applyState (ver nota abajo).
   if(s.massielDone)massielDone=s.massielDone;
   if(typeof s.massielYtAmt==='number')MASSIEL_TASKS[0].amt=s.massielYtAmt;
   if(s.HISTORIAL)HISTORIAL=s.HISTORIAL;
@@ -2086,6 +2076,36 @@ function applyState(s){
   snapshotMovsBaseline();
   snapshotDetBaseline();
   if(s.CUOTAS_NUEVAS){CUOTAS_NUEVAS.length=0;CUOTAS_NUEVAS.push(...s.CUOTAS_NUEVAS);}
+  // v14 (jul-30): bloque pagosByMonth movido hasta ACÁ. buildMonthPagos() depende de
+  // DET / DET_MONTH_OVERRIDES / DET_EXTRA / DET_MONTH_REMOVED, mCats/mCuotas y CUOTAS_NUEVAS.
+  // En v13 corría ANTES de cargar ese detalle, así que el seed no incluía las tareas
+  // derivadas del detalle (colegio, personales, etc.) y el overlay liviano de esas tareas
+  // caía al placeholder corrupto (l=id, cat:'ingreso', acc:'BBVA'). Ahora el seed se calcula
+  // con el detalle ya cargado y reconstruye correctamente todas las tareas.
+  if(s.pagosByMonth)Object.keys(s.pagosByMonth).forEach(k=>{
+    if(!MONTH_PAGOS[k]||!MONTH_PAGOS[k].length)MONTH_PAGOS[k]=buildMonthPagos(k);
+    s.pagosByMonth[k].forEach(sp=>{
+      let p=MONTH_PAGOS[k].find(x=>x.id===sp.id);
+      if(!p){
+        // Si el guardado trae l/acc/cat propios (item custom), se reconstruye tal cual --
+        // nunca con placeholders inventados.
+        p=sp.l?{id:sp.id,l:sp.l,acc:sp.acc||'BBVA',amt:sp.amt,cat:sp.cat||'gasto',done:sp.done}:{id:sp.id,l:sp.id,acc:'BBVA',amt:sp.amt,cat:'ingreso',done:sp.done};
+        MONTH_PAGOS[k].push(p);
+      }
+      p.done=sp.done;if(sp.amt!=null)p.amt=sp.amt;
+      if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;
+    });
+  });
+  PAGOS=MONTH_PAGOS[ACTIVE_ID]||MONTH_PAGOS.jun;
+  // Detección de corrupción: si tras sembrar (con detalle ya cargado) queda l===id, es un
+  // dato realmente irrecuperable por código. Ahora solo debería dispararse en casos genuinos.
+  Object.keys(MONTH_PAGOS).forEach(k=>{
+    (MONTH_PAGOS[k]||[]).forEach(p=>{
+      if(p.l===p.id){
+        console.warn('[Corrupción MONTH_PAGOS] mes='+k+' id='+p.id+' -- l quedó igual al id (l:"'+p.l+'", cat:"'+p.cat+'", acc:"'+p.acc+'", amt:'+p.amt+'). Necesita corrección manual, el código no puede adivinar el valor original.');
+      }
+    });
+  });
 }
 async function loadState(){
   try{
