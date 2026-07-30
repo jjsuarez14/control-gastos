@@ -669,8 +669,7 @@ function buildMonthPagos(id){
   });
   const ahorroItems=itemsForKey('ahorro',id);
   const renting=ahorroItems.find(x=>x.l==='Renting');
-  if(renting&&renting.a>0)caixaSum+=renting.a;
-  pushDirect('Renting','CAIXA',RENTING_MENSUAL);
+  if(renting&&renting.a>0){caixaSum+=renting.a;pushDirect('Renting','CAIXA',RENTING_MENSUAL);}
   // Efectivo dinámico: cada ítem (Barbería/Limpieza) genera N tareas = total/inc en la cuenta EFECTIVO;
   // 'Retirar efectivo' (BBVA) = suma total de todo el efectivo del mes.
   let efectivoSum=0;
@@ -946,7 +945,11 @@ const DET_MONTH_OVERRIDES={
     {id:'col-aum-jul',l:'Aumento mensualidad',a:30,d:'Julio',tag:'BBVA'},
     {id:'col4',l:'Piscina',a:40,d:'Verano',tag:'BBVA'}
   ],ago:[
-    {id:'col-extra-ago',l:'Extraescolar',a:40,d:'Matrícula · agosto (sin mensualidad de curso)',tag:'BBVA'}
+    {id:'col1',l:'Mensualidad',a:0,d:'Sin mensualidad en agosto',tag:'BBVA'},
+    {id:'col2',l:'Proyecto Escolar',a:0,d:'',tag:'BBVA'},
+    {id:'col3',l:'Comedor',a:0,d:'',tag:'BBVA'},
+    {id:'col4',l:'Piscina',a:0,d:'',tag:'BBVA'},
+    {id:'col5',l:'Extraescolar',a:40,d:'Matrícula · agosto',tag:'BBVA'}
   ]},
   variables:{jul:[{id:'var-jul',l:'Compras / Varios',a:354.62,d:'Massiel €80,80 · Jofre €273,82 · detalle completo en Base 07/26',fixed:true}]}
 };
@@ -1067,7 +1070,7 @@ const DET={
   serviciosBase:[{id:'svc1',l:'YouTube',a:12,d:'CLP via Massiel',tag:null,group:'suscripciones'},{id:'svc2',l:'iCloud',a:2.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc3',l:'Amazon Prime',a:4.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc4',l:'Disney+',a:6.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc5',l:'Netflix',a:6.99,d:'CB',tag:'CB',group:'suscripciones'},{id:'svc-claude',l:'Claude',a:18,d:'Solo Jofre · CB',tag:'CB',group:'suscripciones',personalSplit:'jofre'},{id:'svc6',l:'DIGI · Internet',a:25.06,d:'CB',tag:'CB'},{id:'svc7',l:'TuAwa',a:29.99,d:'Filtrada',tag:'BBVA'},{id:'svc8',l:'Luz',a:71.38,d:'Variable',tag:'BBVA'}],
   colegio:[{id:'col1',l:'Mensualidad',a:285.50,d:'Base mensual',tag:'BBVA'},{id:'col2',l:'Proyecto Escolar',a:0,d:'Variable',tag:'BBVA'},{id:'col3',l:'Comedor',a:0,d:'Variable',tag:'BBVA'},{id:'col4',l:'Piscina',a:40,d:'Verano',tag:'BBVA'},{id:'col5',l:'Extraescolar',a:0,d:'Cuando aplique',tag:'BBVA'}],
   gimnasios:[{id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'},{id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel',tag:null,group:'massiel'}],
-  personales:[{id:'per1',l:'Barbería · Jofre',a:40,d:'Solo Jofre · Efectivo',tag:'EFECTIVO',efInc:10,group:'jofre'},{id:'per2',l:'Uñas · Massiel',a:33,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per3',l:'Bono Transporte · Massiel',a:21,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per5',l:'Peluquería J.A.',a:0,d:'Compartido 50/50 · se agrega cuando aplique',tag:null,group:'compartida'},{id:'per6',l:'GENUA · Fisio',a:50,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'}],
+  personales:[{id:'per1',l:'Barbería · Jofre',a:40,d:'Solo Jofre · Efectivo',tag:'EFECTIVO',efInc:10,group:'jofre'},{id:'per2',l:'Uñas · Massiel',a:35,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per3',l:'Bono Transporte · Massiel',a:21,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per5',l:'Peluquería J.A.',a:0,d:'Compartido 50/50 · se agrega cuando aplique',tag:null,group:'compartida'},{id:'per6',l:'GENUA · Fisio',a:50,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'}],
   remesas:[{id:'rem1',l:'Yoffre Suárez',a:125,d:'Solo Jofre'},{id:'rem2',l:'Zoraima Cueva',a:65,d:'Solo Jofre'}],
   ahorro:[{id:'aho1',l:'Fondo Emergencia (TR J.A.)',a:100,d:'TR J.A.'},{id:'aho2',l:'Inversión Hipoteca (TR)',a:140,d:'Trade Republic'},{id:'aho3',l:'Fondo Mutuo (TR Jofre)',a:160,d:'TR Jofre'},{id:'aho4',l:'Inversión Bolsa (IBKR)',a:0,d:'IBKR'}],
   variables:[{id:'var1',l:'Compartir Fam. / Varios',a:509.80,d:'Detalle completo en Base 06/26',fixed:true}]
@@ -1328,7 +1331,27 @@ function renderHist(){
   body.innerHTML=html||`<div class="tp" style="cursor:default;text-align:center;padding:30px 16px"><i class="ti ti-archive-off" style="font-size:24px;color:var(--t3)"></i><div style="font-size:13px;color:var(--t2);margin-top:10px;font-weight:600">Sin datos aún</div></div>`;
 }
 function toast(msg,color){const c=document.createElement('div');c.style.cssText='position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:'+(color||'var(--tl)')+';color:#000;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:100;white-space:nowrap;pointer-events:none;';c.textContent=msg;document.getElementById('app').appendChild(c);setTimeout(()=>c.remove(),2400);}
-function massielTotal(){return parseEuro(MONTHS[ACTIVE_ID].massiel);}
+function massielTotal(){
+  // Calcula la parte de Massiel del mes activo desde las reglas reales.
+  // - 55/45 y 50/50: fracción del total de la categoría.
+  // - Split (Gimnasios, Personales): suma de ítems group='massiel' del detalle.
+  // - Solo Jofre: 0 para Massiel.
+  const id=ACTIVE_ID;const cats=(MONTHS[id]&&MONTHS[id].cats)||[];
+  let total=0;
+  cats.forEach(c=>{
+    if(c.rule==='Split'){
+      const key=c.l==='Gimnasios'?'gimnasios':(c.l==='Personales'?'personales':null);
+      if(key){
+        const suma=itemsForKey(key,id).filter(x=>x.group==='massiel').reduce((s,x)=>s+(x.a||0),0);
+        total+=suma;
+      }
+    }else{
+      const sp=splitAmount(c.rule,c.a);
+      if(sp)total+=sp.massiel;
+    }
+  });
+  return Math.round(total*100)/100;
+}
 const MASSIEL_TASKS=[
   {id:'m-yt',l:'Pago YouTube',sub:'11.000 CLP · vía Massiel',amt:12.00},
   {id:'m-rem',l:'Remesas Jofre',sub:'€190 en pesos chilenos',amt:190.00},
@@ -1350,6 +1373,8 @@ function syncMassielTaskAmounts(id){
   const mrcTask=MASSIEL_TASKS.find(t=>t.id==='m-mrc');
   const mrcCat=(MONTHS[id].cats||[]).find(c=>c.l==='Mercado');
   if(mrcTask&&mrcCat)mrcTask.amt=mrcCat.a;
+  const ytTask=MASSIEL_TASKS.find(t=>t.id==='m-yt');
+  if(ytTask){const tc=ytTCMes[id];ytTask.amt=tc?Math.round((11000/tc)*100)/100:12.00;}
   const perTask=MASSIEL_TASKS.find(t=>t.id==='m-per');
   if(perTask){
     // Solo lo que es 100% de ella: grupo "massiel" en Personales (Uñas,
@@ -1357,8 +1382,13 @@ function syncMassielTaskAmounts(id){
     // compartido (Peluquería J.A.) NO entra acá — ya suma a su aporte
     // total vía el split 50/50 normal, así que termina reflejado en el
     // Bizum, no restado como "gasto personal".
+    // Personales que Massiel paga POR SU CUENTA (separado del Bizum): solo
+    // ítems group='massiel' en Personales SIN tag de cuenta compartida (Uñas,
+    // Bono Transporte). El gimnasio de Massiel entra aquí SOLO si ella lo paga
+    // directo (item con d que NO contenga 'Bizum'); si es On Air compartido
+    // (marcado 'vía Bizum'), su parte va dentro del Bizum, no como pago propio.
     const perMassiel=itemsForKey('personales',id).filter(x=>x.group==='massiel').reduce((s,x)=>s+x.a,0);
-    const gymMassiel=itemsForKey('gimnasios',id).filter(x=>x.group==='massiel').reduce((s,x)=>s+x.a,0);
+    const gymMassiel=itemsForKey('gimnasios',id).filter(x=>x.group==='massiel'&&!/bizum/i.test(x.d||'')).reduce((s,x)=>s+x.a,0);
     perTask.amt=Math.round((perMassiel+gymMassiel)*100)/100;
   }
 }
