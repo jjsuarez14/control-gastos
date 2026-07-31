@@ -2126,6 +2126,27 @@ function applyState(s){
       if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;
     });
   });
+  // ── Auto-saneamiento (v16): corrige datos custom viejos que la lógica nueva ya no debe
+  //    producir, para no depender de limpieza manual por consola. Idempotente.
+  Object.keys(MONTH_PAGOS).forEach(k=>{
+    let arr=MONTH_PAGOS[k]||[];
+    // 1) Nike: label de cuota correcto (compra de 3 cuotas: ago=2/3, sep=3/3)
+    arr.forEach(p=>{
+      if(/nike/i.test(p.l||'')&&Math.abs((p.amt||0)-27.49)<0.6){
+        if(k==='ago'&&/1\/2/.test(p.l))p.l=p.l.replace('1/2','2/3');
+        if(k==='sep'){p.l=p.l.replace('2/2','3/3');if(!/3\/3/.test(p.l))p.l='Nike · 3/3 · ÚLTIMA';}
+      }
+    });
+    // 2) Colegio Extraescolar duplicado: dejar una sola línea
+    let vistoExtra=false;
+    arr=arr.filter(p=>{
+      if(/colegio.*extraescolar/i.test(p.l||'')){ if(vistoExtra)return false; vistoExtra=true; }
+      return true;
+    });
+    // 3) Sweat fuera (cambio de gimnasio) salvo histórico julio
+    if(k!=='jul')arr=arr.filter(p=>!(/sweat/i.test(p.l||'')||/sweat/i.test(p.id||'')));
+    MONTH_PAGOS[k]=arr;
+  });
   PAGOS=MONTH_PAGOS[ACTIVE_ID]||MONTH_PAGOS.jun;
   // Detección de corrupción: si tras sembrar (con detalle ya cargado) queda l===id, es un
   // dato realmente irrecuperable por código. Ahora solo debería dispararse en casos genuinos.
