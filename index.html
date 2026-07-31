@@ -312,15 +312,14 @@ function updTile(){
   const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtE(BAL.EFECTIVO);
   const j=document.getElementById('d-trj');if(j)j.textContent=fmtE(BAL.TRJ);
   const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
-  const trjFm=fondoMutuoSaldo();
-  const fmSaldo=fondoMutuoSaldo(); // saldo real del Fondo Mutuo (aportes − consumos)
+  const trjFm=BAL.TRJ-trjPend;
   const jfm=document.getElementById('d-trj-fm');if(jfm)jfm.textContent=fmtE(trjFm);
   const jpend=document.getElementById('d-trj-pend');if(jpend)jpend.textContent=fmtE(trjPend);
   const ja=document.getElementById('d-trja');if(ja)ja.textContent=fmtE(BAL.TRJA);
   const m=document.getElementById('d-trm');if(m)m.textContent=fmtE(BAL.TRM);
   const pmT=document.getElementById('pm-trm');if(pmT)pmT.textContent=fmtE(BAL.TRM);
   const pmJa=document.getElementById('pm-trja');if(pmJa)pmJa.textContent=fmtE(BAL.TRJA);
-  const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtE(fmSaldo);
+  const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtE(trjFm);
   const bbvaPend=bbvaPendienteList().reduce((s,x)=>s+x.a,0);
   const bd=document.getElementById('bbva-disponible');if(bd){const bDisp=Math.round((BAL.BBVA-bbvaPend)*100)/100;bd.textContent=fmtE(bDisp);bd.style.color=bDisp<0?'var(--rd)':'var(--tl)';}
   const bp=document.getElementById('bbva-pendiente');if(bp)bp.textContent=fmtE(bbvaPend);
@@ -436,7 +435,7 @@ function renderAccountOverlay(accId){
   const balSimple=()=>`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;
   if(mass&&accId==='TRJ'){balHTML=balSimple();}
   else if(accId==='CAIXA'){const pendTDC=Math.round((CAIXA_TDC.limite-CAIXA_TDC.disponible)*100)/100;const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);const caixaDisp=Math.round((BAL.CAIXA-caixaPend)*100)/100;balHTML=`<div style="padding:14px 16px 8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">CUENTA</div><div style="font-size:22px;font-weight:800;color:var(--t1)">${fmtE(BAL.CAIXA)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Saldo actual</div></div><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:#F97316;font-weight:700;letter-spacing:.07em;margin-bottom:4px">TARJETA (TDC)</div><div style="font-size:22px;font-weight:800;color:#F97316">${fmtE(CAIXA_TDC.disponible)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Disp. de ${fmtE(CAIXA_TDC.limite)}</div></div></div><div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:9px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(caixaDisp)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. PAGAR</div><div style="font-size:13px;font-weight:700;color:var(--t2)">${fmtE(caixaPend)}</div></div></div></div>${pendTDC>0?`<div style="padding:8px 10px;border-radius:9px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);font-size:11px;color:#F97316"><i class="ti ti-alert-triangle" style="font-size:12px;margin-right:4px"></i>${fmtE(pendTDC)} pendiente de liquidar</div>`:''}</div>`;}
-  else if(accId==='TRJ'){const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);const trjFm=fondoMutuoSaldo();balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.TRJ)}</div><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(139,111,223,.1);border-radius:10px;padding:9px"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em;margin-bottom:3px">FONDO MUTUO</div><div style="font-size:18px;font-weight:800;color:#8B6FDF">${fmtE(trjFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div><div style="background:rgba(239,68,68,.08);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">PDTE COBRO</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(trjPend)}</div>${trjPendienteList().map(x=>`<div onclick="openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="font-size:9px;color:var(--t3);margin-top:1px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>${x.l} ${fmtE(x.a)}</span><i class="ti ti-pencil" style="font-size:10px;color:var(--t3);margin-left:6px"></i></div>`).join('')}</div></div></div>`;}
+  else if(accId==='TRJ'){const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);const trjFm=BAL.TRJ-trjPend;balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.TRJ)}</div><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(139,111,223,.1);border-radius:10px;padding:9px"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em;margin-bottom:3px">FONDO MUTUO</div><div style="font-size:18px;font-weight:800;color:#8B6FDF">${fmtE(trjFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div><div style="background:rgba(239,68,68,.08);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">PDTE COBRO</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(trjPend)}</div>${trjPendienteList().map(x=>`<div onclick="openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="font-size:9px;color:var(--t3);margin-top:1px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>${x.l} ${fmtE(x.a)}</span><i class="ti ti-pencil" style="font-size:10px;color:var(--t3);margin-left:6px"></i></div>`).join('')}</div></div></div>`;}
   else if(accId==='IBKR'){balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">$382,58</div><div style="font-size:11px;color:var(--t2);margin-top:4px">≈ €369 al cambio</div></div>`;}
   else{balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;}
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">${d.n}</div><div style="font-size:11px;color:var(--t2)">${d.desc}</div></div><button onclick="document.getElementById('aov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>${balHTML}`;
@@ -567,48 +566,6 @@ function fondoMutuoEntradas(monthId){
 // otras cosas). Solo los movimientos que SALEN de TRJ y tocan la categoría
 // 'Compartir Familiar' o 'Vacaciones' consumen el fondo. Massiel ve justo
 // esos movimientos, porque son en los que ella tiene responsabilidad.
-const FONDO_MUTUO_CATS=['Compartir Familiar','Vacaciones'];
-function fondoMutuoSaldo(){
-  // Fondo Mutuo del MES ACTIVO, dinámico con su tarea de aporte:
-  //   • Parte del saldo arrastrado de meses previos (que hoy es 0: jun y jul
-  //     consumieron todo su aporte al fondo).
-  //   • + aporte de este mes SOLO si la transferencia ya se completó (tarea
-  //     'Enviar a TR Jofre' done). Si no se ha completado, el fondo no sube.
-  //   • − consumos del fondo ya pagados este mes (gastos categoría Compartir
-  //     Familiar / Vacaciones registrados en TR Jofre).
-  // Es dinámico: si el mes que viene se asignan 100 al fondo, muestra 100 al
-  // completar la tarea; sube al pasar la diferencia del hotel (Compartir
-  // Familiar/Vacaciones + en TRJ) y baja al pagar el hotel.
-  const id=ACTIVE_ID;
-  const arrastre=fondoMutuoArrastre(id); // saldo que sobró del mes anterior
-  const aporte=fondoMutuoEntradas(id).reduce((s,x)=>s+(x.a||0),0);
-  const aporteEfectivo=(aporte>0&&transferenciaTRJHecha(id))?aporte:0;
-  let neto=0;
-  movimientosVariablesDelMes(id).forEach(mv=>{
-    if(mv.acc!=='TRJ')return;
-    if(FONDO_MUTUO_CATS.includes(mv.cat))neto+=(mv.t?mv.a:-mv.a); // +ingreso / −gasto
-  });
-  return Math.round((arrastre+aporteEfectivo+neto)*100)/100;
-}
-// Saldo que un mes deja para el siguiente. Hoy jun→jul→ago cerraron consumiendo
-// todo su aporte, así que el arrastre es 0. Se calcula recursivamente: lo que
-// quedó del mes anterior tras su aporte efectivo y sus consumos. Para no asumir,
-// arranca el tracking en 'jul' (primer mes con trazabilidad); antes = 0.
-function fondoMutuoArrastre(id){
-  const idx=MONTH_ORDER.indexOf(id);
-  if(idx<=0)return 0;
-  const prev=MONTH_ORDER[idx-1];
-  // Meses ya cerrados dejaron 0 (consumieron su aporte). Solo si un mes cerrado
-  // dejó saldo real positivo trazable, se arrastra. Por defecto 0.
-  return 0;
-}
-// ¿La transferencia mensual a TR Jofre (que lleva el aporte al fondo) ya se
-// completó en el mes m? Busca la tarea 'Enviar a TR Jofre' de ese mes en done.
-function transferenciaTRJHecha(m){
-  const pagos=MONTH_PAGOS[m]||[];
-  const t=pagos.find(p=>p.acc==='TRJ'&&/Enviar a TR Jofre/i.test(p.l||''));
-  return t?!!t.done:false;
-}
 function fondoMutuoTareaLabels(monthId){
   // Todo lo que es "pago/tarea" (dinero de paso ya presupuestado, NO consumo
   // del fondo): las tareas TRJ del motor de pagos de ese mes + el depósito
@@ -622,21 +579,20 @@ function fondoMutuoTareaLabels(monthId){
 }
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
-  const saldo=fondoMutuoSaldo();
+  const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
+  const saldo=Math.round((BAL.TRJ-trjPend)*100)/100;
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Dentro de TR Jofre · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
   if(!desdeJul){html+=`<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin trazabilidad para este mes</div></div>`;document.getElementById('fmov-c').innerHTML=html;return;}
   const entrada=fondoMutuoEntradas(id).reduce((s,x)=>s+x.a,0);
-  // Solo los movimientos de TR Jofre que tocan el fondo: categoría Compartir
-  // Familiar o Vacaciones. Son los que Massiel puede ver (tiene responsabilidad
-  // ahí). El resto del saldo de TRJ (gastos personales de Jofre) no se muestra.
-  const movsFondo=movimientosVariablesDelMes(id).filter(mv=>mv.acc==='TRJ'&&FONDO_MUTUO_CATS.includes(mv.cat));
+  const tareas=fondoMutuoTareaLabels(id);
+  const movs=(MOVS.TRJ||[]).filter(mv=>!tareas.has(mv.l)).slice().reverse();
   const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${aStr}</div></div>`;
   let rows='';
   if(entrada>0)rows+=rowHTML('Inicio','Aporte mensual Fondo Mutuo','+'+fmtE(entrada),true);
-  movsFondo.forEach(mv=>{rows+=rowHTML('','· '+mv.l,'-'+fmtE(mv.a),false);});
+  movs.forEach(mv=>{rows+=rowHTML(mv.dt,mv.l,mv.a,mv.t);});
   html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos este mes</div>';
   html+='</div>';
   document.getElementById('fmov-c').innerHTML=html;
@@ -1395,14 +1351,9 @@ function saveAddItem(){
   toast('✓ Ítem agregado — totales y tareas actualizadas','var(--tl)');saveState();
 }
 function histCardHTML(id,label,accent){
+  const total=totalGastoMes(id);
   const m=MONTHS[id];if(!m)return '';
-  // Mes cerrado: total del mes (como estaba aprobado). Mes EN CURSO: solo lo
-  // ejecutado (tareas completadas + gastos registrados), que empieza en 0 y
-  // sube a medida que se marca/registra.
-  const enCurso=(id===ACTIVE_ID);
-  const total=enCurso?ejecutadoDelMes(id).total:totalGastoMes(id);
-  const sub=enCurso?'Ejecutado este mes · toca para el detalle':'Gasto total del mes · toca para el detalle';
-  return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">${sub}</div></div>`;
+  return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">Gasto total del mes · toca para el detalle</div></div>`;
 }
 // ===== T5: HISTORIAL = LO REALMENTE EJECUTADO (no la previsión) =====
 // El historial debe reflejar solo lo COMPLETADO, no el presupuesto del mes.
@@ -1412,101 +1363,6 @@ function histCardHTML(id,label,accent){
 // Clasificación de un pago hacia categoría de negocio, por su label. El
 // mapeo es explícito (no se inventa): cada patrón viene de cómo buildMonthPagos
 // nombra las tareas. Lo que no casa cae en 'Adicionales' (nunca se pierde).
-function pagoCategoria(p){
-  // Mapea una tarea/pago a su categoría de NEGOCIO (las de CATS). Deriva del
-  // label que buildMonthPagos genera. 'Ahorro' es especial (se muestra en el
-  // bloque "Ahorrando este mes", no en barras). null = no cuenta como gasto.
-  const l=(p.l||'');
-  // --- transferencias internas / ingresos: no son gasto de consumo ---
-  if(/^Enviar a (TR Jofre|TR J\.A\.|IBKR)/i.test(l))return 'Ahorro';
-  if(/^Enviar a Caixa/i.test(l))return 'Ahorro'; // Renting + gastos Caixa consolidados
-  if(/Renting/i.test(l))return 'Ahorro';
-  if(/Bizum de Massiel/i.test(l))return null;    // reembolso interno
-  if(/N[óo]mina/i.test(l))return null;           // ingreso
-  // --- gasto real por categoría ---
-  if(/Enviar a Ma\. Lara/i.test(l))return 'Casa';        // Arriendo + Luz
-  if(/^Colegio/i.test(l))return 'Baby J.A.';
-  if(/On Air|Sweat|Monkey|GENUA|Gimnasio/i.test(l))return 'Deporte';
-  if(/Barber|U[ñn]as|Peluquer/i.test(l))return 'Personales';
-  if(/Retirar efectivo/i.test(l))return 'Casa';          // efectivo (barbería/limpieza)
-  if(/Remesa/i.test(l))return 'Remesas';
-  if(/Vacaciones|Viaje|Boda/i.test(l))return 'Vacaciones';
-  if(/Mercado/i.test(l))return 'Mercado';
-  if(/Agua|Luz|TuAwa|Internet|Tel[eé]fono|Servicio/i.test(l))return 'Casa';
-  return 'Adicionales';
-}
-// Lo ejecutado del mes: recorre MONTH_PAGOS[id], suma solo done:true, excluye
-// ingresos y reembolsos internos (categoria null). Agrupa por categoría.
-// Devuelve {total, porCat:{cat:monto}, nDone, nTotal}.
-function ejecutadoDelMes(id){
-  // Gasto real del mes = TAREAS COMPLETADAS (pagos done) + GASTOS REGISTRADOS
-  // (movimientos variables), cada uno asignado a su categoría. Nada al aire.
-  // Las transferencias de ahorro van a su categoría 'Ahorro' (no inflan otras).
-  const porCat={};let total=0,nDone=0,nTotal=0;
-  const add=(cat,amt)=>{
-    if(cat===null||!(amt>0))return;
-    porCat[cat]=Math.round(((porCat[cat]||0)+amt)*100)/100;
-    total=Math.round((total+amt)*100)/100;
-  };
-  // 1) Tareas completadas del motor de pagos (done)
-  const pagos=MONTH_PAGOS[id]||[];
-  pagos.forEach(p=>{
-    if(p.cat==='ingreso')return; // nómina no es gasto
-    nTotal++;
-    if(!p.done)return;
-    nDone++;
-    add(pagoCategoria(p),(p.amt!=null?p.amt:0));
-  });
-  // 2) Gastos registrados a mano (movimientos variables), ya categorizados.
-  //    Son gastos reales distintos de las tareas → se suman por su categoría.
-  movimientosVariablesDelMes(id).forEach(mv=>{add(mv.cat,mv.a);});
-  // 3) Tareas de Massiel completadas (solo mes activo; su flujo propio)
-  if(id===ACTIVE_ID){
-    if(typeof syncMassielTaskAmounts==='function')syncMassielTaskAmounts(id);
-    const addMassiel=(taskId,cat)=>{
-      const t=MASSIEL_TASKS.find(x=>x.id===taskId);
-      if(t&&massielDone[taskId]&&t.amt>0){add(cat,t.amt);nDone++;}
-    };
-    addMassiel('m-mrc','Mercado');
-    addMassiel('m-per','Personales');
-    addMassiel('m-rem','Remesas');
-    addMassiel('m-yt','Compartir Familiar');
-    nTotal+=5;
-  }
-  return {total,porCat,nDone,nTotal};
-}
-function renderHist(){
-  const body=document.getElementById('hist-body');if(!body)return;
-  let html='';
-  if(MONTHS[ACTIVE_ID])html+=histCardHTML(ACTIVE_ID,'EN CURSO','var(--or)');
-  HISTORIAL.forEach(h=>{html+=histCardHTML(h.id,'CERRADO','var(--t3)');});
-  body.innerHTML=html||`<div class="tp" style="cursor:default;text-align:center;padding:30px 16px"><i class="ti ti-archive-off" style="font-size:24px;color:var(--t3)"></i><div style="font-size:13px;color:var(--t2);margin-top:10px;font-weight:600">Sin datos aún</div></div>`;
-}
-// T5: detalle del historial = tareas realmente COMPLETADAS del mes, agrupadas
-// por categoría. No muestra previsión: si una tarea no está done, no aparece.
-function showHistDetail(id){
-  const m=MONTHS[id];if(!m)return;
-  const ej=ejecutadoDelMes(id);
-  const previsto=totalGastoMes(id);
-  const pagos=(MONTH_PAGOS[id]||[]).filter(p=>p.done&&p.cat!=='ingreso'&&p.amt>0&&pagoCategoria(p)!==null);
-  // agrupar tareas completadas por su categoría de negocio
-  const grupos={};
-  pagos.forEach(p=>{const c=pagoCategoria(p);(grupos[c]=grupos[c]||[]).push(p);});
-  if(id===ACTIVE_ID){
-    const mrc=MASSIEL_TASKS.find(t=>t.id==='m-mrc');
-    if(mrc&&massielDone['m-mrc']&&mrc.amt>0){(grupos['Mercado']=grupos['Mercado']||[]).push({l:'Mercado · aporte Massiel (TR Massiel)',amt:mrc.amt});}
-  }
-  const cats=Object.keys(grupos).sort((a,b)=>ej.porCat[b]-ej.porCat[a]);
-  const pct=previsto>0?Math.min(100,Math.round((ej.total/previsto)*100)):0;
-  const catBlocks=cats.map(c=>{
-    const rows=grupos[c].map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="flex:1;font-size:12px;color:#fff">${p.l}</div><div style="font-size:12px;font-weight:700;color:#fff">${fmtE(p.amt)}</div></div>`).join('');
-    const sub=grupos[c].reduce((s,p)=>s+p.amt,0);
-    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:${CATS_COLORS[c]||'#6B85A8'}"></span><span style="font-size:11px;font-weight:700;color:#fff;letter-spacing:.04em">${c.toUpperCase()}</span></div><div style="font-size:12px;font-weight:800;color:${CATS_COLORS[c]||'#6B85A8'}">${fmtE(sub)}</div></div>${rows}</div>`;
-  }).join('')||'<div style="text-align:center;padding:24px;color:rgba(255,255,255,.35);font-size:12px">Ninguna tarea completada todavía en este mes.<br>El historial se llena a medida que marcas pagos.</div>';
-  const label=id===ACTIVE_ID?'EN CURSO':'CERRADO';
-  document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${m.name} · ${label}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">Lo realmente ejecutado</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:14px 16px 8px"><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:14px"><div style="display:flex;justify-content:space-between;align-items:flex-end"><div><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">GASTO EJECUTADO</div><div style="font-size:28px;font-weight:800;color:#0EC9BC">${fmtE(ej.total)}</div></div><div style="text-align:right"><div style="font-size:9px;color:rgba(255,255,255,.4);margin-bottom:2px">Previsto ${fmtE(previsto)}</div><div style="font-size:13px;font-weight:700;color:#fff">${pct}% ejecutado</div></div></div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:10px"><div style="width:${pct}%;height:100%;background:#0EC9BC"></div></div></div></div><div style="padding:12px 16px 20px">${catBlocks}</div>`;
-  document.getElementById('maov').style.display='block';
-}
 function toast(msg,color){const c=document.createElement('div');c.style.cssText='position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:'+(color||'var(--tl)')+';color:#000;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:100;white-space:nowrap;pointer-events:none;';c.textContent=msg;document.getElementById('app').appendChild(c);setTimeout(()=>c.remove(),2400);}
 function aporteTotales(id){
   // Calcula aporte de Jofre y Massiel del mes desde las reglas reales (no strings).
@@ -1861,14 +1717,7 @@ function categoriaPresupuestoMes(cat,id){
   return categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0);
 }
 function categoriaGroupTotal(cat,id){
-  // Mes futuro: estimado (fijos presupuestados).
   if(esMesFuturo(id))return Math.round(categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0)*100)/100;
-  // Mes EN CURSO en el Historial: solo lo REALMENTE ejecutado = tareas
-  // completadas + gastos registrados. Los fijos aún no pagados NO cuentan
-  // (a diferencia de un mes cerrado, donde ya se ejecutaron todos).
-  if(maovEsHistorial&&id===ACTIVE_ID){return ejecutadoDelMes(id).porCat[cat]||0;}
-  // Mes cerrado (o vista de previsión): fijos + movimientos registrados,
-  // exactamente como estaba aprobado.
   const reg=categoriaSpendForMonth(id)[cat]||0;
   if(CATEGORIAS_POOL.includes(cat))return reg;
   const fijos=categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0);
@@ -1919,28 +1768,19 @@ function showCategoriaNivel2(id,cat){
 }
 let maovBackTo='forecast';
 let maovEsVistaMassiel=true;
-let maovEsHistorial=false; // T5: true cuando el detalle se abre desde el Historial (mostrar ejecutado, no previsión)
 function maovBack(){if(maovBackTo==='forecast')showMaForecast();else document.getElementById('maov').style.display='none';}
 function showMaMonthDetail(id,backTo){
   maovMode='monthDetail';
   maovBackTo=backTo||'close';
   maovEsVistaMassiel=(maovBackTo==='forecast');
-  // Historial = 'close' (o 'hist'): se muestra lo REALMENTE ejecutado.
-  maovEsHistorial=(maovBackTo==='close'||maovBackTo==='hist');
   const d=MONTHS[id];if(!d)return;
-  const ej=ejecutadoDelMes(id);
-  const esEnCurso=(maovEsHistorial&&id===ACTIVE_ID);
   const ahorro=itemsForKey('ahorro',id);
-  // Ahorro y total: para el mes EN CURSO en el historial = lo ejecutado; para
-  // meses cerrados o vista de previsión = el total normal (fijos+movimientos).
-  const ahorroTotal=esEnCurso?(ej.porCat['Ahorro']||0):ahorro.reduce((s,x)=>s+x.a,0);
-  const totalPrevisto=(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0);
-  const total=esEnCurso?ej.total:(maovEsHistorial?totalGastoMes(id):totalPrevisto);
-  const totalLabel=esEnCurso?'gasto ejecutado':'gasto total';
+  const ahorroTotal=ahorro.reduce((s,x)=>s+x.a,0);
+  const total=(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0);
   const cuotasMa=cuotasForMassiel(id);
   const cuotasHTML=cuotasMa.length?cuotasMa.map(maCuotaRowHTML).join(''):'<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">Sin cuotas a tu cargo este mes</div>';
   const tabsHTML=`<button class="tbx on" id="mamt1" onclick="sMTma(1)">Categorías</button><button class="tbx" id="mamt2" onclick="sMTma(2)">Cuotas</button>`;
-  document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="maovBack()" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${d.name}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">${esMesFuturo(id)?'Estimación · solo lectura':'Solo lectura'} · ${totalLabel} ${fmtE(total)}</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:10px 16px 0;display:flex;gap:6px">${tabsHTML}</div><div class="gtab on" id="mamt-tab1"><div style="padding:14px 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">TU APORTE</div><div style="font-size:20px;font-weight:800;color:#D4537E">${fmtAporte(aporteTotales(id).massiel)}</div></div><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">APORTE JOFRE</div><div style="font-size:20px;font-weight:800;color:#4C8DFA">${fmtAporte(aporteTotales(id).jofre)}</div></div></div><div style="padding:0 16px 8px"><div style="background:rgba(14,201,188,.08);border:1px solid rgba(14,201,188,.2);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:#0EC9BC;font-weight:700;letter-spacing:.06em;margin-bottom:3px">AHORRANDO ESTE MES</div><div style="font-size:9px;color:rgba(255,255,255,.4)">Renting · Fondo Emergencia · Fondo Mutuo · IBKR</div></div><div style="font-size:18px;font-weight:800;color:#0EC9BC">${fmtE(ahorroTotal)}</div></div></div><div style="padding:6px 16px 16px">${categoriaNivel1HTML(id)}</div></div><div class="gtab" id="mamt-tab2" style="padding:14px 16px 16px">${cuotasHTML}</div>`;
+  document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="maovBack()" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${d.name}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">${esMesFuturo(id)?'Estimación · solo lectura':'Solo lectura'} · gasto total ${fmtE(total)}</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:10px 16px 0;display:flex;gap:6px">${tabsHTML}</div><div class="gtab on" id="mamt-tab1"><div style="padding:14px 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">TU APORTE</div><div style="font-size:20px;font-weight:800;color:#D4537E">${fmtAporte(aporteTotales(id).massiel)}</div></div><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">APORTE JOFRE</div><div style="font-size:20px;font-weight:800;color:#4C8DFA">${fmtAporte(aporteTotales(id).jofre)}</div></div></div><div style="padding:0 16px 8px"><div style="background:rgba(14,201,188,.08);border:1px solid rgba(14,201,188,.2);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:#0EC9BC;font-weight:700;letter-spacing:.06em;margin-bottom:3px">AHORRANDO ESTE MES</div><div style="font-size:9px;color:rgba(255,255,255,.4)">Renting · Fondo Emergencia · Fondo Mutuo · IBKR</div></div><div style="font-size:18px;font-weight:800;color:#0EC9BC">${fmtE(ahorroTotal)}</div></div></div><div style="padding:6px 16px 16px">${categoriaNivel1HTML(id)}</div></div><div class="gtab" id="mamt-tab2" style="padding:14px 16px 16px">${cuotasHTML}</div>`;
   document.getElementById('maov').style.display='block';
 }
 function showMaSubDetail(monthId,key,label,backCat){
