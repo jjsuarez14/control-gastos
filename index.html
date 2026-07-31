@@ -562,24 +562,28 @@ function fondoMutuoEntradas(monthId){
 // bruto de la cuenta TR Jofre (BAL.TRJ), que arrastra gastos personales de
 // Jofre y tareas pendientes ajenas al fondo (ej. 'Vacaciones - Verano'),
 // dejándolo falsamente en negativo. Bug corregido: antes = BAL.TRJ − pdte.
+// Categorías cuyo gasto en TR Jofre consume el Fondo Mutuo. Regla de Jofre:
+// el Fondo Mutuo NO es todo el saldo de TR Jofre (esa cuenta tiene dinero para
+// otras cosas). Solo los movimientos que SALEN de TRJ y tocan la categoría
+// 'Compartir Familiar' o 'Vacaciones' consumen el fondo. Massiel ve justo
+// esos movimientos, porque son en los que ella tiene responsabilidad.
+const FONDO_MUTUO_CATS=['Compartir Familiar','Vacaciones'];
 function fondoMutuoSaldo(){
-  // aportes: suma de entradas 'Fondo Mutuo' en cada mes desde el inicio del
-  // tracking hasta el mes activo (inclusive).
+  // aportes: entradas 'Fondo Mutuo' de cada mes desde el inicio del tracking
+  // hasta el mes activo (inclusive) — dinero que entra al fondo.
   let aportes=0;
   const ai=MONTH_ORDER.indexOf(ACTIVE_ID);
   const meses=ai<0?MONTH_ORDER.slice():MONTH_ORDER.slice(0,ai+1);
   meses.forEach(m=>{fondoMutuoEntradas(m).forEach(x=>aportes+=(x.a||0));});
-  // consumos: movimientos de MOVS.TRJ que NO son tareas estructuradas (esos son
-  // dinero de paso ya presupuestado) y que son SALIDAS (t=false → gasto real
-  // del fondo). Los ingresos manuales (t=true, ej. 'Diferencia +X') suman.
-  const tareasTodas=new Set();
-  MONTH_ORDER.forEach(m=>{fondoMutuoTareaLabels(m).forEach(l=>tareasTodas.add(l));});
+  // consumos: gastos en TR Jofre cuya categoría resuelta es Compartir Familiar
+  // o Vacaciones, en todos esos meses. Se apoya en movimientosVariablesDelMes,
+  // que ya resuelve la categoría de cada movimiento (misma fuente que ve el
+  // desglose por categoría). Nada hardcodeado, todo trazable por categoría.
   let consumo=0;
-  (MOVS.TRJ||[]).forEach(mv=>{
-    if(tareasTodas.has(mv.l))return; // tarea estructurada, no consumo del fondo
-    const val=moneyFromStr(mv.a);
-    if(mv.t)consumo-=val; // ingreso manual → reduce el consumo (suma al fondo)
-    else consumo+=val;    // gasto manual → consume del fondo
+  meses.forEach(m=>{
+    movimientosVariablesDelMes(m).forEach(mv=>{
+      if(mv.acc==='TRJ'&&FONDO_MUTUO_CATS.includes(mv.cat))consumo+=mv.a;
+    });
   });
   return Math.round((aportes-consumo)*100)/100;
 }
@@ -603,12 +607,14 @@ function renderFondoMutuoMassiel(){
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
   if(!desdeJul){html+=`<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin trazabilidad para este mes</div></div>`;document.getElementById('fmov-c').innerHTML=html;return;}
   const entrada=fondoMutuoEntradas(id).reduce((s,x)=>s+x.a,0);
-  const tareas=fondoMutuoTareaLabels(id);
-  const movs=(MOVS.TRJ||[]).filter(mv=>!tareas.has(mv.l)).slice().reverse();
+  // Solo los movimientos de TR Jofre que tocan el fondo: categoría Compartir
+  // Familiar o Vacaciones. Son los que Massiel puede ver (tiene responsabilidad
+  // ahí). El resto del saldo de TRJ (gastos personales de Jofre) no se muestra.
+  const movsFondo=movimientosVariablesDelMes(id).filter(mv=>mv.acc==='TRJ'&&FONDO_MUTUO_CATS.includes(mv.cat));
   const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${aStr}</div></div>`;
   let rows='';
   if(entrada>0)rows+=rowHTML('Inicio','Aporte mensual Fondo Mutuo','+'+fmtE(entrada),true);
-  movs.forEach(mv=>{rows+=rowHTML(mv.dt,mv.l,mv.a,mv.t);});
+  movsFondo.forEach(mv=>{rows+=rowHTML('','· '+mv.l,'-'+fmtE(mv.a),false);});
   html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos este mes</div>';
   html+='</div>';
   document.getElementById('fmov-c').innerHTML=html;
