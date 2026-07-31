@@ -312,7 +312,7 @@ function updTile(){
   const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtE(BAL.EFECTIVO);
   const j=document.getElementById('d-trj');if(j)j.textContent=fmtE(BAL.TRJ);
   const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
-  const trjFm=BAL.TRJ-trjPend;
+  const trjFm=fondoMutuoSaldo();
   const fmSaldo=fondoMutuoSaldo(); // saldo real del Fondo Mutuo (aportes − consumos)
   const jfm=document.getElementById('d-trj-fm');if(jfm)jfm.textContent=fmtE(trjFm);
   const jpend=document.getElementById('d-trj-pend');if(jpend)jpend.textContent=fmtE(trjPend);
@@ -436,7 +436,7 @@ function renderAccountOverlay(accId){
   const balSimple=()=>`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;
   if(mass&&accId==='TRJ'){balHTML=balSimple();}
   else if(accId==='CAIXA'){const pendTDC=Math.round((CAIXA_TDC.limite-CAIXA_TDC.disponible)*100)/100;const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);const caixaDisp=Math.round((BAL.CAIXA-caixaPend)*100)/100;balHTML=`<div style="padding:14px 16px 8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">CUENTA</div><div style="font-size:22px;font-weight:800;color:var(--t1)">${fmtE(BAL.CAIXA)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Saldo actual</div></div><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:#F97316;font-weight:700;letter-spacing:.07em;margin-bottom:4px">TARJETA (TDC)</div><div style="font-size:22px;font-weight:800;color:#F97316">${fmtE(CAIXA_TDC.disponible)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Disp. de ${fmtE(CAIXA_TDC.limite)}</div></div></div><div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:9px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(caixaDisp)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. PAGAR</div><div style="font-size:13px;font-weight:700;color:var(--t2)">${fmtE(caixaPend)}</div></div></div></div>${pendTDC>0?`<div style="padding:8px 10px;border-radius:9px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);font-size:11px;color:#F97316"><i class="ti ti-alert-triangle" style="font-size:12px;margin-right:4px"></i>${fmtE(pendTDC)} pendiente de liquidar</div>`:''}</div>`;}
-  else if(accId==='TRJ'){const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);const trjFm=BAL.TRJ-trjPend;balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.TRJ)}</div><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(139,111,223,.1);border-radius:10px;padding:9px"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em;margin-bottom:3px">FONDO MUTUO</div><div style="font-size:18px;font-weight:800;color:#8B6FDF">${fmtE(trjFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div><div style="background:rgba(239,68,68,.08);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">PDTE COBRO</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(trjPend)}</div>${trjPendienteList().map(x=>`<div onclick="openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="font-size:9px;color:var(--t3);margin-top:1px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>${x.l} ${fmtE(x.a)}</span><i class="ti ti-pencil" style="font-size:10px;color:var(--t3);margin-left:6px"></i></div>`).join('')}</div></div></div>`;}
+  else if(accId==='TRJ'){const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);const trjFm=fondoMutuoSaldo();balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.TRJ)}</div><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(139,111,223,.1);border-radius:10px;padding:9px"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em;margin-bottom:3px">FONDO MUTUO</div><div style="font-size:18px;font-weight:800;color:#8B6FDF">${fmtE(trjFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div><div style="background:rgba(239,68,68,.08);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">PDTE COBRO</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(trjPend)}</div>${trjPendienteList().map(x=>`<div onclick="openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="font-size:9px;color:var(--t3);margin-top:1px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>${x.l} ${fmtE(x.a)}</span><i class="ti ti-pencil" style="font-size:10px;color:var(--t3);margin-left:6px"></i></div>`).join('')}</div></div></div>`;}
   else if(accId==='IBKR'){balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">$382,58</div><div style="font-size:11px;color:var(--t2);margin-top:4px">≈ €369 al cambio</div></div>`;}
   else{balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;}
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">${d.n}</div><div style="font-size:11px;color:var(--t2)">${d.desc}</div></div><button onclick="document.getElementById('aov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>${balHTML}`;
@@ -569,17 +569,45 @@ function fondoMutuoEntradas(monthId){
 // esos movimientos, porque son en los que ella tiene responsabilidad.
 const FONDO_MUTUO_CATS=['Compartir Familiar','Vacaciones'];
 function fondoMutuoSaldo(){
-  // El Fondo Mutuo es lo que se destina a eso ESTE mes, no un acumulado
-  // histórico. = aporte 'Fondo Mutuo' del mes activo − lo ya gastado del
-  // fondo este mes (movimientos de TR Jofre en categoría Compartir Familiar
-  // o Vacaciones, del mes activo). Nada de arrastrar saldos de meses previos.
+  // Fondo Mutuo del MES ACTIVO, dinámico con su tarea de aporte:
+  //   • Parte del saldo arrastrado de meses previos (que hoy es 0: jun y jul
+  //     consumieron todo su aporte al fondo).
+  //   • + aporte de este mes SOLO si la transferencia ya se completó (tarea
+  //     'Enviar a TR Jofre' done). Si no se ha completado, el fondo no sube.
+  //   • − consumos del fondo ya pagados este mes (gastos categoría Compartir
+  //     Familiar / Vacaciones registrados en TR Jofre).
+  // Es dinámico: si el mes que viene se asignan 100 al fondo, muestra 100 al
+  // completar la tarea; sube al pasar la diferencia del hotel (Compartir
+  // Familiar/Vacaciones + en TRJ) y baja al pagar el hotel.
   const id=ACTIVE_ID;
+  const arrastre=fondoMutuoArrastre(id); // saldo que sobró del mes anterior
   const aporte=fondoMutuoEntradas(id).reduce((s,x)=>s+(x.a||0),0);
-  let consumo=0;
+  const aporteEfectivo=(aporte>0&&transferenciaTRJHecha(id))?aporte:0;
+  let neto=0;
   movimientosVariablesDelMes(id).forEach(mv=>{
-    if(mv.acc==='TRJ'&&FONDO_MUTUO_CATS.includes(mv.cat))consumo+=mv.a;
+    if(mv.acc!=='TRJ')return;
+    if(FONDO_MUTUO_CATS.includes(mv.cat))neto+=(mv.t?mv.a:-mv.a); // +ingreso / −gasto
   });
-  return Math.round((aporte-consumo)*100)/100;
+  return Math.round((arrastre+aporteEfectivo+neto)*100)/100;
+}
+// Saldo que un mes deja para el siguiente. Hoy jun→jul→ago cerraron consumiendo
+// todo su aporte, así que el arrastre es 0. Se calcula recursivamente: lo que
+// quedó del mes anterior tras su aporte efectivo y sus consumos. Para no asumir,
+// arranca el tracking en 'jul' (primer mes con trazabilidad); antes = 0.
+function fondoMutuoArrastre(id){
+  const idx=MONTH_ORDER.indexOf(id);
+  if(idx<=0)return 0;
+  const prev=MONTH_ORDER[idx-1];
+  // Meses ya cerrados dejaron 0 (consumieron su aporte). Solo si un mes cerrado
+  // dejó saldo real positivo trazable, se arrastra. Por defecto 0.
+  return 0;
+}
+// ¿La transferencia mensual a TR Jofre (que lleva el aporte al fondo) ya se
+// completó en el mes m? Busca la tarea 'Enviar a TR Jofre' de ese mes en done.
+function transferenciaTRJHecha(m){
+  const pagos=MONTH_PAGOS[m]||[];
+  const t=pagos.find(p=>p.acc==='TRJ'&&/Enviar a TR Jofre/i.test(p.l||''));
+  return t?!!t.done:false;
 }
 function fondoMutuoTareaLabels(monthId){
   // Todo lo que es "pago/tarea" (dinero de paso ya presupuestado, NO consumo
@@ -1368,13 +1396,13 @@ function saveAddItem(){
 }
 function histCardHTML(id,label,accent){
   const m=MONTHS[id];if(!m)return '';
-  const ej=ejecutadoDelMes(id);
-  const previsto=totalGastoMes(id);
-  const cats=Object.keys(ej.porCat).sort((a,b)=>ej.porCat[b]-ej.porCat[a]);
-  const chips=cats.map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--t2);background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:2px 7px;margin:2px 4px 0 0"><span style="width:6px;height:6px;border-radius:2px;background:${CATS_COLORS[c]||'#6B85A8'}"></span>${c} ${fmtE(ej.porCat[c])}</span>`).join('');
-  const pct=previsto>0?Math.min(100,Math.round((ej.total/previsto)*100)):0;
-  const sub=ej.total>0?`Ejecutado ${fmtE(ej.total)} de ${fmtE(previsto)} previsto · ${pct}%`:'Sin tareas completadas aún';
-  return `<div class="tp" onclick="showHistDetail('${id}')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(ej.total)}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${sub}</div>${ej.total>0?`<div style="height:3px;border-radius:2px;background:var(--bd);overflow:hidden;margin-top:8px"><div style="width:${pct}%;height:100%;background:${accent}"></div></div><div style="margin-top:8px">${chips}</div>`:''}</div>`;
+  // Mes cerrado: total del mes (como estaba aprobado). Mes EN CURSO: solo lo
+  // ejecutado (tareas completadas + gastos registrados), que empieza en 0 y
+  // sube a medida que se marca/registra.
+  const enCurso=(id===ACTIVE_ID);
+  const total=enCurso?ejecutadoDelMes(id).total:totalGastoMes(id);
+  const sub=enCurso?'Ejecutado este mes · toca para el detalle':'Gasto total del mes · toca para el detalle';
+  return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">${sub}</div></div>`;
 }
 // ===== T5: HISTORIAL = LO REALMENTE EJECUTADO (no la previsión) =====
 // El historial debe reflejar solo lo COMPLETADO, no el presupuesto del mes.
@@ -1833,10 +1861,14 @@ function categoriaPresupuestoMes(cat,id){
   return categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0);
 }
 function categoriaGroupTotal(cat,id){
-  // T5: en modo Historial, mostramos SOLO lo ejecutado (tareas completadas),
-  // no la previsión. ejecutadoDelMes agrupa los pagos done por categoría.
-  if(maovEsHistorial){return ejecutadoDelMes(id).porCat[cat]||0;}
+  // Mes futuro: estimado (fijos presupuestados).
   if(esMesFuturo(id))return Math.round(categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0)*100)/100;
+  // Mes EN CURSO en el Historial: solo lo REALMENTE ejecutado = tareas
+  // completadas + gastos registrados. Los fijos aún no pagados NO cuentan
+  // (a diferencia de un mes cerrado, donde ya se ejecutaron todos).
+  if(maovEsHistorial&&id===ACTIVE_ID){return ejecutadoDelMes(id).porCat[cat]||0;}
+  // Mes cerrado (o vista de previsión): fijos + movimientos registrados,
+  // exactamente como estaba aprobado.
   const reg=categoriaSpendForMonth(id)[cat]||0;
   if(CATEGORIAS_POOL.includes(cat))return reg;
   const fijos=categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0);
@@ -1897,12 +1929,14 @@ function showMaMonthDetail(id,backTo){
   maovEsHistorial=(maovBackTo==='close'||maovBackTo==='hist');
   const d=MONTHS[id];if(!d)return;
   const ej=ejecutadoDelMes(id);
+  const esEnCurso=(maovEsHistorial&&id===ACTIVE_ID);
   const ahorro=itemsForKey('ahorro',id);
-  // Ahorro: en historial = ejecutado (categoría 'Ahorro' de lo done); si no, previsto.
-  const ahorroTotal=maovEsHistorial?(ej.porCat['Ahorro']||0):ahorro.reduce((s,x)=>s+x.a,0);
+  // Ahorro y total: para el mes EN CURSO en el historial = lo ejecutado; para
+  // meses cerrados o vista de previsión = el total normal (fijos+movimientos).
+  const ahorroTotal=esEnCurso?(ej.porCat['Ahorro']||0):ahorro.reduce((s,x)=>s+x.a,0);
   const totalPrevisto=(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0);
-  const total=maovEsHistorial?ej.total:totalPrevisto;
-  const totalLabel=maovEsHistorial?'gasto ejecutado':'gasto total';
+  const total=esEnCurso?ej.total:(maovEsHistorial?totalGastoMes(id):totalPrevisto);
+  const totalLabel=esEnCurso?'gasto ejecutado':'gasto total';
   const cuotasMa=cuotasForMassiel(id);
   const cuotasHTML=cuotasMa.length?cuotasMa.map(maCuotaRowHTML).join(''):'<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">Sin cuotas a tu cargo este mes</div>';
   const tabsHTML=`<button class="tbx on" id="mamt1" onclick="sMTma(1)">Categorías</button><button class="tbx" id="mamt2" onclick="sMTma(2)">Cuotas</button>`;
