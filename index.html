@@ -282,7 +282,7 @@ function tareaLabelsForMonth(monthId){
   // variable/manual, no para duplicar Gastos Fijos que ya se ven en Previsión.
   const set=new Set(['Enviar a TR Jofre','Enviar a Caixa']);
   (MONTH_PAGOS[monthId]||[]).forEach(p=>{if(p.cat==='gasto'||p.cat==='enviar'||p.cat==='retiro')set.add(p.l);});
-  CUOTAS_NUEVAS.forEach(c=>set.add((c.desc||'')+' · inicial'));
+  CUOTAS_NUEVAS.forEach(c=>{const base=(c.desc||c.category||'');set.add(base+' · cuota 1/'+(((c.cNum)||0)+1));});
   return set;
 }
 function categoriaSpendForMonth(monthId){
@@ -465,6 +465,16 @@ const AHORRO_DESTINOS=[
   {key:'vacaciones',match:/Vacaciones|Boda de Jeff/i,label:'Vacaciones',color:'#EC4899'}
 ];
 function ahorroMatchesDestino(x,d){return x.key?x.key===d.key:d.match.test(x.l);}
+// T3 fix: un item de ahorro debe pertenecer a UN SOLO destino (el primero que
+// matchea en el orden de AHORRO_DESTINOS), no a todos los que hagan match por
+// regex. Sin esto, 'Fondo Mutuo · Vacaciones' (agosto) caia en 'trj' Y en
+// 'vacaciones' a la vez -> la barra del historial pintaba 2 segmentos para un
+// unico aporte de 600. destinoDeItem devuelve el destino canonico de un item.
+function destinoDeItem(x){
+  if(x.key){return AHORRO_DESTINOS.find(d=>d.key===x.key)||null;}
+  return AHORRO_DESTINOS.find(d=>d.match.test(x.l))||null;
+}
+function itemPerteneceADestino(x,d){const dd=destinoDeItem(x);return dd?dd.key===d.key:false;}
 // Meses anteriores a que existiera el tracking en la app (MONTH_ORDER arranca
 // en 'jun'). Dato dado por Jofre (18-jul) desde el sheet -- no se inventa,
 // si no hay dato es 0.
@@ -487,7 +497,7 @@ function ahorroBreakdown(id){
   }
   const items=itemsForKey('ahorro',id);
   return AHORRO_DESTINOS.map(d=>{
-    const matched=items.filter(x=>ahorroMatchesDestino(x,d));
+    const matched=items.filter(x=>itemPerteneceADestino(x,d));
     const normal=matched.filter(x=>x.tipo!=='especial').reduce((s,x)=>s+x.a,0);
     const especial=matched.filter(x=>x.tipo==='especial').reduce((s,x)=>s+x.a,0);
     return Object.assign({},d,{a:Math.round((normal+especial)*100)/100,especial:Math.round(especial*100)/100});
@@ -506,7 +516,7 @@ function renderAhorroDetailInto(id){
     rows=ahorroBreakdown(id).filter(x=>x.a>0).map(x=>({l:x.label,a:x.a,color:x.color,especial:false}));
   }else{
     rows=itemsForKey('ahorro',id).filter(x=>x.a>0).map(x=>{
-      const dest=AHORRO_DESTINOS.find(d=>ahorroMatchesDestino(x,d));
+      const dest=destinoDeItem(x);
       return{l:x.l,a:x.a,color:dest?dest.color:'#6B85A8',especial:x.tipo==='especial'};
     });
   }
@@ -553,7 +563,7 @@ function fondoMutuoTareaLabels(monthId){
   // registrado a mano (cine, café, ajustes) → eso sí es Fondo Mutuo.
   const set=new Set(['Enviar a TR Jofre']);
   (MONTH_PAGOS[monthId]||[]).forEach(p=>{if(p.acc==='TRJ'&&p.cat==='gasto')set.add(p.l);});
-  CUOTAS_NUEVAS.forEach(c=>{if(c.account==='TRJ')set.add((c.desc||'')+' · inicial');});
+  CUOTAS_NUEVAS.forEach(c=>{if(c.account==='TRJ'){const base=(c.desc||c.category||'');set.add(base+' · cuota 1/'+(((c.cNum)||0)+1));}});
   return set;
 }
 function renderFondoMutuoMassiel(){
@@ -778,6 +788,7 @@ function advanceMonth(newId,nominaAmt){
   PAGOS=MONTH_PAGOS[newId];
   nominaReg=true;
   massielDone={'m-yt':false,'m-rem':false,'m-per':false,'m-mrc':false,'m-biz':false};
+  massielApplied={};
   MASSIEL_TASKS[0].amt=0;
   ensureMonthsAhead(newId,3);
   if(nominaAmt)regMov('BBVA','Nómina Jofre · '+MONTHS[newId].name,nominaAmt,true);
@@ -1329,9 +1340,71 @@ function saveAddItem(){
   toast('✓ Ítem agregado — totales y tareas actualizadas','var(--tl)');saveState();
 }
 function histCardHTML(id,label,accent){
-  const total=totalGastoMes(id);
   const m=MONTHS[id];if(!m)return '';
-  return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">Gasto total del mes · toca para el detalle</div></div>`;
+  const ej=ejecutadoDelMes(id);
+  const previsto=totalGastoMes(id);
+  const cats=Object.keys(ej.porCat).sort((a,b)=>ej.porCat[b]-ej.porCat[a]);
+  const chips=cats.map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--t2);background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:2px 7px;margin:2px 4px 0 0"><span style="width:6px;height:6px;border-radius:2px;background:${CATS_COLORS[c]||'#6B85A8'}"></span>${c} ${fmtE(ej.porCat[c])}</span>`).join('');
+  const pct=previsto>0?Math.min(100,Math.round((ej.total/previsto)*100)):0;
+  const sub=ej.total>0?`Ejecutado ${fmtE(ej.total)} de ${fmtE(previsto)} previsto · ${pct}%`:'Sin tareas completadas aún';
+  return `<div class="tp" onclick="showHistDetail('${id}')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(ej.total)}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${sub}</div>${ej.total>0?`<div style="height:3px;border-radius:2px;background:var(--bd);overflow:hidden;margin-top:8px"><div style="width:${pct}%;height:100%;background:${accent}"></div></div><div style="margin-top:8px">${chips}</div>`:''}</div>`;
+}
+// ===== T5: HISTORIAL = LO REALMENTE EJECUTADO (no la previsión) =====
+// El historial debe reflejar solo lo COMPLETADO, no el presupuesto del mes.
+// Fuente de verdad: MONTH_PAGOS[id] (persiste por mes con done/amt reales) +
+// tareas de Massiel completadas (Mercado, Bizum, etc.) del mes activo.
+//
+// Clasificación de un pago hacia categoría de negocio, por su label. El
+// mapeo es explícito (no se inventa): cada patrón viene de cómo buildMonthPagos
+// nombra las tareas. Lo que no casa cae en 'Adicionales' (nunca se pierde).
+function pagoCategoria(p){
+  const l=(p.l||'');
+  if(/^Enviar a (Caixa|TR Jofre|TR J\.A\.|IBKR)/i.test(l))return 'Ahorro';
+  if(/Renting/i.test(l))return 'Ahorro';
+  if(/Enviar a Ma\. Lara/i.test(l))return 'Casa'; // Arriendo + Luz
+  if(/^Colegio/i.test(l))return 'Baby J.A.';
+  if(/On Air|Sweat|Monkey|GENUA|Gimnasio/i.test(l))return 'Deporte';
+  if(/Barber|U[ñn]as|Peluquer/i.test(l))return 'Personales';
+  if(/Retirar efectivo/i.test(l))return 'Casa';
+  if(/Remesa/i.test(l))return 'Remesas';
+  if(/Bizum de Massiel/i.test(l))return null; // reembolso interno, no gasto
+  if(/N[óo]mina/i.test(l))return null; // ingreso
+  if(/Vacaciones|Viaje|Boda/i.test(l))return 'Vacaciones';
+  if(/Mercado/i.test(l))return 'Mercado';
+  return 'Adicionales';
+}
+// Lo ejecutado del mes: recorre MONTH_PAGOS[id], suma solo done:true, excluye
+// ingresos y reembolsos internos (categoria null). Agrupa por categoría.
+// Devuelve {total, porCat:{cat:monto}, nDone, nTotal}.
+function ejecutadoDelMes(id){
+  const pagos=MONTH_PAGOS[id]||[];
+  const porCat={};let total=0,nDone=0,nTotal=0;
+  pagos.forEach(p=>{
+    if(p.cat==='ingreso')return; // la nómina no es gasto
+    nTotal++;
+    if(!p.done)return;
+    const amt=(p.amt!=null?p.amt:0);
+    if(!(amt>0)){nDone++;return;}
+    const cat=pagoCategoria(p);
+    if(cat===null){nDone++;return;} // dinero de paso / reembolso, no gasto
+    // 'Enviar a X' ya representa el ahorro consolidado; evitamos doble conteo
+    // con Renting (que también es Ahorro y viaja dentro de 'Enviar a Caixa').
+    porCat[cat]=Math.round(((porCat[cat]||0)+amt)*100)/100;
+    total=Math.round((total+amt)*100)/100;
+    nDone++;
+  });
+  // Tareas de Massiel completadas del MES ACTIVO (su Mercado y sus personales
+  // ya se reflejan en su propio flujo; aquí sumamos lo que ella ejecutó y que
+  // no está en MONTH_PAGOS: Mercado lo paga ella a TRM). Solo aplica al mes en
+  // curso, que es el único con massielDone en memoria.
+  if(id===ACTIVE_ID){
+    const mrc=MASSIEL_TASKS.find(t=>t.id==='m-mrc');
+    if(mrc&&massielDone['m-mrc']&&mrc.amt>0){
+      porCat['Mercado']=Math.round(((porCat['Mercado']||0)+mrc.amt)*100)/100;
+      total=Math.round((total+mrc.amt)*100)/100;
+    }
+  }
+  return {total,porCat,nDone,nTotal};
 }
 function renderHist(){
   const body=document.getElementById('hist-body');if(!body)return;
@@ -1339,6 +1412,31 @@ function renderHist(){
   if(MONTHS[ACTIVE_ID])html+=histCardHTML(ACTIVE_ID,'EN CURSO','var(--or)');
   HISTORIAL.forEach(h=>{html+=histCardHTML(h.id,'CERRADO','var(--t3)');});
   body.innerHTML=html||`<div class="tp" style="cursor:default;text-align:center;padding:30px 16px"><i class="ti ti-archive-off" style="font-size:24px;color:var(--t3)"></i><div style="font-size:13px;color:var(--t2);margin-top:10px;font-weight:600">Sin datos aún</div></div>`;
+}
+// T5: detalle del historial = tareas realmente COMPLETADAS del mes, agrupadas
+// por categoría. No muestra previsión: si una tarea no está done, no aparece.
+function showHistDetail(id){
+  const m=MONTHS[id];if(!m)return;
+  const ej=ejecutadoDelMes(id);
+  const previsto=totalGastoMes(id);
+  const pagos=(MONTH_PAGOS[id]||[]).filter(p=>p.done&&p.cat!=='ingreso'&&p.amt>0&&pagoCategoria(p)!==null);
+  // agrupar tareas completadas por su categoría de negocio
+  const grupos={};
+  pagos.forEach(p=>{const c=pagoCategoria(p);(grupos[c]=grupos[c]||[]).push(p);});
+  if(id===ACTIVE_ID){
+    const mrc=MASSIEL_TASKS.find(t=>t.id==='m-mrc');
+    if(mrc&&massielDone['m-mrc']&&mrc.amt>0){(grupos['Mercado']=grupos['Mercado']||[]).push({l:'Mercado · aporte Massiel (TR Massiel)',amt:mrc.amt});}
+  }
+  const cats=Object.keys(grupos).sort((a,b)=>ej.porCat[b]-ej.porCat[a]);
+  const pct=previsto>0?Math.min(100,Math.round((ej.total/previsto)*100)):0;
+  const catBlocks=cats.map(c=>{
+    const rows=grupos[c].map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="flex:1;font-size:12px;color:#fff">${p.l}</div><div style="font-size:12px;font-weight:700;color:#fff">${fmtE(p.amt)}</div></div>`).join('');
+    const sub=grupos[c].reduce((s,p)=>s+p.amt,0);
+    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:${CATS_COLORS[c]||'#6B85A8'}"></span><span style="font-size:11px;font-weight:700;color:#fff;letter-spacing:.04em">${c.toUpperCase()}</span></div><div style="font-size:12px;font-weight:800;color:${CATS_COLORS[c]||'#6B85A8'}">${fmtE(sub)}</div></div>${rows}</div>`;
+  }).join('')||'<div style="text-align:center;padding:24px;color:rgba(255,255,255,.35);font-size:12px">Ninguna tarea completada todavía en este mes.<br>El historial se llena a medida que marcas pagos.</div>';
+  const label=id===ACTIVE_ID?'EN CURSO':'CERRADO';
+  document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${m.name} · ${label}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">Lo realmente ejecutado</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:14px 16px 8px"><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:14px"><div style="display:flex;justify-content:space-between;align-items:flex-end"><div><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">GASTO EJECUTADO</div><div style="font-size:28px;font-weight:800;color:#0EC9BC">${fmtE(ej.total)}</div></div><div style="text-align:right"><div style="font-size:9px;color:rgba(255,255,255,.4);margin-bottom:2px">Previsto ${fmtE(previsto)}</div><div style="font-size:13px;font-weight:700;color:#fff">${pct}% ejecutado</div></div></div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:10px"><div style="width:${pct}%;height:100%;background:#0EC9BC"></div></div></div></div><div style="padding:12px 16px 20px">${catBlocks}</div>`;
+  document.getElementById('maov').style.display='block';
 }
 function toast(msg,color){const c=document.createElement('div');c.style.cssText='position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:'+(color||'var(--tl)')+';color:#000;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:100;white-space:nowrap;pointer-events:none;';c.textContent=msg;document.getElementById('app').appendChild(c);setTimeout(()=>c.remove(),2400);}
 function aporteTotales(id){
@@ -1390,6 +1488,7 @@ const MASSIEL_TASKS=[
   {id:'m-mrc',l:'Mercado',sub:'Aporte mensual',amt:750.00}
 ];
 let massielDone={'m-yt':true,'m-rem':true,'m-per':true,'m-mrc':true,'m-biz':true};
+let massielApplied={}; // T4: monto aplicado por tarea, para revertir exacto al desmarcar
 let ytTCMes={jun:1034};
 let maovMode=null;
 function syncMassielTaskAmounts(id){
@@ -1811,8 +1910,12 @@ async function toggleMassiel(id){
   }
   const turningOn=!massielDone[id];
   massielDone[id]=turningOn;
-  if(id==='m-mrc'){const t=MASSIEL_TASKS.find(x=>x.id==='m-mrc');regMov('TRM','Mercado · aporte Massiel',t.amt,turningOn);}
-  if(id==='m-biz'){regMov('BBVA','Bizum de Massiel',calcBizum(),turningOn);}
+  // T4/error-6: al desmarcar hay que revertir EXACTAMENTE el monto con que se
+  // marcó, no un recálculo posterior (que puede diferir si cambió el TC, el
+  // total, etc.) y descuadrar el saldo. Guardamos el monto aplicado por tarea.
+  massielApplied=massielApplied||{};
+  if(id==='m-mrc'){const t=MASSIEL_TASKS.find(x=>x.id==='m-mrc');const amt=turningOn?t.amt:(massielApplied['m-mrc']!=null?massielApplied['m-mrc']:t.amt);regMov('TRM','Mercado · aporte Massiel',amt,turningOn);massielApplied['m-mrc']=turningOn?amt:null;}
+  if(id==='m-biz'){const amt=turningOn?calcBizum():(massielApplied['m-biz']!=null?massielApplied['m-biz']:calcBizum());regMov('BBVA','Bizum de Massiel',amt,turningOn);massielApplied['m-biz']=turningOn?amt:null;}
   renderMaTile();if(maovMode==='tasks')renderMaTasksInto();updPrevCard();saveState();
 }
 function updPrevCard(){
@@ -1872,15 +1975,22 @@ function confirmCuotaMonto(){const v=toNum((document.getElementById('reg-cmonto'
 let cuotaVarCurrent=0;
 function startCuotaVar(){cuotaVarCurrent=0;regPath.push(reg.step);reg.step='cuotaVar';renderReg();}
 function confirmCuotaVar(){const v=toNum((document.getElementById('reg-cvar')||{}).value);if(!v||v<=0){toast('Indica el monto','var(--rd)');return;}reg.cuotaMontos.push(v);cuotaVarCurrent++;if(cuotaVarCurrent>=reg.cNum){reg.cuotaMonto=reg.cuotaMontos.reduce((s,x)=>s+x,0)/reg.cNum;regPath.push(reg.step);reg.step='cuotaVarDone';renderReg();}else renderReg();}
-function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags){
+function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
+  // T6: opts.offset = nº de cuotas ya pagadas hoy (0 o 1). El label de progreso
+  // debe reflejar el TOTAL real de cuotas, no solo las adicionales. Bug Nike:
+  // 1 pago hoy + 2 cuotas se etiquetaba "1/2","2/2" cuando debía ser "2/3","3/3".
+  const offset=(opts&&opts.offset)||0;   // cuotas ya cubiertas (la de hoy)
+  const totalCuotas=cNum+offset;          // total real incluyendo la de hoy
   ensureMonthsAhead(startId,cNum);
   let idx=MONTH_ORDER.indexOf(startId);if(idx<0)idx=MONTH_ORDER.indexOf(ACTIVE_ID)+1;
   const isArr=Array.isArray(cuotaAmts);
   for(let n=1;n<=cNum;n++){
     const mid=MONTH_ORDER[idx+n-1];if(!mid)break;
     const perCuota=isArr?cuotaAmts[n-1]:cuotaAmts;
+    const numCuota=n+offset;              // 2,3,... si hubo pago hoy; 1,2,... si no
+    const esUltima=numCuota===totalCuotas;
     MONTHS[mid].cuotas=MONTHS[mid].cuotas||[];
-    MONTHS[mid].cuotas.push({l:label,tags:tags,amt:'€'+perCuota.toFixed(2).replace('.',','),prog:n+'/'+cNum+(n===cNum?' · ÚLTIMA':''),pct:Math.round(n/cNum*100),warn:n===cNum,fixed:false});
+    MONTHS[mid].cuotas.push({l:label,tags:tags,amt:'€'+perCuota.toFixed(2).replace('.',','),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false});
   }
 }
 function renderRegSummary(){
@@ -1935,7 +2045,7 @@ function saveReg(){
   }
   else if(!reg.isCuota){regMov(reg.account,label,reg.amount,false,reg.category);}
   else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined});if(reg.account==='CAIXA')regCaixaCard(label,reg.amount);}
-  else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;if(reg.amount>0)regMov(reg.account,label+' · inicial',reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags);CUOTAS_NUEVAS.push(Object.assign({},reg));}
+  else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
   if(currentMonth)openMov(currentMonth);
   updPrevCard();closeReg();gTHome();toast('✓ Movimiento registrado','var(--tl)');saveState();
@@ -2075,7 +2185,7 @@ async function saveState(){
           :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done}
       );
     });
-    const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MOVS,CUOTAS_NUEVAS};
+    const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MOVS,CUOTAS_NUEVAS};
     await _fbSetDoc(stateDocRef(),{json:JSON.stringify(state),updatedAt:Date.now()});
     snapshotMovsBaseline();
     snapshotDetBaseline();
@@ -2103,6 +2213,7 @@ function applyState(s){
   if(typeof s.nominaReg==='boolean')nominaReg=s.nominaReg;
   // v14 (jul-30): el bloque pagosByMonth se movió al FINAL de applyState (ver nota abajo).
   if(s.massielDone)massielDone=s.massielDone;
+  if(s.massielApplied)massielApplied=s.massielApplied;
   if(typeof s.massielYtAmt==='number')MASSIEL_TASKS[0].amt=s.massielYtAmt;
   if(s.HISTORIAL)HISTORIAL=s.HISTORIAL;
   Object.keys(s.mCats||{}).forEach(k=>{if(MONTHS[k]&&s.mCats[k])MONTHS[k].cats=s.mCats[k];});
