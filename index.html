@@ -18,12 +18,19 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0A0F1E;--s1:#111826;--s2:#172035;--bd:#1C2D46;--bd2:#253858;--gd:#E8AA22;--gd2:rgba(232,170,34,.11);--tl:#0EC9BC;--tl2:rgba(14,201,188,.1);--rd:#F04545;--rd2:rgba(240,69,69,.1);--or:#F97316;--or2:rgba(249,115,22,.1);--pu:#8B6FDF;--pu2:rgba(139,111,223,.1);--bl:#4C8DFA;--bl2:rgba(76,141,250,.1);--gn:#22C55E;--gn2:rgba(34,197,94,.1);--pk:#D4537E;--pk2:rgba(212,83,126,.1);--t1:#E2EAF8;--t2:#6B85A8;--t3:#36506A;--fs:'Inter',-apple-system,sans-serif;--fd:'Manrope','Inter',-apple-system,sans-serif;--sh1:0 1px 2px rgba(0,0,0,.24),0 10px 28px -14px rgba(0,0,0,.55);--sh2:0 2px 6px rgba(0,0,0,.28),0 16px 36px -16px rgba(0,0,0,.6);}
 html,body{height:100%;background:#0A0F1E}
-.af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
-@media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd)}}
-.pg{position:absolute;top:0;left:0;right:0;bottom:68px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+.af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs);
+  /* v27 — respetar la zona segura del iPhone (notch/barra de estado y home
+     indicator). Sin esto el contenido arrancaba pegado arriba, tapado por el
+     notch ("muy arriba"). Las páginas y overlays van position:absolute dentro
+     de .af, así que este padding desplaza todo su contenido a la zona visible. */
+  padding-top:env(safe-area-inset-top);
+  padding-bottom:env(safe-area-inset-bottom);
+  box-sizing:border-box}
+@media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd);padding-top:0;padding-bottom:0}}
+.pg{position:absolute;top:env(safe-area-inset-top);left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
 .pgm{background:#EFF4FB}
-.nb{position:absolute;bottom:0;left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
+.nb{position:absolute;bottom:env(safe-area-inset-bottom);left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
 .nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
 .nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;transition:all .18s cubic-bezier(.2,.8,.2,1)}
 .nbi i{font-size:20px;color:var(--t3);transition:color .15s}
@@ -37,9 +44,9 @@ html,body{height:100%;background:#0A0F1E}
 .tp:active{transform:scale(.97)}
 .ts{background:linear-gradient(165deg,var(--s1),#0d1320);border:1px solid var(--bd);border-radius:17px;padding:17px;cursor:pointer;transition:transform .12s;box-shadow:var(--sh1)}
 .ts:active{transform:scale(.97)}
-.ov{position:absolute;inset:0;background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
+.ov{position:absolute;top:env(safe-area-inset-top);left:0;right:0;bottom:env(safe-area-inset-bottom);background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
 .ovc{background:var(--s1);border-radius:22px;margin:10px 10px 0;border:1px solid var(--bd);overflow:hidden;min-height:calc(100% - 20px);box-shadow:var(--sh2)}
-.ovbot{position:absolute;left:0;right:0;bottom:68px;background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
+.ovbot{position:absolute;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
 .btng{background:linear-gradient(135deg,#F5C15C,var(--gd) 60%,#DE9E1E);color:#1a1204;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:0 6px 16px -4px rgba(232,170,34,.45);transition:transform .12s}
 .btng:active{transform:scale(.98)}
 .tbx{flex:1;padding:8px 4px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:1px solid var(--bd);color:var(--t3);transition:all .15s}
@@ -625,7 +632,16 @@ function renderFondoMutuoMassiel(){
   document.getElementById('fmov-c').innerHTML=html;
 }
 function showFondoMutuoMassiel(){renderFondoMutuoMassiel();document.getElementById('fmov').style.display='block';}
-function gT(id){['i','p','h','m'].forEach(p=>{document.getElementById('p-'+p).classList.remove('on');document.getElementById('nb-'+p).classList.remove('on');});document.getElementById('p-'+id).classList.add('on');document.getElementById('nb-'+id).classList.add('on');document.getElementById('p-'+id).scrollTop=0;document.getElementById('fov').style.display='none';document.getElementById('maov').style.display='none';document.getElementById('aov').style.display='none';document.getElementById('fxov').style.display='none';}
+function gT(id){['i','p','h','m'].forEach(p=>{document.getElementById('p-'+p).classList.remove('on');document.getElementById('nb-'+p).classList.remove('on');});document.getElementById('p-'+id).classList.add('on');document.getElementById('nb-'+id).classList.add('on');document.getElementById('p-'+id).scrollTop=0;document.getElementById('fov').style.display='none';document.getElementById('maov').style.display='none';document.getElementById('aov').style.display='none';document.getElementById('fxov').style.display='none';
+  // Al ENTRAR al home de Massiel, recalcular todo su resumen EN VIVO contra el
+  // estado actual (repartoMes/BAL), para que al moverse entre sesiones (Jofre
+  // edita algo -> entra a la vista de Massiel) nunca vea un valor pintado en un
+  // render anterior. Cubre: header de mes, saldos (TRM/TRJA/Fondo Mutuo), card
+  // de aporte (renderMaTile->massielTotal) e historial de ahorro. Sin esto, el
+  // aporte podia quedar congelado (ej. 1.328,22 en vez de 1.310,22) hasta un
+  // evento propio de la vista.
+  if(id==='m'){try{updHeaders();updTile();renderMaTile();renderAhorroTileMassiel();}catch(e){}}
+}
 function gTHome(){gT(localStorage.getItem('cg_role')==='massiel'?'m':'i');}
 function sMT(n){[1,2].forEach(i=>{document.getElementById('mt'+i).classList.remove('on');document.getElementById('mt-tab'+i).classList.remove('on');});document.getElementById('mt'+n).classList.add('on');document.getElementById('mt-tab'+n).classList.add('on');}
 const MONTH_ORDER=['jun','jul','ago','sep'];
@@ -1439,7 +1455,13 @@ function variablesNoCuotaTotal(id){
   return Math.round(variablesNoCuotaDelMes(id).reduce((s,m)=>s+m.a,0)*100)/100;
 }
 function mesGastoTotalReal(id){
-  // Suma de categorías del detalle -> tile y detalle cuadran (punto 7 v25).
+  // v27 — Gasto real del mes = Σ categorías del detalle. Cada categoría ya
+  // combina sus FIJOS ejecutados (gateados por tarea done) + sus REGISTROS
+  // variables del día a día (movimientosVariablesDelMes, 100% Jofre). Por eso el
+  // tile ≡ suma del desglose por categoría (categoriaNivel1HTML) por
+  // construcción. 'Ahorro' ya entra como una categoría más de CATS (50/50).
+  // El total puede exceder Jofre+Massiel del reparto: las variables son 100% de
+  // Jofre y no forman parte del reparto de responsabilidad.
   const prev=maovEsVistaMassiel;
   maovEsVistaMassiel=false;
   let t=0;
@@ -1461,10 +1483,13 @@ function histCardHTML(id,label,accent){
 function renderHist(){
   const el=document.getElementById('hist-body');if(!el)return;
   const ai=MONTH_ORDER.indexOf(ACTIVE_ID);
-  const cerrados=ai>0?MONTH_ORDER.slice(0,ai):[];
-  if(!cerrados.length){el.innerHTML='<div style="padding:24px 4px;text-align:center;color:var(--t3);font-size:12px">Aún no hay meses cerrados. El historial se irá llenando al registrar cada nómina.</div>';return;}
+  // v27 — Historial = meses pasados + el mes ACTUAL (activo). Los futuros (sep+)
+  // NO entran. El mes activo arranca en 0 y crece según se registra ejecución.
+  const meses=ai>=0?MONTH_ORDER.slice(0,ai+1):[];
+  if(!meses.length){el.innerHTML='<div style="padding:24px 4px;text-align:center;color:var(--t3);font-size:12px">Aún no hay meses en el historial. Se irá llenando al registrar cada nómina.</div>';return;}
   const accents=['var(--tl)','var(--gd)','var(--or)','var(--pu)','var(--bl)','var(--pk)'];
-  el.innerHTML=cerrados.slice().reverse().map((id,i)=>histCardHTML(id,'CERRADO',accents[i%accents.length])).join('');
+  // Orden: más reciente arriba -> el activo primero, luego los cerrados.
+  el.innerHTML=meses.slice().reverse().map((id,i)=>histCardHTML(id,id===ACTIVE_ID?'EN CURSO':'CERRADO',accents[i%accents.length])).join('');
 }
 // ===== T5: HISTORIAL = LO REALMENTE EJECUTADO (no la previsión) =====
 // El historial debe reflejar solo lo COMPLETADO, no el presupuesto del mes.
@@ -1630,7 +1655,7 @@ function maCuotaRowHTML(c){
 function sMTma(n){[1,2,3].forEach(i=>{const b=document.getElementById('mamt'+i),t=document.getElementById('mamt-tab'+i);if(b)b.classList.remove('on');if(t)t.classList.remove('on');});const b=document.getElementById('mamt'+n),t=document.getElementById('mamt-tab'+n);if(b)b.classList.add('on');if(t)t.classList.add('on');}
 function maRowHTML(x){return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="flex:1"><div style="font-size:13px;color:#fff">${x.l}</div><div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">${x.d}</div></div><div style="font-size:13px;font-weight:700;color:${x.a>0?'#0EC9BC':'rgba(255,255,255,.3)'}">${fmtE(x.a)}</div></div>`;}
 function isMassielRole(){return document.body.classList.contains('role-massiel');}
-const CATS_COLORS={'Mercado':'#22C55E','Baby J.A.':'#D4537E','Deporte':'#4C8DFA','Salud':'#F04545','Casa':'#F97316','Trabajo':'#8B6FDF','Carro/Moto':'#0EC9BC','Remesas':'#E8AA22','Compartir Familiar':'#A855F7','Personales':'#EC4899','Adicionales':'#6B85A8'};
+const CATS_COLORS={'Mercado':'#22C55E','Baby J.A.':'#D4537E','Deporte':'#4C8DFA','Salud':'#F04545','Casa':'#F97316','Trabajo':'#8B6FDF','Carro/Moto':'#0EC9BC','Remesas':'#E8AA22','Compartir Familiar':'#A855F7','Personales':'#EC4899','Ahorro':'#0EC9BC','Adicionales':'#6B85A8'};
 function totalGastoMes(id){
   const d=MONTHS[id];if(!d)return 0;
   return (d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0);
@@ -1670,84 +1695,161 @@ function patronColegio(itemId){
 function esMesFuturo(id){
   return MONTH_ORDER.indexOf(id)>MONTH_ORDER.indexOf(ACTIVE_ID);
 }
+// v27 — Historial = EJECUCIÓN REAL (Opción A). En mes NO futuro, una línea solo
+// cuenta si su ejecución real ocurrió (su tarea está 'done'). La estructura de
+// tareas varía por mes: en julio/junio Arriendo y Luz eran tareas individuales;
+// desde agosto se agrupan en "Enviar a Ma. Lara". Por eso el gateo es TOLERANTE:
+// un fijo cuenta si su tarea individual 'gasto' está done O si la transferencia
+// agrupada que lo ejecuta ("Ma. Lara") está done.
+// Distinto de "Enviar a Caixa"/"Enviar a TR Jofre" (cat:'enviar'): esas son
+// fondeo de cuenta, NO ejecutan fijos por sí solas — cada fijo que sale de esas
+// cuentas tiene su propia tarea 'gasto' y se gatea por ella.
+function malaraDone(id){
+  const t=(MONTH_PAGOS[id]||[]).find(p=>/Ma\.?\s*Lara/i.test(p.l));
+  return !!(t&&t.done);
+}
+function tareaEnviarDone(id,pattern){
+  const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='enviar'&&pattern.test(p.l));
+  return !!(t&&t.done);
+}
+function tareaGastoDoneExacta(id,pattern){
+  // true solo si existe una tarea 'gasto' que casa el patrón Y está done. Si NO
+  // existe, devuelve false (no la da por hecha) — clave para "empieza en 0".
+  const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&pattern.test(p.l));
+  return !!(t&&t.done);
+}
+// Arriendo/Luz: ejecutados por su tarea individual (jul/jun) O por "Ma. Lara"
+// (ago+). En futuro no gatea.
+function fijoCasaEjecutado(id,pattern){
+  return tareaGastoDoneExacta(id,pattern)||malaraDone(id);
+}
+// v27 — Mapeo de una tarea 'gasto' (por su label) a la CATEGORÍA de gasto del
+// Historial. Es el equivalente de resolverCategoriaMovimiento pero para tareas.
+// Orden: patrones específicos primero. Las cuotas (Nike/Zalando/Emma/Movistar/
+// C.C./Amazon Pago) se resuelven aparte por cuotasFor+tags, así que acá caen en
+// Adicionales solo si llegaran sueltas. "Enviar a Ma. Lara" agrupa Arriendo+Luz
+// (Casa) — se trata en el desglose de ejecución, no acá.
+const TAREA_CAT_RULES=[
+  {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Limpieza/i,cat:'Casa'},
+  {re:/^Colegio/i,cat:'Baby J.A.'},
+  {re:/On Air|^Sweat|^Fisiosalud|^Odontolog/i,cat:'Salud'},
+  {re:/^GENUA|CB Xirivella|^Deporte/i,cat:'Deporte'},
+  {re:/^Claude/i,cat:'Trabajo'},
+  {re:/^Renting/i,cat:'Carro/Moto'},
+  {re:/^Vacaciones/i,cat:'Compartir Familiar'},
+  {re:/^Hotel|Restante - Hotel/i,cat:'Vacaciones'},
+  {re:/^Remesa/i,cat:'Remesas'},
+  {re:/^Barber|^Uñas|^Bono|Transporte|Peluquer/i,cat:'Personales'}
+];
+function categoriaDeTarea(label){
+  const r=TAREA_CAT_RULES.find(x=>x.re.test(label));
+  return r?r.cat:'Adicionales';
+}
+// Tareas 'gasto' done de un mes que mapean a `cat`. EXCLUYE:
+// · "Enviar a Ma. Lara" (se desglosa como Arriendo/Luz en Casa aparte)
+// · cuotas (se resuelven vía cuotasFor+tags para no duplicar)
+// Devuelve [{l,amt}] para el desglose.
+const CUOTA_TAREA_RE=/·\s*\d+\/\d+|última cuota|Colch[oó]n|Movistar|Nike|Zalando|C\.C\.|Amazon · Pago/i;
+function tareasGastoEjecutadas(id,cat){
+  return (MONTH_PAGOS[id]||[]).filter(p=>{
+    if(p.cat!=='gasto'||!p.done)return false;
+    if(/Ma\.?\s*Lara/i.test(p.l))return false;   // se desglosa en Casa
+    if(CUOTA_TAREA_RE.test(p.l))return false;      // cuotas via cuotasFor
+    return categoriaDeTarea(p.l)===cat;
+  }).map(p=>({l:p.l,a:p.amt}));
+}
 function categoriaFijosDetalle(cat,id){
   const cs=catsBySuffix(id);const out=[];
   const futuro=esMesFuturo(id);
-  // En mes futuro no hay tareas ni registros todavia -- se muestra el monto
-  // objetivo (mismo dato que ya usa Previsión), sin gatear por 'done'. En
-  // mes actual/pasado, solo cuenta lo que realmente se pago.
+  if(!futuro){
+    // ── EJECUCIÓN REAL (mes pasado o activo) ────────────────────────────────
+    // El Historial refleja lo que REALMENTE pasó, no el plan: tareas 'gasto'
+    // done mapeadas a su categoría + (para Casa) el desglose de "Enviar a Ma.
+    // Lara" en Arriendo/Luz cuando esa transferencia agrupada está done. Los
+    // movimientos variables del día a día los añade categoriaGroupTotal (reg).
+    // Si nada se ejecutó (agosto recién empezado), out queda vacío -> 0.
+    if(cat==='Casa'){
+      // Arriendo + Luz: por tarea individual (jul/jun) o agrupados en Ma. Lara.
+      if(cs.arr&&fijoCasaEjecutado(id,/^Arriendo/i))out.push({l:'Arriendo',a:cs.arr.a,drill:null});
+      // Resto de servicios de Casa: cada tarea 'gasto' done que mapea a Casa,
+      // salvo Arriendo/Luz (ya arriba) — se agrupan bajo "Servicios".
+      const luzEjec=fijoCasaEjecutado(id,/^Luz$/i);
+      const servTareas=tareasGastoEjecutadas(id,'Casa').filter(t=>!/^Arriendo/i.test(t.l));
+      let servTotal=servTareas.reduce((s,t)=>s+t.a,0);
+      // Luz vía Ma. Lara no aparece como tarea propia: sumarla desde el plan.
+      if(luzEjec){const luzPlan=itemsForKey('servicios',id).find(x=>x.l==='Luz');const yaEsta=servTareas.some(t=>/^Luz$/i.test(t.l));if(luzPlan&&!yaEsta)servTotal+=luzPlan.a;}
+      if(servTotal>0)out.push({l:'Servicios',a:servTotal,drill:{key:'servicios',label:'Servicios',backCat:'Casa'}});
+    }else if(cat==='Baby J.A.'){
+      const t=tareasGastoEjecutadas(id,'Baby J.A.');const tot=t.reduce((s,x)=>s+x.a,0);
+      if(tot>0)out.push({l:'Colegio J.A.',a:tot,drill:{key:'colegio',label:'Colegio J.A.',backCat:'Baby J.A.'}});
+    }else if(cat==='Remesas'){
+      const t=tareasGastoEjecutadas(id,'Remesas');const tot=t.reduce((s,x)=>s+x.a,0);
+      if(tot>0)out.push({l:'Remesas',a:tot,drill:{key:'remesas',label:'Remesas',backCat:'Remesas'}});
+    }else if(cat==='Ahorro'){
+      // Ahorro (50/50) por ejecución de sus depósitos. Fondo Emergencia,
+      // Inversión/IBKR. (Renting->Carro/Moto, Fondo Mutuo->Compartir Familiar.)
+      itemsForKey('ahorro',id).forEach(x=>{
+        if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
+        let hecho=false;
+        if(/Fondo Emergencia/i.test(x.l))hecho=tareaEnviarDone(id,/TR J\.?A\.?/i);
+        else if(/Inversión|Inversion|IBKR|Bolsa|Hipoteca/i.test(x.l))hecho=tareaEnviarDone(id,/IBKR/i);
+        else hecho=tareaEnviarDone(id,new RegExp(x.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'));
+        if(hecho)out.push({l:x.l,a:x.a,drill:null});
+      });
+    }else if(cat==='Compartir Familiar'){
+      // Fondo Mutuo (depósito TR Jofre done) + Vacaciones (tarea propia done).
+      const fm=itemsForKey('ahorro',id).find(x=>/Fondo Mutuo/i.test(x.l));
+      if(fm&&tareaEnviarDone(id,/TR Jofre/i))out.push({l:'Fondo Mutuo',a:fm.a,drill:null});
+      tareasGastoEjecutadas(id,'Compartir Familiar').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
+    }else{
+      // Resto de categorías (Salud, Deporte, Trabajo, Carro/Moto, Vacaciones,
+      // Personales, Mercado, Adicionales): sus tareas 'gasto' done mapeadas.
+      tareasGastoEjecutadas(id,cat).forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
+    }
+    // Cuotas de esta categoría que YA se pagaron (su tarea done).
+    cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
+      if(tareaGastoDoneExacta(id,new RegExp(c.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i')))out.push({l:c.l,a:moneyFromStr(c.amt),drill:null});
+    });
+    return out.filter(x=>x.a>0);
+  }
+  // ── PLAN / PREVISIÓN (mes futuro) ─────────────────────────────────────────
+  // Sin tareas ni registros todavía: se muestra el monto objetivo, igual que
+  // Previsión. (Nota: los meses futuros NO se listan en el Historial, pero esta
+  // rama sí la usa Previsión para su desglose por categoría.)
   if(cat==='Mercado'){
     if(cs.mrc)out.push({l:'Mercado',a:cs.mrc.a,drill:null});
   }else if(cat==='Baby J.A.'){
-    const colegioItems=itemsForKey('colegio',id).filter(x=>futuro||tareaEstaHecha(id,patronColegio(x.id)));
-    if(cs.col)out.push({l:'Colegio J.A.',a:colegioItems.reduce((s,x)=>s+x.a,0),drill:{key:'colegio',label:'Colegio J.A.',backCat:'Baby J.A.'}});
+    if(cs.col)out.push({l:'Colegio J.A.',a:itemsForKey('colegio',id).reduce((s,x)=>s+x.a,0),drill:{key:'colegio',label:'Colegio J.A.',backCat:'Baby J.A.'}});
   }else if(cat==='Deporte'){
     const genua=itemsForKey('personales',id).find(x=>x.id==='per6');
-    if(genua&&(futuro||tareaEstaHecha(id,/^GENUA/i)))out.push({l:genua.l,a:genua.a,drill:null});
+    if(genua)out.push({l:genua.l,a:genua.a,drill:null});
   }else if(cat==='Salud'){
-    itemsForKey('gimnasios',id).filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>{
-      const patron=x.id==='gym1'?/^On Air/i:null;
-      if(futuro||tareaEstaHecha(id,patron))out.push({l:x.l,a:x.a,drill:null});
-    });
+    itemsForKey('gimnasios',id).filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }else if(cat==='Casa'){
     if(cs.arr)out.push({l:'Arriendo',a:cs.arr.a,drill:null});
-    const serviciosItems=itemsForKey('servicios',id).filter(x=>x.id!=='svc-claude'&&(futuro||tareaEstaHecha(id,patronServicio(x.id))));
-    const serviciosTotal=serviciosItems.reduce((s,x)=>s+x.a,0);
-    out.push({l:'Servicios',a:serviciosTotal,drill:{key:'servicios',label:'Servicios',backCat:'Casa'}});
+    const serviciosTotal=itemsForKey('servicios',id).filter(x=>x.id!=='svc-claude').reduce((s,x)=>s+x.a,0);
+    if(serviciosTotal>0)out.push({l:'Servicios',a:serviciosTotal,drill:{key:'servicios',label:'Servicios',backCat:'Casa'}});
   }else if(cat==='Trabajo'){
     const claude=itemsForKey('servicios',id).find(x=>x.id==='svc-claude');
-    if(claude&&(futuro||tareaEstaHecha(id,/Claude/i)))out.push({l:'Claude',a:claude.a,drill:null});
+    if(claude)out.push({l:'Claude',a:claude.a,drill:null});
   }else if(cat==='Carro/Moto'){
-    if(futuro){
-      const rentingObj=itemsForKey('ahorro',id).find(x=>/Renting/i.test(x.l));
-      if(rentingObj)out.push({l:'Renting',a:rentingObj.a,drill:null});
-    }else{
-      // Solo cuenta si la tarea real ya se pago -- mientras siga pendiente
-      // (ej. Renting con la disputa REVEL sin resolver) esto es 0.
-      const rentingTarea=(MONTH_PAGOS[id]||[]).find(p=>/Renting/i.test(p.l));
-      if(rentingTarea&&rentingTarea.done)out.push({l:'Renting',a:rentingTarea.amt,drill:null});
-    }
+    const rentingObj=itemsForKey('ahorro',id).find(x=>/Renting/i.test(x.l));
+    if(rentingObj)out.push({l:'Renting',a:rentingObj.a,drill:null});
   }else if(cat==='Remesas'){
     if(cs.rem)out.push({l:'Remesas',a:itemsForKey('remesas',id).reduce((s,x)=>s+x.a,0),drill:{key:'remesas',label:'Remesas',backCat:'Remesas'}});
   }else if(cat==='Compartir Familiar'){
-    // "Fondo Mutuo" = el depósito mensual normal a TR Jofre. "Vacaciones"
-    // es un obligación aparte (ej. Vacaciones de Verano en julio, Vacaciones
-    // - Verano en agosto) que tambien vive en TR Jofre pero se paga como su
-    // propia tarea, no como parte del deposito mensual -- por eso es una
-    // linea independiente, gateada por su propio done.
     const fm=itemsForKey('ahorro',id).find(x=>/Fondo Mutuo/i.test(x.l));
-    const vacTarea=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&/Vacaciones/i.test(p.l));
-    if(futuro){
-      if(fm)out.push({l:fm.l,a:fm.a,drill:null});
-    }else{
-      const fmTarea=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='enviar'&&/TR Jofre/i.test(p.l));
-      if(fm&&fmTarea&&fmTarea.done)out.push({l:'Fondo Mutuo',a:fm.a,drill:null});
-      if(vacTarea&&vacTarea.done)out.push({l:vacTarea.l,a:vacTarea.amt,drill:null});
-    }
+    if(fm)out.push({l:fm.l,a:fm.a,drill:null});
   }else if(cat==='Vacaciones'){
-    // Ahorro redirigido hacia viajes (ej. "Boda de Jeff & Dani") -- se
-    // identifica por key:'vacaciones' en el item de ahorro (no por texto del
-    // label, para que cualquier viaje futuro con nombre distinto funcione
-    // igual sin tocar código). Los gastos reales del día a día en viaje
-    // llegan por Registro normal con categoría 'Vacaciones' y ya se suman
-    // aparte via movimientosVariablesDelMes.
     itemsForKey('ahorro',id).filter(x=>x.key==='vacaciones').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
+  }else if(cat==='Ahorro'){
+    itemsForKey('ahorro',id).forEach(x=>{
+      if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
+      out.push({l:x.l,a:x.a,drill:null});
+    });
   }else if(cat==='Personales'){
-    // Barbería·Jofre (per1) queda fuera siempre -- ya se registra como
-    // Registro real en Adicionales, duplicaria si se sumara acá también.
-    // GENUA (per6) vive en Deporte. El resto son los items de Massiel
-    // (Uñas, Bono Transporte) + Peluquería J.A. (50/50) -- esos si son fijo,
-    // nadie los está registrando aparte todavía.
     itemsForKey('personales',id).filter(x=>x.id!=='per1'&&x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
-  }else if(cat==='Adicionales'){
-    // Sin fijo: el viejo lump "Adicionales / Varios" de junio era una
-    // estimacion previa a que existieran los Registros reales -- ahora que
-    // junio tiene sus items reales cargados, ese numero queda obsoleto y
-    // duplicaria lo mismo dos veces.
   }
-  // Cuotas etiquetadas con esta categoría (ej. tags:['BBVA','Solo Jofre',
-  // 'Deporte']) también cuentan acá -- genérico, sirve para cualquier
-  // categoría futura, no solo Deporte.
   cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
     out.push({l:c.l,a:moneyFromStr(c.amt),drill:null});
   });
@@ -1894,7 +1996,7 @@ function categoriaGroupTotal(cat,id){
 // Categorias que Massiel puede ver: solo donde tiene responsabilidad real
 // (55/45, 50/50, o sus propios items). Deporte/Trabajo/Remesas/Adicionales
 // son 100% Jofre o sin regla de reparto -> quedan fuera de su vista.
-const CATS_MASSIEL_VISIBLE=['Mercado','Baby J.A.','Salud','Casa','Carro/Moto','Compartir Familiar','Vacaciones','Personales'];
+const CATS_MASSIEL_VISIBLE=['Mercado','Baby J.A.','Salud','Casa','Carro/Moto','Compartir Familiar','Vacaciones','Personales','Ahorro'];
 function categoriasVisibles(){
   // No depende de quien esta logueado (Jofre puede entrar a la seccion de
   // Massiel para monitorear) -- depende de por donde se entro: si vino del
@@ -2045,7 +2147,7 @@ function renderPrevision(){
   }).join('');
 }
 BAL.IBKR=0;MOVS.IBKR=[];
-const CATS=['Mercado','Baby J.A.','Deporte','Salud','Casa','Trabajo','Carro/Moto','Remesas','Compartir Familiar','Vacaciones','Personales','Adicionales'];
+const CATS=['Mercado','Baby J.A.','Deporte','Salud','Casa','Trabajo','Carro/Moto','Remesas','Compartir Familiar','Vacaciones','Personales','Ahorro','Adicionales'];
 const ACCOUNTS_LIST=[{id:'BBVA',n:'BBVA'},{id:'CAIXA',n:'Caixa'},{id:'TRJ',n:'TR Jofre'},{id:'TRJA',n:'TR J.A.'},{id:'TRM',n:'TR Massiel'},{id:'IBKR',n:'IBKR'}];
 const CUOTAS_NUEVAS=[];let reg={},regPath=[];
 function openReg(presetAcc){reg={type:null,desc:'',amount:null,category:null,account:presetAcc||null,isCuota:null,cNum:null,cType:null,shared:null,caixaCard:null,mesInicio:null,cuotaMonto:null,cuotaMontos:[],cuotasIguales:null,cuotaCuentaDeduccion:null,step:'type'};regPath=[];renderReg();document.getElementById('fov').style.display='block';}
