@@ -1794,6 +1794,16 @@ function esMovimientoRevertido(mv){
   // calculo con todo lo demas), el gasto ya corregido se cuenta dos veces.
   return /\(revertido a /i.test(mv.l)||/^Corrección:/i.test(mv.l);
 }
+// v26 — Dotación de un pool: NO es gasto, es el depósito que llena el fondo del
+// cual salen los Registros (ej. "Mercado · aporte Massiel" €750 que Massiel mete
+// en TRM). Antes se contaba como gasto e inflaba Mercado; ahora se excluye del
+// cálculo de movimientos-gasto y se refleja solo en el banner "PRESUPUESTADO"
+// (categoriaPresupuestoMes). Detección genérica por patrón de label sobre las
+// categorías pool — sirve para Mercado y Compartir Familiar sin hardcodear meses.
+const DOTACION_LABEL_RE=/\baporte\b|\bdotaci[oó]n\b|\bfondo\b.*\bmensual\b/i;
+function esDotacionPool(mv,cat){
+  return CATEGORIAS_POOL.includes(cat)&&DOTACION_LABEL_RE.test(mv.l||'');
+}
 function movimientosVariablesDelMes(id){
   const tareas=tareaLabelsForMonth(id);const out=[];
   Object.keys(MOVS).forEach(acc=>{
@@ -1803,6 +1813,7 @@ function movimientosVariablesDelMes(id){
       if(esMovimientoRevertido(mv))return;
       if(!movBelongsToMonth(mv,id))return;
       const cat=resolverCategoriaMovimiento(mv,acc);
+      if(esDotacionPool(mv,cat))return; // dotación del fondo: no es gasto
       out.push({l:mv.l,a:Math.round(Math.abs(moneyFromStr(mv.a))*100)/100,cat,acc});
     });
   });
@@ -1819,12 +1830,31 @@ function categoriaSpendForMonth(id){
 // Por eso acá el fijo se muestra como presupuesto/comentario (como
 // "AHORRANDO ESTE MES"), y el total real de la categoría es solo Registros.
 const CATEGORIAS_POOL=['Mercado','Compartir Familiar'];
+// v26 — Suma las dotaciones REALES (movimientos "aporte/dotación") que llenan
+// el fondo de un pool en el mes. Es lo que efectivamente se depositó, no el
+// presupuesto teórico. Usa la MISMA detección que el filtro de gasto.
+function dotacionRealPool(cat,id){
+  let t=0;
+  Object.keys(MOVS).forEach(acc=>{
+    (MOVS[acc]||[]).forEach(mv=>{
+      if(mv.t)return;
+      if(!movBelongsToMonth(mv,id))return;
+      const c=resolverCategoriaMovimiento(mv,acc);
+      if(c===cat&&esDotacionPool(mv,c)) t+=Math.abs(moneyFromStr(mv.a));
+    });
+  });
+  return Math.round(t*100)/100;
+}
 function categoriaPresupuestoMes(cat,id){
   // El banner "presupuestado" solo aplica en modo real (mes actual/pasado);
   // en un mes futuro la categoria ya se muestra como estimado directamente,
   // no hace falta el comentario aparte.
   if(esMesFuturo(id))return null;
   if(!CATEGORIAS_POOL.includes(cat))return null;
+  // Prioridad a la dotación real depositada; si no hay, cae al presupuesto
+  // configurado de la categoría (comportamiento previo).
+  const real=dotacionRealPool(cat,id);
+  if(real>0)return real;
   return categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0);
 }
 function categoriaGroupTotal(cat,id){
