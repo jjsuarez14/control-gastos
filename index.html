@@ -23,7 +23,7 @@ html,body{height:100%;background:#0A0F1E}
 .pg{position:absolute;top:0;left:0;right:0;bottom:68px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
 .pgm{background:#EFF4FB}
-.nb{position:absolute;bottom:0;left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center;padding-bottom:env(safe-area-inset-bottom)}
+.nb{position:absolute;bottom:0;left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
 .nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
 .nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;transition:all .18s cubic-bezier(.2,.8,.2,1)}
 .nbi i{font-size:20px;color:var(--t3);transition:color .15s}
@@ -1930,8 +1930,17 @@ function esDotacionPool(mv,cat){
 // porque no es gasto), la devolución SÍ entra al cálculo pero con signo
 // negativo: resta del total de su categoría. Genérico: sirve para cualquier
 // devolución futura sin tocar código.
+// CUIDADO — Ingreso ≠ Devolución: un APORTE de otra persona (ej. "Massiel -
+// Vacaciones €300" = dinero que Massiel pasa para cubrir el viaje), una nómina,
+// un bizum, un préstamo o una reversión/corrección contable NO son devoluciones
+// de un gasto propio y NO deben restar. Se detectan y excluyen explícitamente,
+// aunque el label empezara por una palabra de devolución.
 const DEVOLUCION_LABEL_RE=/^\s*(devoluci[oó]n|reembolso|reintegro|abono)\b/i;
-function esDevolucion(mv){ return DEVOLUCION_LABEL_RE.test(mv.l||''); }
+const NO_ES_DEVOLUCION_RE=/aporte|n[oó]mina|bizum|pr[eé]stamo|reversi[oó]n|correcci[oó]n|massiel|jofre|traspaso|transferencia|enviar a/i;
+function esDevolucion(mv){
+  const l=mv.l||'';
+  return DEVOLUCION_LABEL_RE.test(l)&&!NO_ES_DEVOLUCION_RE.test(l);
+}
 function movimientosVariablesDelMes(id){
   const tareas=tareaLabelsForMonth(id);const out=[];
   Object.keys(MOVS).forEach(acc=>{
@@ -2262,7 +2271,18 @@ function saveReg(){
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
   if(currentMonth)openMov(currentMonth);
-  updPrevCard();closeReg();gTHome();toast('✓ Movimiento registrado','var(--tl)');saveState();
+  updPrevCard();closeReg();
+  // v28 — Volver a la sección donde estaba el usuario, no forzar el home. Si
+  // Jofre registró un movimiento estando en la vista de Massiel (p-m), debe
+  // quedarse ahí, no ser enviado a su inicio. Se detecta la página activa y se
+  // re-renderiza su contenido; si por algún motivo no hay ninguna activa, cae al
+  // home por rol (comportamiento previo).
+  const activa=['i','p','h','m'].find(p=>{const el=document.getElementById('p-'+p);return el&&el.classList.contains('on');});
+  if(activa==='m'){gT('m');}          // vista Massiel: gT('m') ya re-renderiza en vivo
+  else if(activa==='h'){renderHist();} // historial: refrescar lista
+  else if(activa==='p'){renderPrevision();} // previsión
+  else if(!activa){gTHome();}         // fallback
+  toast('✓ Movimiento registrado','var(--tl)');saveState();
 }
 const STORAGE_KEY='cgv6-state';
 /* ---- Firebase (persistencia compartida Jofre/Massiel) ---- */
