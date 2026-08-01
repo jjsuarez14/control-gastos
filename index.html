@@ -1133,45 +1133,12 @@ function badgeForTotal(total){
 }
 function recalcMonthTotals(id){
   const m=MONTHS[id];if(!m)return;
-  let jofre=0,massiel=0;
-  m.cats.forEach(c=>{
-    const key=keyMap[c.id];
-    if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);
-    if(key==='gimnasios'||key==='personales'){
-      itemsForKey(key,id).forEach(it=>{
-        const d=(it.d||'').toLowerCase();
-        if(d.includes('solo jofre'))jofre+=it.a;
-        else if(d.includes('solo massiel'))massiel+=it.a;
-        else{jofre+=it.a/2;massiel+=it.a/2;}
-      });
-      return;
-    }
-    if(key==='servicios'){
-      // Regla general de Servicios sigue siendo 55/45 (c.rule), ítem por
-      // ítem, salvo los que traen personalSplit explícito (ej. Claude:
-      // 100% Jofre) — esos NO entran al split de categoría.
-      itemsForKey(key,id).forEach(it=>{
-        if(it.personalSplit==='jofre'){jofre+=it.a;}
-        else if(it.personalSplit==='massiel'){massiel+=it.a;}
-        else{const sp=splitAmount(c.rule,it.a);if(sp){jofre+=sp.jofre;massiel+=sp.massiel;}else{jofre+=it.a*0.55;massiel+=it.a*0.45;}}
-      });
-      return;
-    }
-    if(c.jofreAmt!=null&&c.massielAmt!=null){jofre+=c.jofreAmt;massiel+=c.massielAmt;return;}
-    const sp=splitAmount(c.rule,c.a);
-    if(sp){jofre+=sp.jofre;massiel+=sp.massiel;}
-    else{jofre+=c.a*0.55;massiel+=c.a*0.45;}
-  });
-  // Cuotas (Compras): cada una ya trae su propia responsabilidad en `tags`
-  // (Solo Jofre / Solo Massiel / 50/50) — antes esto era solo informativo
-  // y nunca sumaba al total del mes. Ahora sí, con la misma regla que ya
-  // tenía cada una (nada vive en el sistema sin responsabilidad asignada).
-  cuotasFor(id).forEach(c=>{
-    const amt=moneyFromStr(c.amt);
-    const sp=splitFromCuotaTags(c.tags);
-    if(sp){jofre+=amt*sp.jofre;massiel+=amt*sp.massiel;}
-    else{jofre+=amt*0.55;massiel+=amt*0.45;}
-  });
+  // Refrescar c.a de cada categoría desde su detalle real (efecto secundario
+  // que otras vistas esperan) — el reparto en sí ya no se calcula acá.
+  m.cats.forEach(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);});
+  // Reparto desde la fuente única (v26): mismo número que aporteTotales.
+  const r=repartoMes(id);
+  const jofre=r.jofre, massiel=r.massiel;
   m.jofre=fmtMoneyEs(Math.round(jofre*100)/100);
   m.massiel=fmtMoneyEs(Math.round(massiel*100)/100);
   const b=badgeForTotal(Math.round((jofre+massiel)*100)/100);
@@ -1439,7 +1406,29 @@ function saveAddItem(){
 // dependen del global maovEsVistaMassiel; el Historial es SIEMPRE vista
 // completa (Jofre), así que se fuerza a false durante el cálculo y se
 // restaura, para no depender del estado de UI en curso.
+// v26 — Helpers listos para la redefinición del Historial (próximo chat):
+// separan los movimientos variables del día a día que NO son cuota (esos ya
+// viven en cuotasFor). Se usarán cuando el "gasto real" pase a = planificado
+// (repartoMes, con ahorro y cuotas) + variables 100% Jofre. NO conectados aún
+// a mesGastoTotalReal para no romper el cuadre tile≡detalle (punto 7): el
+// detalle por categoría se calcula con categoriaGroupTotal y habría que
+// realinearlo en la misma pasada. Pendiente explícito documentado.
+function variablesNoCuotaDelMes(id){
+  const cuotasAmts=cuotasFor(id).map(c=>moneyFromStr(c.amt));
+  const pool=cuotasAmts.slice();
+  const out=[];
+  movimientosVariablesDelMes(id).forEach(m=>{
+    const i=pool.findIndex(a=>Math.abs(a-m.a)<0.005);
+    if(i>-1){pool.splice(i,1);}
+    else out.push(m);
+  });
+  return out;
+}
+function variablesNoCuotaTotal(id){
+  return Math.round(variablesNoCuotaDelMes(id).reduce((s,m)=>s+m.a,0)*100)/100;
+}
 function mesGastoTotalReal(id){
+  // Suma de categorías del detalle -> tile y detalle cuadran (punto 7 v25).
   const prev=maovEsVistaMassiel;
   maovEsVistaMassiel=false;
   let t=0;
@@ -1475,47 +1464,67 @@ function renderHist(){
 // mapeo es explícito (no se inventa): cada patrón viene de cómo buildMonthPagos
 // nombra las tareas. Lo que no casa cae en 'Adicionales' (nunca se pierde).
 function toast(msg,color){const c=document.createElement('div');c.style.cssText='position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:'+(color||'var(--tl)')+';color:#000;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:100;white-space:nowrap;pointer-events:none;';c.textContent=msg;document.getElementById('app').appendChild(c);setTimeout(()=>c.remove(),2400);}
-function aporteTotales(id){
-  // Calcula aporte de Jofre y Massiel del mes desde las reglas reales (no strings).
-  const cats=(MONTHS[id]&&MONTHS[id].cats)||[];
+// v26 — FUENTE ÚNICA DE VERDAD del reparto Jofre/Massiel del mes. Antes había
+// dos cálculos paralelos (aporteTotales y recalcMonthTotals) que divergían
+// hasta €900 porque: (a) aporteTotales ignoraba toda categoría con regla
+// 'Variable' (Adicionales/Compras = las cuotas), y (b) trataban el grupo
+// 'compartida' distinto. Ahora TODO reparto sale de acá y las demás funciones
+// son envoltorios. Reglas aplicadas:
+//  · Categorías con regla de split (55/45, 50/50, Solo Jofre/Massiel): por fracción.
+//  · Split (Gimnasios/Personales): ítem por ítem según group (jofre/massiel/
+//    compartida→50/50).
+//  · Categoría 'Variable' (Adicionales): su contenido real son las cuotas, que
+//    se reparten abajo por sus tags — no se reparte el lump para no duplicar.
+//  · Cuotas (cuotasFor): cada una por sus tags (Amazon/Emma 50/50, resto Solo
+//    Jofre), regla ya viva en el sistema.
+function repartoMes(id){
+  const m=MONTHS[id];if(!m)return{jofre:0,massiel:0};
   let jofre=0,massiel=0;
-  cats.forEach(c=>{
+  (m.cats||[]).forEach(c=>{
     if(c.rule==='Split'){
       const key=c.l==='Gimnasios'?'gimnasios':(c.l==='Personales'?'personales':null);
       if(key){
         itemsForKey(key,id).forEach(x=>{
-          if(x.group==='massiel')massiel+=(x.a||0);
-          else jofre+=(x.a||0); // jofre o compartido -> a Jofre por defecto
+          const a=x.a||0;
+          if(x.group==='massiel')massiel+=a;
+          else if(x.group==='compartida'){jofre+=a/2;massiel+=a/2;}
+          else jofre+=a; // jofre por defecto
         });
       }
-    }else{
-      const sp=splitAmount(c.rule,c.a);
-      if(sp){jofre+=sp.jofre;massiel+=sp.massiel;}
+      return;
     }
+    if(c.rule==='Variable')return; // su gasto real vive en las cuotas (abajo)
+    // Servicios: 55/45 ítem por ítem, salvo los que traen personalSplit
+    // explícito (ej. Claude: 100% Jofre) — esos no entran al split de categoría.
+    const key=keyMap[c.id];
+    if(key==='servicios'){
+      itemsForKey(key,id).forEach(it=>{
+        if(it.personalSplit==='jofre'){jofre+=it.a;}
+        else if(it.personalSplit==='massiel'){massiel+=it.a;}
+        else{const sp=splitAmount(c.rule,it.a);if(sp){jofre+=sp.jofre;massiel+=sp.massiel;}else{jofre+=it.a*0.55;massiel+=it.a*0.45;}}
+      });
+      return;
+    }
+    const sp=splitAmount(c.rule,c.a);
+    if(sp){jofre+=sp.jofre;massiel+=sp.massiel;}
+  });
+  // Cuotas: cada una por su responsabilidad real (tags)
+  cuotasFor(id).forEach(c=>{
+    const amt=moneyFromStr(c.amt);
+    const sp=splitFromCuotaTags(c.tags);
+    if(sp){jofre+=amt*sp.jofre;massiel+=amt*sp.massiel;}
+    else{jofre+=amt*0.55;massiel+=amt*0.45;}
   });
   return {jofre:Math.round(jofre*100)/100, massiel:Math.round(massiel*100)/100};
 }
+function aporteTotales(id){
+  // Envoltorio sobre la fuente única (v26). Mantiene la firma previa.
+  return repartoMes(id);
+}
 function fmtAporte(n){return '€'+n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:true});}
 function massielTotal(){
-  // Calcula la parte de Massiel del mes activo desde las reglas reales.
-  // - 55/45 y 50/50: fracción del total de la categoría.
-  // - Split (Gimnasios, Personales): suma de ítems group='massiel' del detalle.
-  // - Solo Jofre: 0 para Massiel.
-  const id=ACTIVE_ID;const cats=(MONTHS[id]&&MONTHS[id].cats)||[];
-  let total=0;
-  cats.forEach(c=>{
-    if(c.rule==='Split'){
-      const key=c.l==='Gimnasios'?'gimnasios':(c.l==='Personales'?'personales':null);
-      if(key){
-        const suma=itemsForKey(key,id).filter(x=>x.group==='massiel').reduce((s,x)=>s+(x.a||0),0);
-        total+=suma;
-      }
-    }else{
-      const sp=splitAmount(c.rule,c.a);
-      if(sp)total+=sp.massiel;
-    }
-  });
-  return Math.round(total*100)/100;
+  // Envoltorio sobre la fuente única (v26): la parte de Massiel del mes activo.
+  return repartoMes(ACTIVE_ID).massiel;
 }
 const MASSIEL_TASKS=[
   {id:'m-yt',l:'Pago YouTube',sub:'11.000 CLP · vía Massiel',amt:12.00},
@@ -1834,16 +1843,23 @@ const CATEGORIAS_POOL=['Mercado','Compartir Familiar'];
 // el fondo de un pool en el mes. Es lo que efectivamente se depositó, no el
 // presupuesto teórico. Usa la MISMA detección que el filtro de gasto.
 function dotacionRealPool(cat,id){
-  let t=0;
+  // La dotación real del fondo es el aporte NETO del mes: entradas de aporte
+  // menos cualquier reverso/ajuste con el mismo label (ej. julio tiene
+  // +750 el 4/7, y un par +750/-750 el 30/7 que se anula -> neto 750). Así el
+  // banner "PRESUPUESTADO" refleja el techo efectivamente disponible, sin
+  // contar dobles ni ajustes espejo.
+  let neto=0;
   Object.keys(MOVS).forEach(acc=>{
     (MOVS[acc]||[]).forEach(mv=>{
-      if(mv.t)return;
       if(!movBelongsToMonth(mv,id))return;
       const c=resolverCategoriaMovimiento(mv,acc);
-      if(c===cat&&esDotacionPool(mv,c)) t+=Math.abs(moneyFromStr(mv.a));
+      if(c===cat&&esDotacionPool(mv,c)){
+        const val=Math.abs(moneyFromStr(mv.a));
+        neto+=mv.t?val:-val; // entrada suma, salida resta
+      }
     });
   });
-  return Math.round(t*100)/100;
+  return Math.round(neto*100)/100;
 }
 function categoriaPresupuestoMes(cat,id){
   // El banner "presupuestado" solo aplica en modo real (mes actual/pasado);
@@ -2164,6 +2180,33 @@ function mergeMovsConDelta(freshArr,baseArr,actualArr){
   const resultadoKeys=new Set(resultado.map(movKey));
   agregadosPorMi.forEach(m=>{if(!resultadoKeys.has(movKey(m))){resultado.push(m);resultadoKeys.add(movKey(m));}});
   return resultado;
+}
+// v26 — Utilidad de mantenimiento: eliminar movimientos concretos de MOVS de
+// forma segura, respetando el delta-merge (el borrado se detecta al comparar
+// contra MOVS_BASELINE y se propaga como "removido por mí", sin pisar cambios
+// de la otra sesión). Revierte el balance del movimiento eliminado. Devuelve
+// el detalle de lo purgado. matchers: [{acc,l,a}] — a en euros (número), l
+// exacto. Solo elimina la PRIMERA coincidencia por matcher (evita borrar de
+// más si hay homónimos legítimos). NO persiste sola: llamar saveState() luego.
+function purgarMovimientos(matchers){
+  const purgados=[];
+  (matchers||[]).forEach(mt=>{
+    const arr=MOVS[mt.acc]||[];
+    const idx=arr.findIndex(m=>{
+      if(m.l!==mt.l)return false;
+      const val=Math.abs(moneyFromStr(m.a));
+      return Math.abs(val-Math.abs(mt.a))<0.005;
+    });
+    if(idx>-1){
+      const m=arr[idx];
+      // revertir balance: si era salida (t falsy) el balance había bajado -> subir; si entrada, bajar.
+      const val=Math.abs(moneyFromStr(m.a));
+      if(BAL[mt.acc]!=null){ BAL[mt.acc]=Math.round((BAL[mt.acc]+(m.t?-val:val))*100)/100; }
+      arr.splice(idx,1);
+      purgados.push({acc:mt.acc,l:m.l,a:m.a,t:!!m.t});
+    }
+  });
+  return purgados;
 }
 // ---- Merge por delta para DET_MONTH_OVERRIDES / DET_EXTRA (v11) ----
 // Mismo problema que MOVS tenía antes de mergeMovsConDelta: se guardaban con
