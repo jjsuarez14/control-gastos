@@ -704,21 +704,16 @@ function buildMonthPagos(id){
     if(it.tag==='EFECTIVO'){ if(it.a>0)efectivoItems.push({label:it.l,total:it.a,inc:it.efInc||30}); return; }
     handleTaggedItem(it.l,it.tag,it.a);
   });
-  // Gimnasio On Air (desde agosto): se paga como tarea única de €44 en Caixa
-  // (Jofre €22 + Massiel €22). Massiel reembolsa su mitad vía Bizum, no como
-  // tarea individual. Las 2 líneas se mantienen en el detalle por si cambia.
+  // Gimnasio On Air (desde agosto): tarea(s) en Caixa según ONAIR_SCHEDULE.
+  // Se divide en "Matrícula - On Air" (única, agosto) + "Mensualidad On Air"
+  // (variable por mes). Suma a caixaSum para que "Enviar a Caixa" lo cubra.
+  // Reparto 50/50: la mitad de Massiel vuelve por Bizum (no es tarea aparte).
   {
-    // On Air (desde agosto) se paga SIEMPRE desde Caixa como tarea única de
-    // €44 (Jofre 22 + Massiel 22). Antes se agrupaba solo si el item no traía
-    // tag; los meses sin override (oct/nov+) heredaban tag:'TR' de DET.gimnasios
-    // y mandaban On Air a TR Jofre por error. Ahora la regla es incondicional:
-    // cualquier ítem "On Air" va a Caixa, sin importar su tag.
     const gimItems=itemsForKey('gimnasios',id);
-    const onairItems=gimItems.filter(it=>/on air/i.test(it.l||''));
-    if(onairItems.length){
-      const totalOnair=Math.round(onairItems.reduce((s,it)=>s+(it.a||0),0)*100)/100;
-      if(totalOnair>0){caixaSum+=totalOnair;pushDirect('On Air Nuevo Centro ('+totalOnair+'€)','CAIXA',totalOnair);}
-    }
+    const oa=onairDelMes(id);
+    if(oa.matricula>0){caixaSum+=oa.matricula;pushDirect('Matrícula - On Air','CAIXA',oa.matricula);}
+    if(oa.mensualidad>0){caixaSum+=oa.mensualidad;pushDirect('Mensualidad On Air','CAIXA',oa.mensualidad);}
+    // Resto de gimnasios que NO sean On Air (por si se agrega otro gimnasio).
     gimItems.forEach(it=>{ if(!/on air/i.test(it.l||'')) handleTaggedItem(it.l,it.tag,it.a); });
   }
   itemsForKey('personales',id).forEach(it=>{
@@ -1004,12 +999,6 @@ const DET_MONTH_OVERRIDES={
   gimnasios:{jul:[
     {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · TR Jofre',tag:'TR'},
     {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel',tag:null}
-  ],ago:[
-    {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · Caixa',tag:null},
-    {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel · Caixa · vía Bizum',tag:null}
-  ],sep:[
-    {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · Caixa',tag:null},
-    {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel · Caixa · vía Bizum',tag:null}
   ]},
   colegio:{jul:[
     {id:'col1',l:'Mensualidad',a:285.50,d:'Base mensual',tag:'BBVA'},
@@ -1062,6 +1051,25 @@ function itemsForKey(key,id){
     if(ov)return ov;
     return (DET.ahorro||[]).map(x=>Object.assign({},x));
   }
+  if(key==='gimnasios'){
+    // Desde agosto el detalle On Air se deriva de onairDelMes (total del mes,
+    // repartido 50/50 Jofre/Massiel). La mitad de Massiel alimenta massielTotal
+    // → Bizum. Si hay override guardado con montos editados a mano se respeta;
+    // si no, se genera fresco para que sep/oct/nov+ tengan el monto correcto sin
+    // tocar datos. Julio y anteriores siguen su override/DET base.
+    const idx=MONTH_ORDER.indexOf(id),iAgo=MONTH_ORDER.indexOf('ago');
+    if(iAgo>=0&&idx>=iAgo){
+      if(ov)return ov; // el usuario ya lo fijó para ese mes
+      const oa=onairDelMes(id);
+      const total=Math.round((oa.matricula+oa.mensualidad)*100)/100;
+      const mitadJ=Math.round(total*0.5*100)/100;
+      const mitadM=Math.round((total-mitadJ)*100)/100;
+      return [
+        {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:mitadJ,d:'50% · Caixa',tag:null,group:'jofre'},
+        {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:mitadM,d:'50% · Caixa · vía Bizum',tag:null,group:'massiel'}
+      ];
+    }
+  }
   const fresh=(DET[key]||[]).map(x=>Object.assign({},x));
   if(ov){
     reconcileOverride(key,id,ov,fresh);
@@ -1077,6 +1085,31 @@ function itemsForKey(key,id){
   return fresh.concat(extraItems);
 }
 const PISCINA_SCHEDULE={sep:57,nov:97,ene:97,abr:97};
+// On Air Nuevo Centro (gimnasio, desde agosto): se paga SIEMPRE desde Caixa,
+// reparto 50/50 con reembolso de Massiel vía Bizum (su mitad NO es tarea
+// aparte; entra en massielTotal por el item group:'massiel' del detalle de
+// gimnasios). Mensualidad variable por mes + matrícula única en agosto.
+// Montos confirmados por Jofre (01-ago):
+//   ago: matrícula 30 + mensualidad 19,96 = 49,96
+//   sep: 43,99 · oct: 53,99 · nov en adelante: 43,99
+// La tarea de Caixa se divide en 2 líneas cuando hay matrícula
+// ("Matrícula - On Air" + "Mensualidad On Air"); si no, una sola mensualidad.
+const ONAIR_MENSUALIDAD_DEFAULT=43.99;
+const ONAIR_SCHEDULE={
+  ago:{matricula:30,mensualidad:19.96},
+  sep:{matricula:0,mensualidad:43.99},
+  oct:{matricula:0,mensualidad:53.99}
+  // nov+ → ONAIR_MENSUALIDAD_DEFAULT (43,99), sin matrícula
+};
+function onairDelMes(id){
+  const s=ONAIR_SCHEDULE[id];
+  if(s)return{matricula:s.matricula||0,mensualidad:s.mensualidad||0};
+  // Meses sin entrada explícita: desde agosto en adelante, mensualidad default;
+  // antes de agosto no había On Air.
+  const idx=MONTH_ORDER.indexOf(id),iAgo=MONTH_ORDER.indexOf('ago');
+  if(iAgo<0||idx<0||idx<iAgo)return{matricula:0,mensualidad:0};
+  return{matricula:0,mensualidad:ONAIR_MENSUALIDAD_DEFAULT};
+}
 // Tareas de Hotel: GASTO desde TR Jofre, categoría Vacaciones. Consumen el
 // Fondo Mutuo (no son dinero entrante) — por eso NO suman a "Enviar a TR
 // Jofre" (no tocan trjSum en buildMonthPagos). Agosto se maneja aparte por el
@@ -2296,6 +2329,17 @@ function applyState(s){
     });
     // 3) Sweat fuera (cambio de gimnasio) salvo histórico julio
     if(k!=='jul')arr=arr.filter(p=>!(/sweat/i.test(p.l||'')||/sweat/i.test(p.id||'')));
+    // 4) (v25) Purga de placeholders corruptos heredados de Firestore: tareas
+    //    de sesiones viejas cuyo id ya no genera buildMonthPagos y que se
+    //    cargaron como placeholder (l===id, cat:'ingreso', acc:'BBVA'). Son
+    //    basura irrecuperable (On Air viejo, IBKR en sep, ago-renting,
+    //    limpieza-hogar con id viejo, etc.). Se eliminan SOLO si NO están done
+    //    (no borramos historial de algo ya pagado) y coinciden con el patrón
+    //    exacto del placeholder — buildMonthPagos regenerará la tarea correcta.
+    //    El mes en curso (ACTIVE_ID) y julio (histórico) se preservan.
+    if(k!==ACTIVE_ID&&k!=='jul'){
+      arr=arr.filter(p=>!(p.l===p.id&&p.cat==='ingreso'&&p.acc==='BBVA'&&!p.done));
+    }
     MONTH_PAGOS[k]=arr;
   });
   // 4) Cuota Nike mal grabada en MONTHS[].cuotas: era compra de 3 cuotas
