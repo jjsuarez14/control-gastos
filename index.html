@@ -28,7 +28,7 @@ html,body{height:100%;background:#0A0F1E}
 .pg{position:absolute;top:env(safe-area-inset-top);left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
 .pgm{background:#EFF4FB}
-.nb{position:absolute;bottom:0;left:0;right:0;height:calc(68px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
+.nb{position:absolute;bottom:0;left:0;right:0;height:68px;padding-bottom:env(safe-area-inset-bottom);box-sizing:content-box;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
 .nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
 .nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;transition:all .18s cubic-bezier(.2,.8,.2,1)}
 .nbi i{font-size:20px;color:var(--t3);transition:color .15s}
@@ -79,6 +79,11 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </style>
 </head>
 <body>
+<!-- v28 DIAG TEMPORAL: toca 5 veces la esquina sup-izq para ver los valores de
+     safe-area reales del dispositivo. Ayuda a diagnosticar el layout en iPhone
+     sin adivinar. Se puede quitar cuando el visual esté OK. -->
+<div id="safeDiag" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#000;color:#0f0;font:11px monospace;padding:6px;white-space:pre;line-height:1.5"></div>
+<div onclick="(window.__dc=(window.__dc||0)+1,window.__dc>=5&&(function(){const d=document.getElementById('safeDiag');const p=document.createElement('div');p.style.cssText='position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';document.body.appendChild(p);const cs=getComputedStyle(p);const af=document.querySelector('.af').getBoundingClientRect();d.textContent='SAFE-AREA t:'+cs.paddingTop+' b:'+cs.paddingBottom+' l:'+cs.paddingLeft+' r:'+cs.paddingRight+'\nviewport '+window.innerWidth+'x'+window.innerHeight+' | .af top:'+Math.round(af.top)+' h:'+Math.round(af.height)+'\nstandalone:'+(window.navigator.standalone===true);p.remove();d.style.display='block';window.__dc=0;})())" style="position:fixed;top:0;left:0;width:44px;height:44px;z-index:9998"></div>
 
 <div style="font-family:-apple-system,'Inter',sans-serif;min-height:720px">
 <div class="af" id="app">
@@ -2610,6 +2615,9 @@ function applyState(s){
   // con el detalle ya cargado y reconstruye correctamente todas las tareas.
   if(s.pagosByMonth)Object.keys(s.pagosByMonth).forEach(k=>{
     if(!MONTH_PAGOS[k]||!MONTH_PAGOS[k].length)MONTH_PAGOS[k]=buildMonthPagos(k);
+    // v28 — Monto fresco de referencia por id (buildMonthPagos ya suma dinámicamente
+    // lo que agrupa cada transferencia de fondeo: On Air, Renting, etc.).
+    const freshById={};buildMonthPagos(k).forEach(fp=>{freshById[fp.id]=fp;});
     s.pagosByMonth[k].forEach(sp=>{
       let p=MONTH_PAGOS[k].find(x=>x.id===sp.id);
       if(!p){
@@ -2618,7 +2626,20 @@ function applyState(s){
         p=sp.l?{id:sp.id,l:sp.l,acc:sp.acc||'BBVA',amt:sp.amt,cat:sp.cat||'gasto',done:sp.done}:{id:sp.id,l:sp.id,acc:'BBVA',amt:sp.amt,cat:'ingreso',done:sp.done};
         MONTH_PAGOS[k].push(p);
       }
-      p.done=sp.done;if(sp.amt!=null)p.amt=sp.amt;
+      p.done=sp.done;
+      // v28 — Regla de monto para tareas de FONDEO (cat:'enviar', ej. "Enviar a
+      // Caixa/TR Jofre"): su monto es una SUMA derivada de lo que agrupan. Si la
+      // tarea AÚN NO está done, se recalcula fresco (así un ítem recién añadido —
+      // ej. On Air — entra solo, sin tener que editar a mano). Si YA está done, se
+      // respeta el monto guardado (fue lo que realmente se transfirió). Para el
+      // resto de tareas se mantiene el comportamiento normal (respeta lo guardado).
+      const fresh=freshById[sp.id];
+      const esFondeo=(p.cat==='enviar')||(fresh&&fresh.cat==='enviar');
+      if(esFondeo&&!sp.done&&fresh&&fresh.amt!=null){
+        p.amt=fresh.amt;                 // no-done: recalcular fresco
+      }else if(sp.amt!=null){
+        p.amt=sp.amt;                    // done o no-fondeo: respetar guardado
+      }
       if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;
     });
   });
