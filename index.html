@@ -1761,6 +1761,11 @@ function tareasGastoEjecutadas(id,cat){
 function categoriaFijosDetalle(cat,id){
   const cs=catsBySuffix(id);const out=[];
   const futuro=esMesFuturo(id);
+  if(esJunioHistorico(id)){
+    // Junio pre-sistema: total histórico por categoría (una línea de resumen).
+    const v=JUNIO_HISTORICO[cat]||0;
+    return v>0?[{l:cat,a:v,drill:null}]:[];
+  }
   if(!futuro){
     // ── EJECUCIÓN REAL (mes pasado o activo) ────────────────────────────────
     // El Historial refleja lo que REALMENTE pasó, no el plan: tareas 'gasto'
@@ -2012,7 +2017,30 @@ function categoriaPresupuestoMes(cat,id){
   if(real>0)return real;
   return categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0);
 }
+// v28 — JUNIO es un mes PRE-SISTEMA: no se vivió con la app, así que no tiene
+// tareas marcadas ni movimientos registrados que reconstruir. Su verdad son los
+// 35 movimientos reales que dio Jofre (total €4.041,58). Se trata como TOTAL
+// HISTÓRICO FIJO por categoría — NO se calcula desde ejecución real (que no
+// existe). Desde julio en adelante sí se usa ejecución real. Los importes son la
+// suma real por categoría según la tabla de Jofre.
+const JUNIO_HISTORICO={
+  'Casa':1333.89,            // Arriendo 867 + Servicios 303,97 + Amazon 3/4 162,92
+  'Mercado':750.00,
+  'Compartir Familiar':369.69, // Compartir Fam. 209,69 + Fondo Mutuo 160
+  'Adicionales':497.30,      // Zalando 43,44 + Zara 20,45 + Nike 66,85 + Primor 50,75 + Nike P&P 64,74 + Alquiler Boda 67,70 + Regalo Boda 100 + Short 8,02 + Residencias 75,35
+  'Salud':233.77,            // Gimnasio 80 + Suplementos 71,96 + Medicina 9,81 + Gimnasio Massiel 72
+  'Ahorro':240.00,           // Fondo Emerg. 100 + Inv. Hipoteca 140 + Inv. Bolsa 0
+  'Remesas':190.00,          // Yoffre 125 + Zoraima 65
+  'Baby J.A.':168.50,        // Colegio 113,50 + Barbería JA 15 + Piscina 40
+  'Trabajo':86.96,           // Claude 18 + Taller Madrid 68,96
+  'Personales':84.80,        // Transporte 10,80 + Barbería 20 + Uñas Massiel 33 + Transporte Massiel 21
+  'Deporte':76.67,           // GENUA 50 + 24 Segons 26,67
+  'Carro/Moto':10.00
+};
+const JUNIO_ID='jun';
+function esJunioHistorico(id){return id===JUNIO_ID;}
 function categoriaGroupTotal(cat,id){
+  if(esJunioHistorico(id))return JUNIO_HISTORICO[cat]||0;
   if(esMesFuturo(id))return Math.round(categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0)*100)/100;
   const reg=categoriaSpendForMonth(id)[cat]||0;
   if(CATEGORIAS_POOL.includes(cat))return reg;
