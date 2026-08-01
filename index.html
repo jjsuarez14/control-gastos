@@ -285,20 +285,6 @@ function tareaLabelsForMonth(monthId){
   CUOTAS_NUEVAS.forEach(c=>{const base=(c.desc||c.category||'');set.add(base+' · cuota 1/'+(((c.cNum)||0)+1));});
   return set;
 }
-function categoriaSpendForMonth(monthId){
-  const tareas=tareaLabelsForMonth(monthId);
-  const totals={};CATS.forEach(c=>totals[c]=0);
-  Object.keys(MOVS).forEach(acc=>{
-    (MOVS[acc]||[]).forEach(mv=>{
-      if(mv.t)return; // solo gastos
-      if(tareas.has(mv.l))return; // excluir estructurado
-      if(!movBelongsToMonth(mv,monthId))return;
-      const cat=CATS.includes(mv.cat)?mv.cat:'Adicionales';
-      totals[cat]=Math.round((totals[cat]+Math.abs(moneyFromStr(mv.a)))*100)/100;
-    });
-  });
-  return totals;
-}
 const MOVS={BBVA:[],CAIXA:[],TRM:[],TRJ:[],TRJA:[]};
 let nominaReg=true;
 function fmtE(v){const s=Math.abs(v).toFixed(2);const[i,d]=s.split('.');return(v<0?'-':'')+'€'+parseInt(i).toLocaleString('es-ES',{useGrouping:true})+','+d;}
@@ -312,14 +298,14 @@ function updTile(){
   const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtE(BAL.EFECTIVO);
   const j=document.getElementById('d-trj');if(j)j.textContent=fmtE(BAL.TRJ);
   const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
-  const trjFm=BAL.TRJ-trjPend;
+  const trjFm=fondoMutuoDisponible(ACTIVE_ID);
   const jfm=document.getElementById('d-trj-fm');if(jfm)jfm.textContent=fmtE(trjFm);
   const jpend=document.getElementById('d-trj-pend');if(jpend)jpend.textContent=fmtE(trjPend);
   const ja=document.getElementById('d-trja');if(ja)ja.textContent=fmtE(BAL.TRJA);
   const m=document.getElementById('d-trm');if(m)m.textContent=fmtE(BAL.TRM);
   const pmT=document.getElementById('pm-trm');if(pmT)pmT.textContent=fmtE(BAL.TRM);
   const pmJa=document.getElementById('pm-trja');if(pmJa)pmJa.textContent=fmtE(BAL.TRJA);
-  const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtE(trjFm);
+  const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtE(fondoMutuoDisponible(ACTIVE_ID));
   const bbvaPend=bbvaPendienteList().reduce((s,x)=>s+x.a,0);
   const bd=document.getElementById('bbva-disponible');if(bd){const bDisp=Math.round((BAL.BBVA-bbvaPend)*100)/100;bd.textContent=fmtE(bDisp);bd.style.color=bDisp<0?'var(--rd)':'var(--tl)';}
   const bp=document.getElementById('bbva-pendiente');if(bp)bp.textContent=fmtE(bbvaPend);
@@ -406,7 +392,7 @@ async function markPago(id){
   }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);}
   else if(p.cat==='retiro'){regMov('BBVA',p.l,p.amt,false);regMov('EFECTIVO',p.l,p.amt,true);}
   else{regMov(p.acc,p.l,p.amt,false);if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}}
-  updBbvaBadge();updPrevCard();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);saveState();
+  updBbvaBadge();updPrevCard();updTile();if(typeof renderMaTile==='function')renderMaTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);saveState();
 }
 let amtPromptResolve=null;
 function askAmount(title,sub,defaultVal){
@@ -424,7 +410,7 @@ function confirmAmtPrompt(){const v=document.getElementById('amtprompt-input').v
 function updBbvaBadge(){const pend=PAGOS.filter(x=>!x.done&&(x.cat==='enviar'||x.cat==='retiro'||(x.cat==='gasto'&&x.acc==='BBVA'))).length;const tt=document.getElementById('bbva-task-txt');if(tt){tt.textContent=!nominaReg&&PAGOS.some(x=>x.cat==='ingreso'&&!x.done)?'Esperando nómina':pend>0?pend+' pendientes':'✓ Al día';tt.style.color=!nominaReg?'var(--t3)':pend>0?'var(--gd)':'var(--tl)';}}
 const ACC_META={BBVA:{n:'BBVA',c:'#4C8DFA',desc:'Cuenta principal'},CAIXA:{n:'Caixa',c:'#F97316',desc:'Renting + TDC'},TRJ:{n:'TR Jofre',c:'#8B6FDF',desc:'Fondo social'},TRM:{n:'TR Massiel',c:'#D4537E',desc:'Mercado'},TRJA:{n:'TR J.A.',c:'#22C55E',desc:'Fondo emergencia'},IBKR:{n:'IBKR',c:'#4C8DFA',desc:'Inversión bolsa'},EFECTIVO:{n:'Efectivo',c:'#9CA3AF',desc:'Retiros para pagos en efectivo'}};
 function tasksFor(accId){if(accId==='BBVA')return PAGOS.filter(p=>p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'));return PAGOS.filter(p=>p.cat==='gasto'&&p.acc===accId&&!p.done);}
-function srcReady(accId){if(accId==='CAIXA'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='CAIXA');return t?t.done:true;}if(accId==='TRJ'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='TRJ');return t?t.done:true;}return true;}
+function srcReady(accId){if(accId==='CAIXA'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='CAIXA');return t?t.done:true;}if(accId==='TRJ'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='TRJ');return t?t.done:true;}if(accId==='EFECTIVO'){const t=PAGOS.find(p=>p.cat==='retiro');return t?t.done:true;}return true;}
 function renderAccountOverlay(accId){
   currentOverlayAcc=accId;const d=ACC_META[accId];let balHTML='';
   // T2: en perfil Massiel las cuentas son SOLO consulta (saldo + movimientos).
@@ -435,7 +421,7 @@ function renderAccountOverlay(accId){
   const balSimple=()=>`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;
   if(mass&&accId==='TRJ'){balHTML=balSimple();}
   else if(accId==='CAIXA'){const pendTDC=Math.round((CAIXA_TDC.limite-CAIXA_TDC.disponible)*100)/100;const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);const caixaDisp=Math.round((BAL.CAIXA-caixaPend)*100)/100;balHTML=`<div style="padding:14px 16px 8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">CUENTA</div><div style="font-size:22px;font-weight:800;color:var(--t1)">${fmtE(BAL.CAIXA)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Saldo actual</div></div><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:#F97316;font-weight:700;letter-spacing:.07em;margin-bottom:4px">TARJETA (TDC)</div><div style="font-size:22px;font-weight:800;color:#F97316">${fmtE(CAIXA_TDC.disponible)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Disp. de ${fmtE(CAIXA_TDC.limite)}</div></div></div><div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:9px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(caixaDisp)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. PAGAR</div><div style="font-size:13px;font-weight:700;color:var(--t2)">${fmtE(caixaPend)}</div></div></div></div>${pendTDC>0?`<div style="padding:8px 10px;border-radius:9px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);font-size:11px;color:#F97316"><i class="ti ti-alert-triangle" style="font-size:12px;margin-right:4px"></i>${fmtE(pendTDC)} pendiente de liquidar</div>`:''}</div>`;}
-  else if(accId==='TRJ'){const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);const trjFm=BAL.TRJ-trjPend;balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.TRJ)}</div><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(139,111,223,.1);border-radius:10px;padding:9px"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em;margin-bottom:3px">FONDO MUTUO</div><div style="font-size:18px;font-weight:800;color:#8B6FDF">${fmtE(trjFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div><div style="background:rgba(239,68,68,.08);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">PDTE COBRO</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(trjPend)}</div>${trjPendienteList().map(x=>`<div onclick="openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="font-size:9px;color:var(--t3);margin-top:1px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>${x.l} ${fmtE(x.a)}</span><i class="ti ti-pencil" style="font-size:10px;color:var(--t3);margin-left:6px"></i></div>`).join('')}</div></div></div>`;}
+  else if(accId==='TRJ'){const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);const trjFm=fondoMutuoDisponible(ACTIVE_ID);balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.TRJ)}</div><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(139,111,223,.1);border-radius:10px;padding:9px"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em;margin-bottom:3px">FONDO MUTUO</div><div style="font-size:18px;font-weight:800;color:#8B6FDF">${fmtE(trjFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div><div style="background:rgba(239,68,68,.08);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">PDTE COBRO</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(trjPend)}</div>${trjPendienteList().map(x=>`<div onclick="openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="font-size:9px;color:var(--t3);margin-top:1px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>${x.l} ${fmtE(x.a)}</span><i class="ti ti-pencil" style="font-size:10px;color:var(--t3);margin-left:6px"></i></div>`).join('')}</div></div></div>`;}
   else if(accId==='IBKR'){balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">$382,58</div><div style="font-size:11px;color:var(--t2);margin-top:4px">≈ €369 al cambio</div></div>`;}
   else{balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;}
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">${d.n}</div><div style="font-size:11px;color:var(--t2)">${d.desc}</div></div><button onclick="document.getElementById('aov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>${balHTML}`;
@@ -444,7 +430,7 @@ function renderAccountOverlay(accId){
   else if(accId==='BBVA'){if(nominaReg)pend=tasksFor('BBVA').filter(p=>!p.done);}
   else if(accId==='IBKR'){pend=[];}
   else if(srcReady(accId)){pend=tasksFor(accId).filter(p=>!p.done);}
-  else{waitMsg='Pendiente de recibir la transferencia desde BBVA';}
+  else{waitMsg=accId==='EFECTIVO'?'Pendiente de retirar el efectivo desde BBVA':'Pendiente de recibir la transferencia desde BBVA';}
   if(mass){/* saltar por completo el bloque de tareas/mensajes de estado */}
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
   else if(pend.length){html+=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;pend.forEach(p=>{html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i></div>`;});html+='</div>';}
@@ -555,6 +541,36 @@ function showA(id){if(!ACC_META[id])return;renderAccountOverlay(id);document.get
 function fondoMutuoEntradas(monthId){
   return itemsForKey('ahorro',monthId).filter(x=>/Fondo Mutuo/i.test(x.l)).map(x=>({id:x.id,l:x.l,a:x.a,d:x.d}));
 }
+// ── FUENTE DE VERDAD del Fondo Mutuo disponible (regla de Jofre, spec v24) ──
+// = 0 mientras la tarea "Enviar a TR Jofre" del mes NO esté done.
+// Al completarla → = asignación de Fondo Mutuo del mes (item "Fondo Mutuo" del
+//   Ahorro: ago 600 / sep 200 / oct 400), NO el total de la transferencia.
+// − gastos de categoría Compartir Familiar / Vacaciones ya PAGADOS desde TRJ:
+//     · tareas del motor con vacacion:true (hoteles) ya done,
+//     · movimientos manuales en MOVS.TRJ con cat Vacaciones/Compartir Familiar.
+// Nunca baja de 0. Cuando llega a 0, los gastos familiares siguientes salen
+// del saldo normal (BAL.TRJ), no del fondo.
+const FONDO_MUTUO_CATS=['Vacaciones','Compartir Familiar'];
+function fondoMutuoConsumido(monthId){
+  let c=0;
+  (MONTH_PAGOS[monthId]||[]).forEach(p=>{
+    if(p.acc==='TRJ'&&p.cat==='gasto'&&p.done&&p.vacacion&&p.amt>0)c+=p.amt;
+  });
+  (MOVS.TRJ||[]).forEach(mv=>{
+    if(mv.t)return; // solo salidas
+    if(!FONDO_MUTUO_CATS.includes(mv.cat))return;
+    if(!movBelongsToMonth(mv,monthId))return;
+    c+=Math.abs(moneyFromStr(mv.a));
+  });
+  return Math.round(c*100)/100;
+}
+function fondoMutuoDisponible(monthId){
+  const envio=(MONTH_PAGOS[monthId]||[]).find(p=>p.cat==='enviar'&&p.acc==='TRJ');
+  if(!envio||!envio.done)return 0;
+  const asignacion=fondoMutuoEntradas(monthId).reduce((s,x)=>s+x.a,0);
+  const disp=Math.round((asignacion-fondoMutuoConsumido(monthId))*100)/100;
+  return disp<0?0:disp;
+}
 // Saldo REAL del Fondo Mutuo (lo que ve Massiel): aportes acumulados de todos
 // los meses trackeados − consumos reales del fondo (salidas familiares
 // registradas a mano en MOVS.TRJ: cine, cena, helados...). NO es el saldo
@@ -579,20 +595,31 @@ function fondoMutuoTareaLabels(monthId){
 }
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
-  const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
-  const saldo=Math.round((BAL.TRJ-trjPend)*100)/100;
+  const saldo=fondoMutuoDisponible(id);
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Dentro de TR Jofre · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
   if(!desdeJul){html+=`<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin trazabilidad para este mes</div></div>`;document.getElementById('fmov-c').innerHTML=html;return;}
-  const entrada=fondoMutuoEntradas(id).reduce((s,x)=>s+x.a,0);
-  const tareas=fondoMutuoTareaLabels(id);
-  const movs=(MOVS.TRJ||[]).filter(mv=>!tareas.has(mv.l)).slice().reverse();
+  const asignacion=fondoMutuoEntradas(id).reduce((s,x)=>s+x.a,0);
+  const envio=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='enviar'&&p.acc==='TRJ');
+  const envioDone=!!(envio&&envio.done);
   const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${aStr}</div></div>`;
   let rows='';
-  if(entrada>0)rows+=rowHTML('Inicio','Aporte mensual Fondo Mutuo','+'+fmtE(entrada),true);
-  movs.forEach(mv=>{rows+=rowHTML(mv.dt,mv.l,mv.a,mv.t);});
+  // Aporte mensual: solo aparece cuando "Enviar a TR Jofre" ya está done
+  // (antes de eso el fondo disponible es 0). Monto = asignación del mes.
+  if(envioDone&&asignacion>0)rows+=rowHTML('Inicio','Aporte mensual Fondo Mutuo','+'+fmtE(asignacion),true);
+  // Consumos: tareas de hotel (vacacion) ya pagadas + movimientos manuales de
+  // MOVS.TRJ en categoría Vacaciones / Compartir Familiar de este mes.
+  (MONTH_PAGOS[id]||[]).forEach(p=>{
+    if(p.acc==='TRJ'&&p.cat==='gasto'&&p.done&&p.vacacion&&p.amt>0)rows+=rowHTML('—',p.l,'-'+fmtE(p.amt),false);
+  });
+  (MOVS.TRJ||[]).slice().reverse().forEach(mv=>{
+    if(mv.t)return;
+    if(!FONDO_MUTUO_CATS.includes(mv.cat))return;
+    if(!movBelongsToMonth(mv,id))return;
+    rows+=rowHTML(mv.dt,mv.l,mv.a,false);
+  });
   html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos este mes</div>';
   html+='</div>';
   document.getElementById('fmov-c').innerHTML=html;
@@ -681,13 +708,18 @@ function buildMonthPagos(id){
   // (Jofre €22 + Massiel €22). Massiel reembolsa su mitad vía Bizum, no como
   // tarea individual. Las 2 líneas se mantienen en el detalle por si cambia.
   {
+    // On Air (desde agosto) se paga SIEMPRE desde Caixa como tarea única de
+    // €44 (Jofre 22 + Massiel 22). Antes se agrupaba solo si el item no traía
+    // tag; los meses sin override (oct/nov+) heredaban tag:'TR' de DET.gimnasios
+    // y mandaban On Air a TR Jofre por error. Ahora la regla es incondicional:
+    // cualquier ítem "On Air" va a Caixa, sin importar su tag.
     const gimItems=itemsForKey('gimnasios',id);
-    const onairItems=gimItems.filter(it=>/on air/i.test(it.l||'')&&!it.tag);
+    const onairItems=gimItems.filter(it=>/on air/i.test(it.l||''));
     if(onairItems.length){
       const totalOnair=Math.round(onairItems.reduce((s,it)=>s+(it.a||0),0)*100)/100;
-      if(totalOnair>0)pushDirect('On Air Nuevo Centro ('+totalOnair+'€)','CAIXA',totalOnair);
+      if(totalOnair>0){caixaSum+=totalOnair;pushDirect('On Air Nuevo Centro ('+totalOnair+'€)','CAIXA',totalOnair);}
     }
-    gimItems.forEach(it=>{ if(!(/on air/i.test(it.l||'')&&!it.tag)) handleTaggedItem(it.l,it.tag,it.a); });
+    gimItems.forEach(it=>{ if(!/on air/i.test(it.l||'')) handleTaggedItem(it.l,it.tag,it.a); });
   }
   itemsForKey('personales',id).forEach(it=>{
     if(it.tag==='EFECTIVO'){ if(it.a>0)efectivoItems.push({label:it.l,total:it.a,inc:it.efInc||10}); return; }
@@ -696,6 +728,12 @@ function buildMonthPagos(id){
   cuotasFor(id).forEach(c=>{
     const tag=(c.tags&&c.tags.includes('Caixa'))?'CB':((c.tags&&c.tags.includes('TR Jofre'))?'TR':'BBVA');
     handleTaggedItem(c.l+(c.prog?' · '+c.prog:''),tag,moneyFromStr(c.amt));
+  });
+  // Tareas de Hotel (gasto TRJ, cat Vacaciones). pushDirect NO toca trjSum, así
+  // que NO entran en "Enviar a TR Jofre" (no es dinero entrante; consumen fondo).
+  (HOTEL_TAREAS[id]||[]).forEach(h=>{
+    if(!(h.a>0))return;
+    list.push({id:p+h.id,l:h.l,acc:'TRJ',amt:Math.round(h.a*100)/100,cat:'gasto',done:false,vacacion:true});
   });
   const ahorroItems=itemsForKey('ahorro',id);
   const renting=ahorroItems.find(x=>x.l==='Renting');
@@ -959,15 +997,17 @@ const DET_MONTH_OVERRIDES={
     ],
     sep:[
       {id:'aho-caixa-sep',l:'Renting',a:400,d:'Caixa'},
-      {id:'aho-emerg-sep',l:'Fondo Emergencia',a:150,d:'TR J.A. · 50% del resto'},
-      {id:'aho-fmutuo-sep',l:'Fondo Mutuo',a:75,d:'TR Jofre · 25% del resto'},
-      {id:'aho-inv-sep',l:'Inversión',a:75,d:'IBKR · 25% del resto'}
+      {id:'aho-fmutuo-sep',l:'Fondo Mutuo',a:200,d:'TR Jofre · excepción septiembre (incluye Cumpleaños Massiel 200)'},
+      {id:'aho-emerg-sep',l:'Fondo Emergencia',a:100,d:'TR J.A. · excepción septiembre'}
     ]
   },
   gimnasios:{jul:[
     {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · TR Jofre',tag:'TR'},
     {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel',tag:null}
   ],ago:[
+    {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · Caixa',tag:null},
+    {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel · Caixa · vía Bizum',tag:null}
+  ],sep:[
     {id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · Caixa',tag:null},
     {id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel · Caixa · vía Bizum',tag:null}
   ]},
@@ -1037,6 +1077,14 @@ function itemsForKey(key,id){
   return fresh.concat(extraItems);
 }
 const PISCINA_SCHEDULE={sep:57,nov:97,ene:97,abr:97};
+// Tareas de Hotel: GASTO desde TR Jofre, categoría Vacaciones. Consumen el
+// Fondo Mutuo (no son dinero entrante) — por eso NO suman a "Enviar a TR
+// Jofre" (no tocan trjSum en buildMonthPagos). Agosto se maneja aparte por el
+// ahorro 'Fondo Mutuo · Vacaciones'; acá van sep/oct confirmados por Jofre.
+const HOTEL_TAREAS={
+  sep:[{id:'hotel-cumple-massiel',l:'Hotel - Cumpleaños de Massiel',a:105.61}],
+  oct:[{id:'hotel-boda-jeff-dani',l:'Hotel - Boda Jeff & Dani',a:254.32}]
+};
 function splitAmount(rule,amt){
   if(rule==='55/45')return{jofre:amt*0.55,massiel:amt*0.45};
   if(rule==='50/50')return{jofre:amt*0.5,massiel:amt*0.5};
@@ -1350,10 +1398,40 @@ function saveAddItem(){
   closeAddItem();openMov(currentMonth);renderPrevision();if(currentMonth===ACTIVE_ID)updPrevCard();updBbvaBadge();
   toast('✓ Ítem agregado — totales y tareas actualizadas','var(--tl)');saveState();
 }
+// ── Fuente de verdad ÚNICA del gasto total del mes (spec v24, punto 7) ──
+// El tile del Historial y el detalle deben sumar IGUAL. El detalle lista las
+// categorías vía categoriaGroupTotal (fijos ejecutados + movimientos reales),
+// así que el tile debe sumar exactamente eso, no los montos objetivo de
+// Previsión (totalGastoMes). categoriaGroupTotal/categoriaFijosDetalle
+// dependen del global maovEsVistaMassiel; el Historial es SIEMPRE vista
+// completa (Jofre), así que se fuerza a false durante el cálculo y se
+// restaura, para no depender del estado de UI en curso.
+function mesGastoTotalReal(id){
+  const prev=maovEsVistaMassiel;
+  maovEsVistaMassiel=false;
+  let t=0;
+  try{ CATS.forEach(c=>{ t+=categoriaGroupTotal(c,id); }); }
+  finally{ maovEsVistaMassiel=prev; }
+  return Math.round(t*100)/100;
+}
 function histCardHTML(id,label,accent){
-  const total=totalGastoMes(id);
-  const m=MONTHS[id];if(!m)return '';
+  const total=mesGastoTotalReal(id);  const m=MONTHS[id];if(!m)return '';
   return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">Gasto total del mes · toca para el detalle</div></div>`;
+}
+// renderHist: llena #hist-body con los meses ya cerrados (anteriores al mes en
+// curso dentro de MONTH_ORDER), del más reciente al más antiguo. Cada tarjeta
+// abre el detalle en modo Historial (vista Jofre completa). El tile usa
+// mesGastoTotalReal → cuadra con el detalle (punto 7). Restaurada en v25: en
+// v24 la función se había perdido y #hist-body quedaba vacío, además de que las
+// 3 llamadas a renderHist() en boot/advanceMonth tiraban ReferenceError y
+// abortaban el resto del render.
+function renderHist(){
+  const el=document.getElementById('hist-body');if(!el)return;
+  const ai=MONTH_ORDER.indexOf(ACTIVE_ID);
+  const cerrados=ai>0?MONTH_ORDER.slice(0,ai):[];
+  if(!cerrados.length){el.innerHTML='<div style="padding:24px 4px;text-align:center;color:var(--t3);font-size:12px">Aún no hay meses cerrados. El historial se irá llenando al registrar cada nómina.</div>';return;}
+  const accents=['var(--tl)','var(--gd)','var(--or)','var(--pu)','var(--bl)','var(--pk)'];
+  el.innerHTML=cerrados.slice().reverse().map((id,i)=>histCardHTML(id,'CERRADO',accents[i%accents.length])).join('');
 }
 // ===== T5: HISTORIAL = LO REALMENTE EJECUTADO (no la previsión) =====
 // El historial debe reflejar solo lo COMPLETADO, no el presupuesto del mes.
@@ -1384,7 +1462,7 @@ function aporteTotales(id){
   });
   return {jofre:Math.round(jofre*100)/100, massiel:Math.round(massiel*100)/100};
 }
-function fmtAporte(n){return '€'+n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtAporte(n){return '€'+n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:true});}
 function massielTotal(){
   // Calcula la parte de Massiel del mes activo desde las reglas reales.
   // - 55/45 y 50/50: fracción del total de la categoría.
@@ -1776,7 +1854,12 @@ function showMaMonthDetail(id,backTo){
   const d=MONTHS[id];if(!d)return;
   const ahorro=itemsForKey('ahorro',id);
   const ahorroTotal=ahorro.reduce((s,x)=>s+x.a,0);
-  const total=(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0);
+  // Punto 7: en vista Historial (Jofre) el total del header debe cuadrar con la
+  // suma de categorías del listado y con el tile → mesGastoTotalReal. En vista
+  // Massiel/forecast se conserva el total presupuestado (estimación del mes).
+  const total=maovEsVistaMassiel
+    ?(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0)
+    :mesGastoTotalReal(id);
   const cuotasMa=cuotasForMassiel(id);
   const cuotasHTML=cuotasMa.length?cuotasMa.map(maCuotaRowHTML).join(''):'<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">Sin cuotas a tu cargo este mes</div>';
   const tabsHTML=`<button class="tbx on" id="mamt1" onclick="sMTma(1)">Categorías</button><button class="tbx" id="mamt2" onclick="sMTma(2)">Cuotas</button>`;
