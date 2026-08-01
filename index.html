@@ -18,19 +18,12 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0A0F1E;--s1:#111826;--s2:#172035;--bd:#1C2D46;--bd2:#253858;--gd:#E8AA22;--gd2:rgba(232,170,34,.11);--tl:#0EC9BC;--tl2:rgba(14,201,188,.1);--rd:#F04545;--rd2:rgba(240,69,69,.1);--or:#F97316;--or2:rgba(249,115,22,.1);--pu:#8B6FDF;--pu2:rgba(139,111,223,.1);--bl:#4C8DFA;--bl2:rgba(76,141,250,.1);--gn:#22C55E;--gn2:rgba(34,197,94,.1);--pk:#D4537E;--pk2:rgba(212,83,126,.1);--t1:#E2EAF8;--t2:#6B85A8;--t3:#36506A;--fs:'Inter',-apple-system,sans-serif;--fd:'Manrope','Inter',-apple-system,sans-serif;--sh1:0 1px 2px rgba(0,0,0,.24),0 10px 28px -14px rgba(0,0,0,.55);--sh2:0 2px 6px rgba(0,0,0,.28),0 16px 36px -16px rgba(0,0,0,.6);}
 html,body{height:100%;background:#0A0F1E}
-.af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs);
-  /* v27 — respetar la zona segura del iPhone (notch/barra de estado y home
-     indicator). Sin esto el contenido arrancaba pegado arriba, tapado por el
-     notch ("muy arriba"). Las páginas y overlays van position:absolute dentro
-     de .af, así que este padding desplaza todo su contenido a la zona visible. */
-  padding-top:env(safe-area-inset-top);
-  padding-bottom:env(safe-area-inset-bottom);
-  box-sizing:border-box}
-@media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd);padding-top:0;padding-bottom:0}}
-.pg{position:absolute;top:env(safe-area-inset-top);left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+.af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
+@media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd)}}
+.pg{position:absolute;top:0;left:0;right:0;bottom:68px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
 .pgm{background:#EFF4FB}
-.nb{position:absolute;bottom:env(safe-area-inset-bottom);left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
+.nb{position:absolute;bottom:0;left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center;padding-bottom:env(safe-area-inset-bottom)}
 .nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
 .nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;transition:all .18s cubic-bezier(.2,.8,.2,1)}
 .nbi i{font-size:20px;color:var(--t3);transition:color .15s}
@@ -44,9 +37,9 @@ html,body{height:100%;background:#0A0F1E}
 .tp:active{transform:scale(.97)}
 .ts{background:linear-gradient(165deg,var(--s1),#0d1320);border:1px solid var(--bd);border-radius:17px;padding:17px;cursor:pointer;transition:transform .12s;box-shadow:var(--sh1)}
 .ts:active{transform:scale(.97)}
-.ov{position:absolute;top:env(safe-area-inset-top);left:0;right:0;bottom:env(safe-area-inset-bottom);background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
+.ov{position:absolute;inset:0;background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
 .ovc{background:var(--s1);border-radius:22px;margin:10px 10px 0;border:1px solid var(--bd);overflow:hidden;min-height:calc(100% - 20px);box-shadow:var(--sh2)}
-.ovbot{position:absolute;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
+.ovbot{position:absolute;left:0;right:0;bottom:68px;background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
 .btng{background:linear-gradient(135deg,#F5C15C,var(--gd) 60%,#DE9E1E);color:#1a1204;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:0 6px 16px -4px rgba(232,170,34,.45);transition:transform .12s}
 .btng:active{transform:scale(.98)}
 .tbx{flex:1;padding:8px 4px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:1px solid var(--bd);color:var(--t3);transition:all .15s}
@@ -1445,7 +1438,9 @@ function variablesNoCuotaDelMes(id){
   const pool=cuotasAmts.slice();
   const out=[];
   movimientosVariablesDelMes(id).forEach(m=>{
-    const i=pool.findIndex(a=>Math.abs(a-m.a)<0.005);
+    // Solo los gastos positivos pueden ser una cuota ya contada; una devolución
+    // (m.a<0) nunca es cuota -> siempre entra (restando).
+    const i=m.a>0?pool.findIndex(a=>Math.abs(a-m.a)<0.005):-1;
     if(i>-1){pool.splice(i,1);}
     else out.push(m);
   });
@@ -1806,8 +1801,10 @@ function categoriaFijosDetalle(cat,id){
       // Personales, Mercado, Adicionales): sus tareas 'gasto' done mapeadas.
       tareasGastoEjecutadas(id,cat).forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
     }
-    // Cuotas de esta categoría que YA se pagaron (su tarea done).
-    cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
+    // Cuotas de esta categoría que YA se pagaron (su tarea done). Se muestra el
+    // monto REAL completo — Massiel ve lo mismo que Jofre; el filtro de qué
+    // categorías ve ella se aplica arriba (categoriasVisibles), no acá.
+    cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).forEach(c=>{
       if(tareaGastoDoneExacta(id,new RegExp(c.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i')))out.push({l:c.l,a:moneyFromStr(c.amt),drill:null});
     });
     return out.filter(x=>x.a>0);
@@ -1926,17 +1923,32 @@ const DOTACION_LABEL_RE=/\baporte\b|\bdotaci[oó]n\b|\bfondo\b.*\bmensual\b/i;
 function esDotacionPool(mv,cat){
   return CATEGORIAS_POOL.includes(cat)&&DOTACION_LABEL_RE.test(mv.l||'');
 }
+// v28 — Una DEVOLUCIÓN/REEMBOLSO es un ingreso que reduce el gasto real de su
+// categoría (ej. compras un abrigo €40 y te devuelven €30 -> el gasto real es
+// €10). Se detecta por el label, para no tener que corregir el dato cada vez.
+// A diferencia de una transferencia interna normal (mv.t=true, que se ignora
+// porque no es gasto), la devolución SÍ entra al cálculo pero con signo
+// negativo: resta del total de su categoría. Genérico: sirve para cualquier
+// devolución futura sin tocar código.
+const DEVOLUCION_LABEL_RE=/^\s*(devoluci[oó]n|reembolso|reintegro|abono)\b/i;
+function esDevolucion(mv){ return DEVOLUCION_LABEL_RE.test(mv.l||''); }
 function movimientosVariablesDelMes(id){
   const tareas=tareaLabelsForMonth(id);const out=[];
   Object.keys(MOVS).forEach(acc=>{
     (MOVS[acc]||[]).forEach(mv=>{
-      if(mv.t)return;
+      const devol=esDevolucion(mv);
+      // Transferencias internas (t:true) se ignoran, SALVO que sean devoluciones.
+      if(mv.t&&!devol)return;
       if(tareas.has(mv.l))return;
       if(esMovimientoRevertido(mv))return;
       if(!movBelongsToMonth(mv,id))return;
       const cat=resolverCategoriaMovimiento(mv,acc);
       if(esDotacionPool(mv,cat))return; // dotación del fondo: no es gasto
-      out.push({l:mv.l,a:Math.round(Math.abs(moneyFromStr(mv.a))*100)/100,cat,acc});
+      // Devolución: signo negativo (resta del gasto de la categoría). Gasto
+      // normal: signo positivo. Se usa el valor absoluto del importe y se le
+      // asigna el signo según sea devolución o no.
+      const abs=Math.round(Math.abs(moneyFromStr(mv.a))*100)/100;
+      out.push({l:mv.l,a:devol?-abs:abs,cat,acc});
     });
   });
   return out;
@@ -2046,10 +2058,12 @@ function showMaMonthDetail(id,backTo){
   const d=MONTHS[id];if(!d)return;
   const ahorro=itemsForKey('ahorro',id);
   const ahorroTotal=ahorro.reduce((s,x)=>s+x.a,0);
-  // Punto 7: en vista Historial (Jofre) el total del header debe cuadrar con la
-  // suma de categorías del listado y con el tile → mesGastoTotalReal. En vista
-  // Massiel/forecast se conserva el total presupuestado (estimación del mes).
-  const total=maovEsVistaMassiel
+  // v28 — El total del header es SIEMPRE el gasto real del mes (mesGastoTotalReal),
+  // igual para Jofre y Massiel: la vista de Massiel no tiene números propios, es
+  // la misma verdad filtrada a sus categorías. Solo los meses FUTUROS muestran la
+  // estimación (previsión), porque aún no hay ejecución. Así, en el mes actual
+  // Massiel ve el gasto real (0 si nada se ejecutó), no el presupuesto.
+  const total=esMesFuturo(id)
     ?(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0)
     :mesGastoTotalReal(id);
   const cuotasMa=cuotasForMassiel(id);
