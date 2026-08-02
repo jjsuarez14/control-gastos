@@ -17,8 +17,9 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0A0F1E;--s1:#111826;--s2:#172035;--bd:#1C2D46;--bd2:#253858;--gd:#E8AA22;--gd2:rgba(232,170,34,.11);--tl:#0EC9BC;--tl2:rgba(14,201,188,.1);--rd:#F04545;--rd2:rgba(240,69,69,.1);--or:#F97316;--or2:rgba(249,115,22,.1);--pu:#8B6FDF;--pu2:rgba(139,111,223,.1);--bl:#4C8DFA;--bl2:rgba(76,141,250,.1);--gn:#22C55E;--gn2:rgba(34,197,94,.1);--pk:#D4537E;--pk2:rgba(212,83,126,.1);--t1:#E2EAF8;--t2:#6B85A8;--t3:#36506A;--fs:'Inter',-apple-system,sans-serif;--fd:'Manrope','Inter',-apple-system,sans-serif;--sh1:0 1px 2px rgba(0,0,0,.24),0 10px 28px -14px rgba(0,0,0,.55);--sh2:0 2px 6px rgba(0,0,0,.28),0 16px 36px -16px rgba(0,0,0,.6);}
-html,body{height:100%;background:#0A0F1E}
-.af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
+html{height:100%}
+body{min-height:100%;height:100dvh;background:#0A0F1E;margin:0}
+.af{width:100%;max-width:480px;height:100%;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
 @media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd)}}
 .pg{position:absolute;top:0;left:0;right:0;bottom:68px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
@@ -713,15 +714,25 @@ function buildMonthPagos(id){
     if(it.tag==='EFECTIVO'){ if(it.a>0)efectivoItems.push({label:it.l,total:it.a,inc:it.efInc||30}); return; }
     handleTaggedItem(it.l,it.tag,it.a);
   });
-  // Gimnasio On Air (desde agosto): tarea(s) en Caixa según ONAIR_SCHEDULE.
-  // Se divide en "Matrícula - On Air" (única, agosto) + "Mensualidad On Air"
-  // (variable por mes). Suma a caixaSum para que "Enviar a Caixa" lo cubra.
+  // Gimnasio On Air (desde agosto): tareas según ONAIR_SCHEDULE (cobros reales
+  // por ciclo de nómina, ver onairCobrosDelMes).
+  //   - Matrícula (única, agosto) → Caixa. Suma a caixaSum ("Enviar a Caixa").
+  //   - Mensualidad(es) → BBVA directo (nómina ya vive en BBVA, sin fondeo).
+  // Un mes puede traer 2 mensualidades (mes doble = septiembre): se generan 2
+  // tareas numeradas para que cada cobro real sea marcable por separado.
   // Reparto 50/50: la mitad de Massiel vuelve por Bizum (no es tarea aparte).
   {
     const gimItems=itemsForKey('gimnasios',id);
-    const oa=onairDelMes(id);
-    if(oa.matricula>0){caixaSum+=oa.matricula;pushDirect('Matrícula - On Air','CAIXA',oa.matricula);}
-    if(oa.mensualidad>0){caixaSum+=oa.mensualidad;pushDirect('Mensualidad On Air','CAIXA',oa.mensualidad);}
+    const cobros=onairCobrosDelMes(id);
+    const mens=cobros.filter(c=>c.tipo==='mensualidad');
+    cobros.filter(c=>c.tipo==='matricula').forEach(c=>{
+      caixaSum+=c.monto;pushDirect('Matrícula - On Air','CAIXA',c.monto);
+    });
+    mens.forEach((c,i)=>{
+      // Si hay más de una mensualidad en el mes, numerar (1/2, 2/2).
+      const lbl=mens.length>1?('Mensualidad On Air ('+(i+1)+'/'+mens.length+')'):'Mensualidad On Air';
+      pushDirect(lbl,'BBVA',c.monto);
+    });
     // Resto de gimnasios que NO sean On Air (por si se agrega otro gimnasio).
     gimItems.forEach(it=>{ if(!/on air/i.test(it.l||'')) handleTaggedItem(it.l,it.tag,it.a); });
   }
@@ -939,7 +950,23 @@ function cuotasFor(id){
   const cc=cuotaState(5,24,off);if(cc)list.push({l:'Emma Colchón',tags:['Caixa','50/50'],amt:'€33,97',prog:progTxt(cc),pct:Math.round(cc.n/cc.total*100),warn:cc.last,fixed:true});
   const nk=cuotaState(2,3,off);if(nk)list.push({l:'Nike',tags:['Caixa','Solo Jofre'],amt:'€66,85',prog:progTxt(nk),pct:Math.round(nk.n/nk.total*100),warn:nk.last,fixed:true});
   const nkpp=cuotaState(2,3,off);if(nkpp)list.push({l:'Nike P&P',tags:['BBVA','Solo Jofre'],amt:'€64,74',prog:progTxt(nkpp),pct:Math.round(nkpp.n/nkpp.total*100),warn:nkpp.last,fixed:true});
-  const amz=cuotaState(3,4,off);if(amz){list.push({l:'Amazon · Pago 1',tags:['TR Jofre','50/50'],amt:'€112,67',prog:progTxt(amz),pct:Math.round(amz.n/amz.total*100),warn:amz.last,fixed:true});list.push({l:'Amazon · Pago 2',tags:['TR Jofre','50/50'],amt:'€48,93',prog:progTxt(amz),pct:Math.round(amz.n/amz.total*100),warn:amz.last,fixed:true});}
+  // v28 — Amazon: eran DOS compras distintas cargadas en TR Jofre, con planes
+  // de cuotas DIFERENTES (antes ambas estaban mal como 4 cuotas 50/50):
+  //  · "Amazon · Pago 1" = compra a 6 CUOTAS de €112,67 (última 6/6 = €112,70).
+  //    En julio iba 4/6 -> agosto 5/6 -> septiembre 6/6. REPARTO ESPECIAL: como
+  //    Massiel ya pagó todo agosto antes de detectar esta cuota, AGOSTO lo asume
+  //    Jofre al 100% ('Solo Jofre'); SEPTIEMBRE vuelve a 50/50.
+  //  · "Amazon · Pago 2" = compra 4x de €50,25, YA pagada al 100% en julio (4/4).
+  //    No debe reaparecer en agosto/septiembre.
+  const amz1=cuotaState(3,6,off);
+  if(amz1){
+    const esAgosto=(off===monthOffsetFromBase('ago'));
+    const repartoTag=esAgosto?'Solo Jofre':'50/50';
+    const monto=amz1.last?'€112,70':'€112,67';
+    list.push({l:'Amazon · Pago 1',tags:['TR Jofre',repartoTag],amt:monto,prog:progTxt(amz1),pct:Math.round(amz1.n/amz1.total*100),warn:amz1.last,fixed:true});
+  }
+  const amz2=cuotaState(3,4,off);
+  if(amz2)list.push({l:'Amazon · Pago 2',tags:['TR Jofre','50/50'],amt:'€50,25',prog:progTxt(amz2),pct:Math.round(amz2.n/amz2.total*100),warn:amz2.last,fixed:true});
   const zal=cuotaState(1,2,off);if(zal)list.push({l:'Zalando',tags:['Caixa','Solo Jofre'],amt:'€43,44',prog:progTxt(zal),pct:Math.round(zal.n/zal.total*100),warn:zal.last,fixed:true});
   if(off===0){list.push({l:'Primor',tags:['Caixa','Solo Jofre'],amt:'€50,75',prog:'3/3 · ÚLTIMA',pct:100,warn:true,fixed:true});list.push({l:'24 Segons',tags:['Caixa','Solo Jofre'],amt:'€26,67',prog:'3/3 · ÚLTIMA',pct:100,warn:true,fixed:true});list.push({l:'Zara',tags:['Caixa','Solo Jofre'],amt:'€20,45',prog:'3/3 · ÚLTIMA',pct:100,warn:true,fixed:true});}
   return list.concat(MONTHS[id]&&MONTHS[id].cuotas||[]);
@@ -1096,30 +1123,63 @@ function itemsForKey(key,id){
   return fresh.concat(extraItems);
 }
 const PISCINA_SCHEDULE={sep:57,nov:97,ene:97,abr:97};
-// On Air Nuevo Centro (gimnasio, desde agosto): se paga SIEMPRE desde Caixa,
-// reparto 50/50 con reembolso de Massiel vía Bizum (su mitad NO es tarea
-// aparte; entra en massielTotal por el item group:'massiel' del detalle de
-// gimnasios). Mensualidad variable por mes + matrícula única en agosto.
-// Montos confirmados por Jofre (01-ago):
-//   ago: matrícula 30 + mensualidad 19,96 = 49,96
-//   sep: 43,99 · oct: 53,99 · nov en adelante: 43,99
-// La tarea de Caixa se divide en 2 líneas cuando hay matrícula
-// ("Matrícula - On Air" + "Mensualidad On Air"); si no, una sola mensualidad.
+// On Air Nuevo Centro (gimnasio, desde agosto). CICLO REAL DE COBRO: cada 4
+// semanas (28 días), NO mensual → 13 cobros/año. Eso obliga a que una vez al
+// año un mes reciba DOS cobros. Ancla confirmada por Jofre: 1er cobro 03/08/26.
+//
+// IMPORTANTE — asignación por CICLO DE NÓMINA, no por calendario:
+// la nómina llega el 29-30 y con advanceMonth el sistema ya está en el mes
+// siguiente. Un cobro que cae a fin de mes (ej. 31/08) se paga cuando el
+// sistema YA avanzó a septiembre → pertenece a 'sep', no a 'ago'. Por eso el
+// mes doble en el sistema es SEPTIEMBRE (cobros 31/08 + 28/09), no agosto.
+//
+// Reparto: hoy vive como DOS líneas de 100% responsabilidad dentro del detalle
+// de gimnasios (override guardado en Firestore) — NO lo tocamos. Acá solo se
+// define cuánto suma On Air al total del mes y a qué cuenta va la tarea.
+//
+// CUENTAS: la matrícula (única, agosto) YA se pagó desde Caixa. Las
+// mensualidades se pagan desde BBVA (nómina ya vive en BBVA, sin fondeo
+// intermedio). Confirmado por Jofre (02-ago).
+//
+// Tabla de COBROS REALES calculada una vez desde el ancla (+28 días). Fija y
+// determinista: NO depende de new Date(). Cada fila = un cobro, asignada al
+// mes-sistema de su ciclo de nómina. Montos confirmados por Jofre:
+//   cuota 1 (03/08) → ago: matrícula 30 + mensualidad 19,96 (alta) = 49,96
+//   cuota 2 (31/08) → sep: 43,99 (mensualidad estándar)
+//   cuota 3 (28/09) → sep: 53,99 (43,99 + extra anual 10€, va SIEMPRE en la
+//                     3ª cuota del año desde el alta)
+//   cuota 4 (26/10) → oct: 43,99
+//   cuota 5+ → 43,99 estándar (el +10 anual reaparece en la 13ª cuota: jul/27)
 const ONAIR_MENSUALIDAD_DEFAULT=43.99;
+// Cobros por mes-sistema: cada mes lista sus cobros con {tipo, monto}.
+// tipo 'matricula' → tarea "Matrícula - On Air" (Caixa, ya pagada).
+// tipo 'mensualidad' → tarea "Mensualidad On Air" (BBVA). Si un mes tiene 2
+// mensualidades se generan 2 tareas numeradas.
 const ONAIR_SCHEDULE={
-  ago:{matricula:30,mensualidad:19.96},
-  sep:{matricula:0,mensualidad:43.99},
-  oct:{matricula:0,mensualidad:53.99}
-  // nov+ → ONAIR_MENSUALIDAD_DEFAULT (43,99), sin matrícula
+  ago:[{tipo:'matricula',monto:30},{tipo:'mensualidad',monto:19.96}],
+  sep:[{tipo:'mensualidad',monto:43.99},{tipo:'mensualidad',monto:53.99}],
+  oct:[{tipo:'mensualidad',monto:43.99}]
+  // nov+ → 1 mensualidad default (43,99); el +10 anual vuelve en jul/27
 };
-function onairDelMes(id){
+// Devuelve los cobros del mes como lista normalizada de líneas.
+// Cada línea: {tipo:'matricula'|'mensualidad', monto:Number}
+function onairCobrosDelMes(id){
   const s=ONAIR_SCHEDULE[id];
-  if(s)return{matricula:s.matricula||0,mensualidad:s.mensualidad||0};
-  // Meses sin entrada explícita: desde agosto en adelante, mensualidad default;
-  // antes de agosto no había On Air.
+  if(s)return s.map(x=>({tipo:x.tipo,monto:x.monto||0})).filter(x=>x.monto>0);
+  // Meses sin entrada explícita: desde agosto en adelante, 1 mensualidad
+  // default; antes de agosto no había On Air.
   const idx=MONTH_ORDER.indexOf(id),iAgo=MONTH_ORDER.indexOf('ago');
-  if(iAgo<0||idx<0||idx<iAgo)return{matricula:0,mensualidad:0};
-  return{matricula:0,mensualidad:ONAIR_MENSUALIDAD_DEFAULT};
+  if(iAgo<0||idx<0||idx<iAgo)return[];
+  return[{tipo:'mensualidad',monto:ONAIR_MENSUALIDAD_DEFAULT}];
+}
+// Compat: total agregado del mes (matrícula + todas las mensualidades) y su
+// desglose, para el detalle de gimnasios (reparto 50/50 histórico) que aún
+// llama onairDelMes. Suma TODOS los cobros del mes.
+function onairDelMes(id){
+  const cobros=onairCobrosDelMes(id);
+  let matricula=0,mensualidad=0;
+  cobros.forEach(c=>{ if(c.tipo==='matricula')matricula+=c.monto; else mensualidad+=c.monto; });
+  return{matricula:Math.round(matricula*100)/100,mensualidad:Math.round(mensualidad*100)/100};
 }
 // Tareas de Hotel: GASTO desde TR Jofre, categoría Vacaciones. Consumen el
 // Fondo Mutuo (no son dinero entrante) — por eso NO suman a "Enviar a TR
@@ -2604,7 +2664,23 @@ function applyState(s){
   // caía al placeholder corrupto (l=id, cat:'ingreso', acc:'BBVA'). Ahora el seed se calcula
   // con el detalle ya cargado y reconstruye correctamente todas las tareas.
   if(s.pagosByMonth)Object.keys(s.pagosByMonth).forEach(k=>{
-    if(!MONTH_PAGOS[k]||!MONTH_PAGOS[k].length)MONTH_PAGOS[k]=buildMonthPagos(k);
+    // v29 (FIX RAÍZ — mes en blanco al avanzar): antes esto solo reconstruía si
+    // el mes estaba VACÍO. Pero ensureMonthsAhead pre-crea los meses futuros con
+    // ensureBridgeTask → quedan con UNA sola tarea (la puente "Registrar nómina
+    // de …") y se guardan así en Firestore. Al avanzar a ese mes, como NO estaba
+    // vacío (tenía 1 tarea), NO se reconstruía y el mes aparecía SIN tareas
+    // (Arriendo, Servicios, On Air, Renting…). Ahora también reconstruye cuando
+    // el mes solo contiene la(s) tarea(s) puente de nómina — es decir, fue
+    // pre-creado pero nunca poblado. buildMonthPagos regenera todo y el loop de
+    // abajo re-aplica los done/amt guardados sobre esa base completa.
+    const soloPuente=(MONTH_PAGOS[k]||[]).every(p=>p.cat==='ingreso'&&p.nextId);
+    if(!MONTH_PAGOS[k]||!MONTH_PAGOS[k].length||soloPuente){
+      const donePrev={};(MONTH_PAGOS[k]||[]).forEach(p=>{donePrev[p.id]={done:p.done,amt:p.amt};});
+      MONTH_PAGOS[k]=buildMonthPagos(k);
+      // Preservar el done/amt de la tarea puente si ya existía (p.ej. si ya se
+      // había registrado la nómina antes de repoblar).
+      MONTH_PAGOS[k].forEach(p=>{const d=donePrev[p.id];if(d){p.done=d.done;if(d.amt!=null)p.amt=d.amt;}});
+    }
     // v28 — Monto fresco de referencia por id (buildMonthPagos ya suma dinámicamente
     // lo que agrupa cada transferencia de fondeo: On Air, Renting, etc.).
     const freshById={};buildMonthPagos(k).forEach(fp=>{freshById[fp.id]=fp;});
@@ -2652,6 +2728,17 @@ function applyState(s){
     });
     // 3) Sweat fuera (cambio de gimnasio) salvo histórico julio
     if(k!=='jul')arr=arr.filter(p=>!(/sweat/i.test(p.l||'')||/sweat/i.test(p.id||'')));
+    // 3b) (v29) Transición del modelo On Air: antes la mensualidad era UNA tarea
+    //     en Caixa con id "<mes>-mensualidad-on-air". Ahora es 1+ tareas en BBVA
+    //     con ids "<mes>-mensualidad-on-air" / "…-1-2" / "…-2-2". Para no dejar la
+    //     tarea vieja de Caixa duplicando el gasto, se elimina la versión vieja
+    //     (acc CAIXA) si NO está done — buildMonthPagos ya generó la(s) nueva(s)
+    //     en BBVA. Si está done (ya se pagó por Caixa en un mes pasado), se
+    //     respeta como histórico. El mes en curso y julio se preservan.
+    //     "Matrícula - On Air" (Caixa) NO se toca: sigue siendo Caixa.
+    if(k!==ACTIVE_ID&&k!=='jul'){
+      arr=arr.filter(p=>!(/mensualidad on air/i.test(p.l||'')&&p.acc==='CAIXA'&&!p.done));
+    }
     // 4) (v25) Purga de placeholders corruptos heredados de Firestore: tareas
     //    de sesiones viejas cuyo id ya no genera buildMonthPagos y que se
     //    cargaron como placeholder (l===id, cat:'ingreso', acc:'BBVA'). Son
