@@ -270,6 +270,65 @@ const CAIXA_TDC={disponible:391.53,limite:500};
 function trjPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='TRJ'&&p.cat==='gasto'&&p.id!=='j-fmutuo'&&!p.done).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
 function caixaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='CAIXA'&&p.cat==='gasto'&&!p.done).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
 function bbvaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'))&&!p.done&&p.amt!=null).map(p=>({l:p.l,a:p.amt})):[];}
+// ── DISPONIBLE (v29, spec confirmada por Jofre) ──────────────────────────────
+// El problema previo: "Pdte. cobro" mezclaba GASTOS reales (salen a terceros)
+// con FONDEOS (cat:'enviar'/'retiro' — dinero que va de BBVA a otra cuenta
+// PROPIA). Los fondeos restaban del disponible de BBVA pero NUNCA sumaban en la
+// cuenta destino → el dinero fondeado caía en un limbo y Caixa/TR daban
+// negativos falsos aunque el dinero venía en camino.
+//
+// Regla confirmada (2 preguntas, 02-ago):
+//   · BBVA (origen): los fondeos SÍ restan (reservado, no gastable hoy).
+//     Disponible = Saldo − gastos propios pendientes − fondeos que SALEN.
+//   · Caixa/TR/etc (destino): el fondeo que viene en camino SÍ suma.
+//     Disponible = Saldo − gastos propios pendientes + fondeos que ENTRAN.
+// Conservación: cada fondeo pendiente resta una vez (en src) y suma una vez
+// (en acc destino). Nada se pierde ni se duplica.
+//
+// Una tarea de fondeo trae: acc = cuenta DESTINO, src = cuenta ORIGEN (BBVA),
+// cat 'enviar'. "Retirar efectivo" (cat:'retiro') es fondeo BBVA→EFECTIVO
+// (acc queda 'BBVA' en la tarea, destino real EFECTIVO) — se maneja aparte.
+//
+// Fondeo pendiente que ENTRA a la cuenta `acc` (suma a su disponible).
+function fondeoEntrantePend(acc){
+  const list=MONTH_PAGOS[ACTIVE_ID]||[];
+  let sum=0;
+  list.forEach(p=>{
+    if(p.done||p.amt==null)return;
+    if(p.cat==='enviar'&&p.acc===acc&&p.src&&p.src!==acc)sum+=p.amt; // Enviar a <acc>
+    else if(p.cat==='retiro'&&acc==='EFECTIVO')sum+=p.amt;           // Retirar efectivo → Efectivo
+  });
+  return Math.round(sum*100)/100;
+}
+// Fondeo pendiente que SALE de la cuenta `acc` (resta de su disponible).
+function fondeoSalientePend(acc){
+  const list=MONTH_PAGOS[ACTIVE_ID]||[];
+  let sum=0;
+  list.forEach(p=>{
+    if(p.done||p.amt==null)return;
+    // 'enviar': el origen es src (BBVA). 'retiro': sale de BBVA hacia efectivo.
+    if(p.cat==='enviar'&&(p.src||'BBVA')===acc)sum+=p.amt;
+    else if(p.cat==='retiro'&&acc==='BBVA')sum+=p.amt;
+  });
+  return Math.round(sum*100)/100;
+}
+// Gastos propios pendientes de la cuenta `acc` (tareas cat:'gasto' de esa cuenta
+// aún no done). NO incluye fondeos.
+function gastosPropiosPend(acc){
+  const list=MONTH_PAGOS[ACTIVE_ID]||[];
+  let sum=0;
+  list.forEach(p=>{ if(!p.done&&p.amt!=null&&p.cat==='gasto'&&p.acc===acc)sum+=p.amt; });
+  return Math.round(sum*100)/100;
+}
+// Disponible unificado por cuenta (la fórmula única, para todas las cuentas):
+//   Disponible = Saldo − gastos propios pendientes − fondeo que sale + fondeo que entra
+// Da negativo SOLO si de verdad los gastos propios superan el saldo+entrante
+// (alerta útil de sobregasto), nunca por fondeo en tránsito.
+function disponibleCuenta(acc){
+  const saldo=BAL[acc]||0;
+  const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc);
+  return Math.round(d*100)/100;
+}
 const MONTH_NUM={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
 function movBelongsToMonth(mv,monthId){
   if(!mv.dt||mv.dt==='—')return false;
@@ -288,27 +347,70 @@ function tareaLabelsForMonth(monthId){
 }
 const MOVS={BBVA:[],CAIXA:[],TRM:[],TRJ:[],TRJA:[]};
 let nominaReg=true;
+// ── AUDITORÍA BALANCE vs MOVIMIENTOS (v29, pendiente #2 del traspaso) ─────────
+// Compara el saldo guardado BAL[acc] contra la suma NETA de sus movimientos
+// (entradas − salidas). Si difieren, hay un descuadre que NO se explica por los
+// movimientos registrados (ajuste manual viejo, mov faltante, balance inicial
+// no reflejado…). NO inventa: solo expone el número para que Jofre lo cuadre.
+// El campo mov.a viene como string con signo ('+€1.234,56' / '-€…'); mov.t es
+// true=entrada. Usamos mov.t para el signo y parseEuro para el valor absoluto.
+function sumaNetaMovs(acc){
+  const list=MOVS[acc]||[];
+  let entradas=0,salidas=0;
+  list.forEach(mv=>{
+    const val=Math.abs(parseEuro(mv.a));
+    if(mv.t)entradas+=val; else salidas+=val;
+  });
+  entradas=Math.round(entradas*100)/100;
+  salidas=Math.round(salidas*100)/100;
+  return {entradas,salidas,neto:Math.round((entradas-salidas)*100)/100};
+}
+function auditarCuenta(acc){
+  const {entradas,salidas,neto}=sumaNetaMovs(acc);
+  const saldo=Math.round((BAL[acc]||0)*100)/100;
+  const desfase=Math.round((saldo-neto)*100)/100; // + = saldo mayor que lo que explican los movs
+  return {acc,saldo,entradas,salidas,neto,desfase,cuadra:Math.abs(desfase)<0.01};
+}
+function auditarTodo(){
+  return Object.keys(BAL).filter(a=>MOVS[a]!==undefined||['BBVA','CAIXA','TRM','TRJ','TRJA','EFECTIVO'].includes(a)).map(auditarCuenta);
+}
 function fmtE(v){const s=Math.abs(v).toFixed(2);const[i,d]=s.split('.');return(v<0?'-':'')+'€'+parseInt(i).toLocaleString('es-ES',{useGrouping:true})+','+d;}
 function updTile(){
   const b=document.getElementById('bbva-tile-bal');
   if(b){const s=fmtE(BAL.BBVA).replace('€','').split(',');b.innerHTML='€'+s[0]+'<span style="font-size:18px;font-weight:500">,'+s[1]+'</span>';}
   const c=document.getElementById('d-caixa');if(c)c.textContent=fmtE(BAL.CAIXA);
+  // Caixa (destino de fondeo): Disponible incluye el fondeo entrante pendiente
+  // ("Enviar a Caixa" aún no done) — el dinero viene en camino, no debe dar
+  // negativo falso. Fórmula unificada disponibleCuenta.
   const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);
-  const cd=document.getElementById('d-caixa-disp');if(cd){const cDisp=Math.round((BAL.CAIXA-caixaPend)*100)/100;cd.textContent=fmtE(cDisp);cd.style.color=cDisp<0?'var(--rd)':'var(--tl)';}
+  const cDisp=disponibleCuenta('CAIXA');
+  const cd=document.getElementById('d-caixa-disp');if(cd){cd.textContent=fmtE(cDisp);cd.style.color=cDisp<0?'var(--rd)':'var(--tl)';}
   const ct=document.getElementById('d-caixa-tarjeta');if(ct)ct.textContent=fmtE(CAIXA_TDC.disponible);
   const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtE(BAL.EFECTIVO);
   const j=document.getElementById('d-trj');if(j)j.textContent=fmtE(BAL.TRJ);
   const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
   const trjFm=fondoMutuoDisponible(ACTIVE_ID);
   const jfm=document.getElementById('d-trj-fm');if(jfm)jfm.textContent=fmtE(trjFm);
-  const jpend=document.getElementById('d-trj-pend');if(jpend)jpend.textContent=fmtE(trjPend);
+  // "Pdte" en TRJ = gastos propios pendientes (cuotas Amazon, Hotel, GENUA…).
+  // Se pagan con el fondeo "Enviar a TR Jofre" que viene en camino. Se muestra
+  // en ámbar si el fondeo entrante los cubre (no es alarma, el dinero viene);
+  // en rojo solo si faltaría dinero (sobregasto real). Fórmula unificada.
+  const jpend=document.getElementById('d-trj-pend');
+  if(jpend){jpend.textContent=fmtE(trjPend);
+    const trjDisp=disponibleCuenta('TRJ');
+    jpend.parentElement.style.color=trjPend<=0?'var(--t3)':(trjDisp<0?'var(--rd)':'var(--or)');
+  }
   const ja=document.getElementById('d-trja');if(ja)ja.textContent=fmtE(BAL.TRJA);
   const m=document.getElementById('d-trm');if(m)m.textContent=fmtE(BAL.TRM);
   const pmT=document.getElementById('pm-trm');if(pmT)pmT.textContent=fmtE(BAL.TRM);
   const pmJa=document.getElementById('pm-trja');if(pmJa)pmJa.textContent=fmtE(BAL.TRJA);
   const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtE(fondoMutuoDisponible(ACTIVE_ID));
+  // BBVA: Disponible con la fórmula unificada (fondeos que salen restan, gastos
+  // propios restan). "Pdte." = lo que reserva de BBVA (gastos BBVA + fondeos que
+  // salen + retiros) — coincide con bbvaPendienteList, que ya suma justo eso.
   const bbvaPend=bbvaPendienteList().reduce((s,x)=>s+x.a,0);
-  const bd=document.getElementById('bbva-disponible');if(bd){const bDisp=Math.round((BAL.BBVA-bbvaPend)*100)/100;bd.textContent=fmtE(bDisp);bd.style.color=bDisp<0?'var(--rd)':'var(--tl)';}
+  const bDisp=disponibleCuenta('BBVA');
+  const bd=document.getElementById('bbva-disponible');if(bd){bd.textContent=fmtE(bDisp);bd.style.color=bDisp<0?'var(--rd)':'var(--tl)';}
   const bp=document.getElementById('bbva-pendiente');if(bp)bp.textContent=fmtE(bbvaPend);
 }
 function toNum(v){return parseFloat(String(v==null?'':v).trim().replace(',','.'));}
@@ -421,7 +523,7 @@ function renderAccountOverlay(accId){
   const mass=isMassielRole();
   const balSimple=()=>`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;
   if(mass&&accId==='TRJ'){balHTML=balSimple();}
-  else if(accId==='CAIXA'){const pendTDC=Math.round((CAIXA_TDC.limite-CAIXA_TDC.disponible)*100)/100;const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);const caixaDisp=Math.round((BAL.CAIXA-caixaPend)*100)/100;balHTML=`<div style="padding:14px 16px 8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">CUENTA</div><div style="font-size:22px;font-weight:800;color:var(--t1)">${fmtE(BAL.CAIXA)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Saldo actual</div></div><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:#F97316;font-weight:700;letter-spacing:.07em;margin-bottom:4px">TARJETA (TDC)</div><div style="font-size:22px;font-weight:800;color:#F97316">${fmtE(CAIXA_TDC.disponible)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Disp. de ${fmtE(CAIXA_TDC.limite)}</div></div></div><div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:9px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(caixaDisp)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. PAGAR</div><div style="font-size:13px;font-weight:700;color:var(--t2)">${fmtE(caixaPend)}</div></div></div></div>${pendTDC>0?`<div style="padding:8px 10px;border-radius:9px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);font-size:11px;color:#F97316"><i class="ti ti-alert-triangle" style="font-size:12px;margin-right:4px"></i>${fmtE(pendTDC)} pendiente de liquidar</div>`:''}</div>`;}
+  else if(accId==='CAIXA'){const pendTDC=Math.round((CAIXA_TDC.limite-CAIXA_TDC.disponible)*100)/100;const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);const caixaEntra=fondeoEntrantePend('CAIXA');const caixaDisp=disponibleCuenta('CAIXA');const dispColor=caixaDisp<0?'var(--rd)':'var(--tl)';const dispBg=caixaDisp<0?'rgba(239,68,68,.08)':'rgba(34,197,94,.08)';const dispBd=caixaDisp<0?'rgba(239,68,68,.2)':'rgba(34,197,94,.2)';balHTML=`<div style="padding:14px 16px 8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">CUENTA</div><div style="font-size:22px;font-weight:800;color:var(--t1)">${fmtE(BAL.CAIXA)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Saldo actual</div></div><div style="background:var(--s2);border-radius:10px;padding:10px"><div style="font-size:9px;color:#F97316;font-weight:700;letter-spacing:.07em;margin-bottom:4px">TARJETA (TDC)</div><div style="font-size:22px;font-weight:800;color:#F97316">${fmtE(CAIXA_TDC.disponible)}</div><div style="font-size:9px;color:var(--t3);margin-top:3px">Disp. de ${fmtE(CAIXA_TDC.limite)}</div></div></div><div style="background:${dispBg};border:1px solid ${dispBd};border-radius:10px;padding:9px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:${dispColor};font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:18px;font-weight:800;color:${dispColor}">${fmtE(caixaDisp)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. PAGAR</div><div style="font-size:13px;font-weight:700;color:var(--t2)">${fmtE(caixaPend)}</div></div></div>${caixaEntra>0?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);display:flex;justify-content:space-between;font-size:9px;color:var(--t3)"><span>Fondeo en camino (+)</span><span style="color:#22C55E;font-weight:700">${fmtE(caixaEntra)}</span></div>`:''}</div>${pendTDC>0?`<div style="padding:8px 10px;border-radius:9px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);font-size:11px;color:#F97316"><i class="ti ti-alert-triangle" style="font-size:12px;margin-right:4px"></i>${fmtE(pendTDC)} pendiente de liquidar</div>`:''}</div>`;}
   else if(accId==='TRJ'){const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);const trjFm=fondoMutuoDisponible(ACTIVE_ID);balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.TRJ)}</div><div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(139,111,223,.1);border-radius:10px;padding:9px"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em;margin-bottom:3px">FONDO MUTUO</div><div style="font-size:18px;font-weight:800;color:#8B6FDF">${fmtE(trjFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div><div style="background:rgba(239,68,68,.08);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--rd);font-weight:700;letter-spacing:.06em;margin-bottom:3px">PDTE COBRO</div><div style="font-size:18px;font-weight:800;color:var(--rd)">${fmtE(trjPend)}</div>${trjPendienteList().map(x=>`<div onclick="openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="font-size:9px;color:var(--t3);margin-top:1px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>${x.l} ${fmtE(x.a)}</span><i class="ti ti-pencil" style="font-size:10px;color:var(--t3);margin-left:6px"></i></div>`).join('')}</div></div></div>`;}
   else if(accId==='IBKR'){balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">$382,58</div><div style="font-size:11px;color:var(--t2);margin-top:4px">≈ €369 al cambio</div></div>`;}
   else{balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;}
@@ -436,6 +538,17 @@ function renderAccountOverlay(accId){
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
   else if(pend.length){html+=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;pend.forEach(p=>{html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i></div>`;});html+='</div>';}
   else{html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--tl2);border:1px solid rgba(14,201,188,.25);display:flex;gap:8px;align-items:center"><i class="ti ti-check" style="font-size:15px;color:var(--tl)"></i><div style="font-size:12px;color:var(--tl);font-weight:600">Sin tareas pendientes</div></div></div>`;}
+  // ── Panel de auditoría balance-vs-movimientos (solo Jofre) ──
+  // Compara el saldo guardado contra la suma neta de movimientos. Si hay
+  // desfase, lo muestra en rojo con el detalle para que Jofre lo cuadre.
+  // Cuentas sin registro de movimientos (IBKR, EFECTIVO sin MOVS) se omiten.
+  if(!mass&&MOVS[accId]!==undefined){
+    const au=auditarCuenta(accId);
+    const col=au.cuadra?'#22C55E':'var(--rd)';
+    const bg=au.cuadra?'rgba(34,197,94,.07)':'rgba(239,68,68,.08)';
+    const bd2=au.cuadra?'rgba(34,197,94,.2)':'rgba(239,68,68,.25)';
+    html+=`<div style="padding:0 16px 10px"><div style="background:${bg};border:1px solid ${bd2};border-radius:11px;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:9px;color:${col};font-weight:700;letter-spacing:.06em">AUDITORÍA · SALDO vs MOVIMIENTOS</div><div style="font-size:9px;color:${col};font-weight:700">${au.cuadra?'✓ CUADRA':'⚠ DESCUADRE'}</div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;font-size:10px;color:var(--t2)"><div style="display:flex;justify-content:space-between"><span>Entradas</span><span style="color:var(--tl);font-weight:600">${fmtE(au.entradas)}</span></div><div style="display:flex;justify-content:space-between"><span>Salidas</span><span style="color:var(--rd);font-weight:600">${fmtE(au.salidas)}</span></div><div style="display:flex;justify-content:space-between"><span>Neto movs</span><span style="font-weight:600">${fmtE(au.neto)}</span></div><div style="display:flex;justify-content:space-between"><span>Saldo guardado</span><span style="font-weight:600">${fmtE(au.saldo)}</span></div></div>${!au.cuadra?`<div style="margin-top:7px;padding-top:7px;border-top:1px solid ${bd2};display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;color:${col};font-weight:700">Desfase sin explicar</span><span style="font-size:14px;color:${col};font-weight:800">${fmtE(au.desfase)}</span></div><div style="font-size:9px;color:var(--t3);margin-top:4px;line-height:1.4">El saldo ${au.desfase>0?'supera':'es menor que'} lo que explican los movimientos. Posible ajuste manual viejo, movimiento faltante o balance inicial no registrado. Revisar antes de cuadrar.</div>`:''}</div></div>`;
+  }
   const movs=ordenarMovsPorFecha(MOVS[accId]||[]).slice(0,8);
   html+=`<div style="padding:0 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">MOVIMIENTOS</div>`;
   if(movs.length){movs.forEach(t=>{html+=`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:34px;flex-shrink:0;text-align:center">${t.dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${t.l}</div><div style="font-size:13px;font-weight:700;color:${t.t?'var(--tl)':'var(--rd)'};">${t.a}</div></div>`;});}
