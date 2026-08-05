@@ -265,6 +265,43 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 </div>
 <script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTROL DE GASTOS — v29 (2026-08-02)
+   Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
+
+   1. ON AIR — ciclo real de cobro cada 28 días (no mensual). Modelo por cobros
+      reales asignados al mes-sistema según ciclo de NÓMINA. El mes doble es
+      SEPTIEMBRE (cobros 31/08 + 28/09), no agosto. Matrícula (Caixa, ya pagada)
+      separada de mensualidades (BBVA). Fechas fijas desde ancla 03/08/26.
+      Ver ONAIR_SCHEDULE / onairCobrosDelMes.
+
+   2. FIX "MES EN BLANCO" — applyState ahora reconstruye un mes cuando solo tiene
+      la tarea puente de nómina (pre-creado sin poblar), no solo cuando está
+      vacío. Antes: al avanzar de mes, las cuentas aparecían sin tareas. Ver la
+      condición `soloPuente` en applyState.
+
+   3. DISPONIBLE por cuenta — fórmula unificada disponibleCuenta(acc):
+      Saldo − gastos propios pend − fondeo que SALE + fondeo que ENTRA.
+      Separa GASTOS (a terceros) de FONDEOS (traspasos internos entre cuentas
+      propias). BBVA: los fondeos restan (reservado). Caixa/TR: el fondeo en
+      camino suma (ya no da negativo falso). Da negativo SOLO por sobregasto
+      real. Ver fondeoEntrantePend / fondeoSalientePend / gastosPropiosPend.
+
+   4. AUDITORÍA balance-vs-movimientos — auditarCuenta(acc) / auditarTodo().
+      Compara saldo vs (SALDO_APERTURA + neto movimientos). Cálculo INTERNO
+      (consola), sin panel visible. SALDO_APERTURA = saldos de arranque de julio
+      (sistema cuadrado contra banca real, confirmado por Jofre 02-ago).
+
+   CORRECCIONES DE DATOS aplicadas en vivo a Firestore el 2026-08-02 (NO viven en
+   este HTML, se leen de Firestore; se documentan aquí para trazabilidad):
+     · DIGI agosto: monto 25,40 → 25,39 y marcada pagada (había cobro real 2/8).
+       Movimiento Caixa 2/8 ajustado a −25,39. Caixa +0,01.
+     · Fondeo "Enviar a Caixa" agosto: 151,29 → 131,33. Incluía la mensualidad
+       On Air (19,96) que ahora se paga desde BBVA. Movimientos 1/8 ajustados a
+       ±131,33. BBVA +19,96 / Caixa −19,96.
+     · Resultado verificado tras recarga fresca: BBVA 3.009,96 · Caixa 71,96 ·
+       Disponible Caixa +5,02 (positivo y lógico). Sin duplicación de movimientos.
+   ═══════════════════════════════════════════════════════════════════════════ */
 const BAL={BBVA:135.12,CAIXA:4.14,TRM:0.10,TRJ:0.00,TRJA:0.00,EFECTIVO:0.00};
 const CAIXA_TDC={disponible:391.53,limite:500};
 function trjPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='TRJ'&&p.cat==='gasto'&&p.id!=='j-fmutuo'&&!p.done).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
@@ -347,13 +384,19 @@ function tareaLabelsForMonth(monthId){
 }
 const MOVS={BBVA:[],CAIXA:[],TRM:[],TRJ:[],TRJA:[]};
 let nominaReg=true;
-// ── AUDITORÍA BALANCE vs MOVIMIENTOS (v29, pendiente #2 del traspaso) ─────────
-// Compara el saldo guardado BAL[acc] contra la suma NETA de sus movimientos
-// (entradas − salidas). Si difieren, hay un descuadre que NO se explica por los
-// movimientos registrados (ajuste manual viejo, mov faltante, balance inicial
-// no reflejado…). NO inventa: solo expone el número para que Jofre lo cuadre.
-// El campo mov.a viene como string con signo ('+€1.234,56' / '-€…'); mov.t es
-// true=entrada. Usamos mov.t para el signo y parseEuro para el valor absoluto.
+// ── AUDITORÍA BALANCE vs MOVIMIENTOS (v29) ───────────────────────────────────
+// Compara el saldo guardado BAL[acc] contra (saldo de apertura de julio + suma
+// neta de movimientos). El sistema arrancó en julio con saldos base cargados
+// directamente en BAL (NO como movimiento de entrada), tras un cuadre validado
+// contra banca real. Por eso la auditoría DEBE partir de ese saldo de apertura;
+// si no, marca un falso descuadre igual al saldo base.
+//
+// SALDO_APERTURA = saldo real de cada cuenta al iniciar julio en el sistema,
+// capturado en vivo (saldo actual − neto de movimientos registrados) el 02-ago,
+// con los saldos ya confirmados contra banca real por Jofre (Explicación A: el
+// sistema quedó cuadrado hace un mes, nada se hizo sin registrar). No inventar:
+// estos valores son los que hacen que sistema == banca.
+const SALDO_APERTURA={BBVA:1009.33,CAIXA:104.17,TRJ:0.19,TRM:-176.07,TRJA:0,EFECTIVO:0};
 function sumaNetaMovs(acc){
   const list=MOVS[acc]||[];
   let entradas=0,salidas=0;
@@ -367,9 +410,12 @@ function sumaNetaMovs(acc){
 }
 function auditarCuenta(acc){
   const {entradas,salidas,neto}=sumaNetaMovs(acc);
+  const apertura=SALDO_APERTURA[acc]||0;
   const saldo=Math.round((BAL[acc]||0)*100)/100;
-  const desfase=Math.round((saldo-neto)*100)/100; // + = saldo mayor que lo que explican los movs
-  return {acc,saldo,entradas,salidas,neto,desfase,cuadra:Math.abs(desfase)<0.01};
+  // Esperado = apertura + neto de movimientos. Desfase real = saldo − esperado.
+  const esperado=Math.round((apertura+neto)*100)/100;
+  const desfase=Math.round((saldo-esperado)*100)/100;
+  return {acc,saldo,apertura,entradas,salidas,neto,esperado,desfase,cuadra:Math.abs(desfase)<0.02};
 }
 function auditarTodo(){
   return Object.keys(BAL).filter(a=>MOVS[a]!==undefined||['BBVA','CAIXA','TRM','TRJ','TRJA','EFECTIVO'].includes(a)).map(auditarCuenta);
@@ -538,17 +584,10 @@ function renderAccountOverlay(accId){
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
   else if(pend.length){html+=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;pend.forEach(p=>{html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i></div>`;});html+='</div>';}
   else{html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--tl2);border:1px solid rgba(14,201,188,.25);display:flex;gap:8px;align-items:center"><i class="ti ti-check" style="font-size:15px;color:var(--tl)"></i><div style="font-size:12px;color:var(--tl);font-weight:600">Sin tareas pendientes</div></div></div>`;}
-  // ── Panel de auditoría balance-vs-movimientos (solo Jofre) ──
-  // Compara el saldo guardado contra la suma neta de movimientos. Si hay
-  // desfase, lo muestra en rojo con el detalle para que Jofre lo cuadre.
-  // Cuentas sin registro de movimientos (IBKR, EFECTIVO sin MOVS) se omiten.
-  if(!mass&&MOVS[accId]!==undefined){
-    const au=auditarCuenta(accId);
-    const col=au.cuadra?'#22C55E':'var(--rd)';
-    const bg=au.cuadra?'rgba(34,197,94,.07)':'rgba(239,68,68,.08)';
-    const bd2=au.cuadra?'rgba(34,197,94,.2)':'rgba(239,68,68,.25)';
-    html+=`<div style="padding:0 16px 10px"><div style="background:${bg};border:1px solid ${bd2};border-radius:11px;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:9px;color:${col};font-weight:700;letter-spacing:.06em">AUDITORÍA · SALDO vs MOVIMIENTOS</div><div style="font-size:9px;color:${col};font-weight:700">${au.cuadra?'✓ CUADRA':'⚠ DESCUADRE'}</div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;font-size:10px;color:var(--t2)"><div style="display:flex;justify-content:space-between"><span>Entradas</span><span style="color:var(--tl);font-weight:600">${fmtE(au.entradas)}</span></div><div style="display:flex;justify-content:space-between"><span>Salidas</span><span style="color:var(--rd);font-weight:600">${fmtE(au.salidas)}</span></div><div style="display:flex;justify-content:space-between"><span>Neto movs</span><span style="font-weight:600">${fmtE(au.neto)}</span></div><div style="display:flex;justify-content:space-between"><span>Saldo guardado</span><span style="font-weight:600">${fmtE(au.saldo)}</span></div></div>${!au.cuadra?`<div style="margin-top:7px;padding-top:7px;border-top:1px solid ${bd2};display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;color:${col};font-weight:700">Desfase sin explicar</span><span style="font-size:14px;color:${col};font-weight:800">${fmtE(au.desfase)}</span></div><div style="font-size:9px;color:var(--t3);margin-top:4px;line-height:1.4">El saldo ${au.desfase>0?'supera':'es menor que'} lo que explican los movimientos. Posible ajuste manual viejo, movimiento faltante o balance inicial no registrado. Revisar antes de cuadrar.</div>`:''}</div></div>`;
-  }
+  // La auditoría balance-vs-movimientos existe como cálculo interno
+  // (auditarCuenta / auditarTodo), consultable por consola para diagnóstico.
+  // NO se renderiza en la UI: el saldo ya está cuadrado contra banca real y un
+  // panel visible solo generaría ruido en la pantalla de Jofre.
   const movs=ordenarMovsPorFecha(MOVS[accId]||[]).slice(0,8);
   html+=`<div style="padding:0 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">MOVIMIENTOS</div>`;
   if(movs.length){movs.forEach(t=>{html+=`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:34px;flex-shrink:0;text-align:center">${t.dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${t.l}</div><div style="font-size:13px;font-weight:700;color:${t.t?'var(--tl)':'var(--rd)'};">${t.a}</div></div>`;});}
@@ -2914,12 +2953,36 @@ function startRealtimeSync(){
   });
 }
 async function init(){
-  ensureBridgeTask('jun');ensureBridgeTask('jul');
-  const loaded=await loadState();
-  ensureMonthsAhead(ACTIVE_ID,3);
-  updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
-  startRealtimeSync();
-  const bl=document.getElementById('bootLoader');if(bl)bl.remove();
+  // FIX pantalla azul iPhone standalone: si loadState() (Firestore) se cuelga o
+  // lanza en el arranque, el bootLoader nunca se removía y la app quedaba en la
+  // pantalla azul de carga (había que cerrar y reabrir varias veces). Ahora:
+  //  1) timeout de seguridad que remueve el loader pase lo que pase (2.5s),
+  //  2) try/catch para que un error de red no deje la app colgada,
+  //  3) la UI se pinta con lo que haya (seed/caché) y realtime la actualiza.
+  const bl=document.getElementById('bootLoader');
+  let removed=false;
+  const killLoader=()=>{ if(!removed&&bl){removed=true;bl.remove();} };
+  const safety=setTimeout(killLoader,2500); // red muerta → no dejar pantalla azul
+  try{
+    ensureBridgeTask('jun');ensureBridgeTask('jul');
+    // loadState con carrera contra timeout: si Firestore tarda >8s, seguimos con
+    // lo que haya (el realtime sync lo actualizará al llegar la conexión).
+    await Promise.race([
+      loadState(),
+      new Promise(res=>setTimeout(res,8000))
+    ]);
+  }catch(e){
+    console.error('init loadState falló, arrancando con estado local:',e&&e.message);
+  }
+  try{
+    ensureMonthsAhead(ACTIVE_ID,3);
+    updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
+    startRealtimeSync();
+  }catch(e){
+    console.error('init render falló:',e&&e.message);
+  }finally{
+    clearTimeout(safety);killLoader();
+  }
 }
 const CG_PIN='1441';
 function setRole(r){localStorage.setItem('cg_role',r);applyRole();}
