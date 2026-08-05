@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test</title>
+</head>
+<body style="margin:0;background:#0A0F1E;color:#fff;font:16px -apple-system,sans-serif;padding:40px 20px">
+<h1 style="color:#0EC9BC">✅ La página carga</h1>
+<p>Si ves esto en tu iPhone, el hosting y tu navegador funcionan bien.</p>
+<div id="out" style="margin-top:20px;font-size:13px;color:#8B9;white-space:pre-wrap;word-break:break-word"></div>
+<button id="fb" style="margin-top:20px;padding:14px 20px;background:#0EC9BC;color:#000;border:none;border-radius:10px;font-size:16px;font-weight:700">Probar Firebase</button>
+<div id="fbout" style="margin-top:16px;font-size:13px;color:#F97316;white-space:pre-wrap;word-break:break-word"></div>
+<script>
+var out=document.getElementById('out');
+out.textContent='userAgent:\n'+navigator.userAgent+'\n\nstandalone: '+(window.navigator.standalone)+'\nonLine: '+navigator.onLine+'\nlocalStorage: '+(typeof localStorage!=='undefined');
+document.getElementById('fb').addEventListener('click',function(){
+  var o=document.getElementById('fbout');
+  o.textContent='Cargando Firebase desde gstatic...';
+  import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js')
+    .then(function(m){ o.style.color='#0EC9BC'; o.textContent='✅ Firebase (import dinámico) SÍ carga. initializeApp='+(typeof m.initializeApp); })
+    .catch(function(e){ o.style.color='#F97316'; o.textContent='❌ Firebase NO carga (import dinámico bloqueado):\n'+(e&&e.message||e); });
+});
+</script>
+</body>
+</html>
