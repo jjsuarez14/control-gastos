@@ -2,6 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<!-- v31: anti-caché del HTML. GitHub Pages sirve index.html con max-age=600 e
+     iOS standalone lo cachea de forma agresiva → el teléfono seguía ejecutando
+     una versión vieja tras desplegar (Caixa con errores viejos, arranque roto).
+     Estas metas fuerzan a iOS a revalidar el HTML en cada apertura. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Control de Gastos</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -266,13 +273,15 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v30 (2026-08-05)
-   · Reconciliación tarea↔movimiento real: una tarea deja de contar como
-     pendiente si su movimiento ya está ejecutado (fin del doble conteo en
-     "Pdte. pagar" / "Disponible real"). Ej. agosto: Emma Colchón y Disney+
-     ya pagados dejaban el Disponible de Caixa en negativo falso.
-     Helper tieneMovEjecutado + tareaPendiente.
-   · (pendiente en esta versión: arranque iOS standalone — ver init())
+   CONTROL DE GASTOS — v31 (2026-08-05)
+   · Anti-caché del HTML (metas no-cache): iOS standalone dejaba de servir la
+     versión desplegada por el max-age de GitHub Pages → la app abría rota o
+     con datos viejos. Ahora el HTML se revalida en cada apertura.
+   · Rol Massiel sin caché local: se queda en "Cargando tus datos…" hasta tener
+     Firestore fresco; nunca ve datos viejos (opción 1 confirmada por Jofre).
+     Rol Jofre mantiene caché para arranque instantáneo en el iPhone.
+   · (heredado v30) Reconciliación tarea↔movimiento real: una tarea deja de
+     contar como pendiente si su movimiento ya está ejecutado.
    Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
 
    1. ON AIR — ciclo real de cobro cada 28 días (no mensual). Modelo por cobros
@@ -3039,26 +3048,46 @@ async function init(){
   };
   try{ ensureBridgeTask('jun');ensureBridgeTask('jul'); }catch(e){}
   // 1) Caché local → pintar app real al instante y quitar el loader.
+  //    EXCEPCIÓN rol Massiel (opción 1 confirmada por Jofre): NO usar caché.
+  //    Su vista debe quedarse en "Cargando tus datos…" hasta tener Firestore
+  //    fresco, para NUNCA mostrarle datos viejos ni por 1-2s. Jofre sí usa
+  //    caché (arranque instantáneo en el iPhone).
+  const esMassiel = (function(){ try{ return localStorage.getItem('cg_role')==='massiel'; }catch(e){ return false; } })();
   try{
-    if(cargarCacheLocal()){ hayDatos=true; pintar(); killLoader(); }
+    if(!esMassiel && cargarCacheLocal()){ hayDatos=true; pintar(); killLoader(); }
   }catch(e){}
-  // Red de seguridad: si NO hubo caché, retirar el loader a los 8s aunque
-  // Firestore no responda, para no dejar la pantalla azul colgada para siempre.
-  const safety=setTimeout(killLoader,8000);
+  // Red de seguridad: retirar el loader a los 8s aunque Firestore no responda.
+  // EXCEPCIÓN rol Massiel: no lo retira (no queremos mostrarle el seed base);
+  // en su lugar, el realtime sync lo cerrará cuando Firestore llegue.
+  const safety=setTimeout(()=>{ if(!esMassiel) killLoader(); },8000);
   // 2) Firestore: carrera contra timeout. Al llegar, refresca sobre la caché.
+  let firestoreOk=false;
   try{
-    await Promise.race([
-      loadState(),
-      new Promise(res=>setTimeout(res,8000))
+    const res=await Promise.race([
+      loadState(),                                   // devuelve true si cargó Firestore
+      new Promise(r=>setTimeout(()=>r('timeout'),8000))
     ]);
-    pintar();            // repintar con lo fresco de Firestore
-    hayDatos=true;
+    firestoreOk=(res===true);
+    if(firestoreOk){ pintar(); hayDatos=true; }
   }catch(e){
     console.error('init loadState falló, se mantiene la caché local:',e&&e.message);
   }
   try{ startRealtimeSync(); }catch(e){ console.error('realtime init falló:',e&&e.message); }
   clearTimeout(safety);
-  killLoader(); // en cualquier caso, ya hay datos (caché o Firestore) o pasaron 8s
+  // Retirar el loader salvo un caso: rol Massiel SIN datos reales (ni caché ni
+  // Firestore). Mostrarle el seed base sería enseñarle cifras que no son suyas;
+  // preferimos que siga viendo "Cargando tus datos…" hasta que haya conexión.
+  // El realtime sync retirará el loader en cuanto Firestore llegue.
+  if(esMassiel && !firestoreOk){
+    // dejar el bootLoader visible; realtime lo cierra al recibir el snapshot
+    _fbOnSnapshot && (function(){ try{
+      const off=_fbOnSnapshot(stateDocRef(),(snap)=>{
+        if(snap.exists()&&snap.data()&&snap.data().json){ killLoader(); if(typeof off==='function')off(); }
+      });
+    }catch(e){ killLoader(); } })();
+  }else{
+    killLoader();
+  }
 }
 const CG_PIN='1441';
 function setRole(r){localStorage.setItem('cg_role',r);applyRole();}
