@@ -301,22 +301,14 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 })();
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v31 (2026-08-05)
-   · Anti-caché del HTML (metas no-cache): iOS standalone dejaba de servir la
-     versión desplegada por el max-age de GitHub Pages → la app abría rota o
-     con datos viejos. Ahora el HTML se revalida en cada apertura.
-   · Rol Massiel sin caché local: se queda en "Cargando tus datos…" hasta tener
-     Firestore fresco; nunca ve datos viejos (opción 1 confirmada por Jofre).
-     Rol Jofre mantiene caché para arranque instantáneo en el iPhone.
-   · Reconciliación tarea↔movimiento COMPLETA: además del cálculo del disponible,
-     ahora tasksFor() / updBbvaBadge() / updPrevCard() usan tareaPendiente(), así
-     la LISTA VISUAL "Tareas del mes" también oculta las ya ejecutadas (antes el
-     disponible se corregía pero la lista seguía mostrando duplicados: GENUA,
-     Amazon, Colegio·Extraescolar, Disney+, Emma Colchón).
-   · Fondo Mutuo agosto = 0 (escenario A): cuando la asignación del fondo está
-     destinada a Vacaciones y existe el hotel del mes, esos fondos ya están
-     comprometidos (se pagan desde BBVA) → disponible en TRJ = 0. Solo afecta
-     agosto; jun/jul/sep/oct/nov sin cambios.
+   CONTROL DE GASTOS — v32 (2026-08-05)
+   · ARRANQUE BLINDADO: la app pinta la UI de forma SÍNCRONA (caché o seed) y
+     retira el bootLoader ANTES de tocar Firebase. Firebase carga 100% en
+     segundo plano y no puede bloquear el arranque. Resuelve la pantalla azul
+     en iOS pase lo que pase con la red o el SDK. (initSync + initAsync)
+   · Panel de diagnóstico visible (window.onerror) por si algo aún falla.
+   · (heredado v31) anti-caché HTML, Massiel sin caché, reconciliación completa
+     tarea↔movimiento (tasksFor), Fondo Mutuo agosto = 0.
    Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
 
    1. ON AIR — ciclo real de cobro cada 28 días (no mensual). Modelo por cobros
@@ -3077,70 +3069,70 @@ function startRealtimeSync(){
     try{applyState(JSON.parse(data.json));renderAll();guardarCacheLocal(data.json);}catch(e){}
   });
 }
-async function init(){
-  // FIX arranque iOS standalone (v30). Antes: el bootLoader se retiraba a los
-  // 2.5s pase lo que pase; si Firebase aún no cargaba (frecuente en la app
-  // instalada, en frío), quedaba pantalla azul o UI vacía. Ahora:
-  //  1) Se pinta PRIMERO con la caché local del último estado bueno (datos
-  //     reales, instantáneo) → el usuario ve su app real de inmediato.
-  //  2) El bootLoader solo se retira cuando YA hay algo real pintado (caché o
-  //     Firestore), nunca dejando una UI vacía a la vista.
-  //  3) loadState (Firestore) corre en carrera contra un timeout; cuando llega,
-  //     actualiza; el realtime sync mantiene todo fresco después.
-  //  4) Si no hay caché y Firestore tarda, el loader se queda (con su spinner)
-  //     hasta que haya datos — mejor eso que una pantalla vacía y confusa.
-  const bl=document.getElementById('bootLoader');
-  let removed=false;
-  const killLoader=()=>{ if(!removed&&bl){removed=true;bl.remove();} };
-  let hayDatos=false;
-  const pintar=()=>{
-    try{
-      ensureMonthsAhead(ACTIVE_ID,3);
-      updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();updPrevCard();
-    }catch(e){ console.error('init render falló:',e&&e.message); }
-  };
-  try{ ensureBridgeTask('jun');ensureBridgeTask('jul'); }catch(e){}
-  // 1) Caché local → pintar app real al instante y quitar el loader.
-  //    EXCEPCIÓN rol Massiel (opción 1 confirmada por Jofre): NO usar caché.
-  //    Su vista debe quedarse en "Cargando tus datos…" hasta tener Firestore
-  //    fresco, para NUNCA mostrarle datos viejos ni por 1-2s. Jofre sí usa
-  //    caché (arranque instantáneo en el iPhone).
-  const esMassiel = (function(){ try{ return localStorage.getItem('cg_role')==='massiel'; }catch(e){ return false; } })();
+// ── ARRANQUE BLINDADO (v32) ──────────────────────────────────────────────────
+// Estructura en 2 fases para que la app SIEMPRE abra, incluso si Firebase se
+// cuelga, la red falla, o Safari iOS se comporta distinto:
+//   FASE 1 (SÍNCRONA, sin await): pinta la UI con caché local o con el seed del
+//     código y RETIRA el bootLoader de inmediato. Nada asíncrono puede bloquear
+//     esto. En el peor caso el usuario ve datos (caché/seed) al instante.
+//   FASE 2 (async, segundo plano): carga Firebase y refresca; si falla, la app
+//     ya está pintada y usable. Firebase nunca puede impedir el arranque.
+function pintarUI(){
   try{
-    if(!esMassiel && cargarCacheLocal()){ hayDatos=true; pintar(); killLoader(); }
-  }catch(e){}
-  // Red de seguridad: retirar el loader a los 8s aunque Firestore no responda.
-  // EXCEPCIÓN rol Massiel: no lo retira (no queremos mostrarle el seed base);
-  // en su lugar, el realtime sync lo cerrará cuando Firestore llegue.
-  const safety=setTimeout(()=>{ if(!esMassiel) killLoader(); },8000);
-  // 2) Firestore: carrera contra timeout. Al llegar, refresca sobre la caché.
+    ensureMonthsAhead(ACTIVE_ID,3);
+    updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();updPrevCard();
+  }catch(e){ if(window.__cgDiagShow)window.__cgDiagShow('render falló', (e&&e.stack)||e); }
+}
+function initSync(){
+  // FASE 1 — 100% síncrona. Se ejecuta pase lo que pase con Firebase.
+  const bl=document.getElementById('bootLoader');
+  const killLoader=()=>{ if(bl&&bl.parentNode){bl.remove();} };
+  let esMassiel=false;
+  try{ esMassiel=localStorage.getItem('cg_role')==='massiel'; }catch(e){}
+  try{ ensureBridgeTask('jun');ensureBridgeTask('jul'); }catch(e){}
+  // Jofre: pinta con caché local si existe; si no, con el seed del código.
+  // Massiel: NO usa caché (no mostrar datos viejos); pinta seed solo para no
+  //   dejar pantalla azul, pero se queda el loader hasta que Firestore llegue.
+  let pintadoDeCache=false;
+  if(!esMassiel){
+    try{ pintadoDeCache=cargarCacheLocal(); }catch(e){}
+  }
+  // Pintar SIEMPRE (con caché si hubo, si no con el seed que ya está en memoria).
+  pintarUI();
+  // Retirar el loader ya, salvo Massiel sin datos frescos (mantiene "Cargando").
+  if(!esMassiel){ killLoader(); }
+  return { esMassiel, killLoader };
+}
+async function initAsync(ctx){
+  // FASE 2 — Firebase en segundo plano. Nunca bloquea el arranque.
+  const { esMassiel, killLoader } = ctx;
   let firestoreOk=false;
   try{
     const res=await Promise.race([
-      loadState(),                                   // devuelve true si cargó Firestore
+      loadState(),
       new Promise(r=>setTimeout(()=>r('timeout'),8000))
     ]);
     firestoreOk=(res===true);
-    if(firestoreOk){ pintar(); hayDatos=true; }
-  }catch(e){
-    console.error('init loadState falló, se mantiene la caché local:',e&&e.message);
+    if(firestoreOk){ pintarUI(); }
+  }catch(e){ if(window.__cgDiagShow)window.__cgDiagShow('loadState (2ª fase)', (e&&e.stack)||e); }
+  try{ startRealtimeSync(); }catch(e){}
+  // Massiel: si aún no hubo datos frescos, el realtime cierra el loader al llegar.
+  if(esMassiel){
+    if(firestoreOk){ pintarUI(); killLoader(); }
+    else{
+      try{
+        const off=_fbOnSnapshot(stateDocRef(),(snap)=>{
+          if(snap&&snap.exists&&snap.exists()&&snap.data()&&snap.data().json){ pintarUI(); killLoader(); if(typeof off==='function')off(); }
+        });
+      }catch(e){ killLoader(); }
+    }
   }
-  try{ startRealtimeSync(); }catch(e){ console.error('realtime init falló:',e&&e.message); }
-  clearTimeout(safety);
-  // Retirar el loader salvo un caso: rol Massiel SIN datos reales (ni caché ni
-  // Firestore). Mostrarle el seed base sería enseñarle cifras que no son suyas;
-  // preferimos que siga viendo "Cargando tus datos…" hasta que haya conexión.
-  // El realtime sync retirará el loader en cuanto Firestore llegue.
-  if(esMassiel && !firestoreOk){
-    // dejar el bootLoader visible; realtime lo cierra al recibir el snapshot
-    _fbOnSnapshot && (function(){ try{
-      const off=_fbOnSnapshot(stateDocRef(),(snap)=>{
-        if(snap.exists()&&snap.data()&&snap.data().json){ killLoader(); if(typeof off==='function')off(); }
-      });
-    }catch(e){ killLoader(); } })();
-  }else{
-    killLoader();
-  }
+}
+function init(){
+  // Orquestador: fase síncrona primero (garantiza que la app abre), luego la
+  // asíncrona en segundo plano. Cualquier fallo de la 2ª fase NO afecta a la 1ª.
+  const ctx=initSync();
+  Promise.resolve().then(()=>initAsync(ctx)).catch(e=>{ if(window.__cgDiagShow)window.__cgDiagShow('initAsync', (e&&e.stack)||e); });
 }
 const CG_PIN='1441';
 function setRole(r){localStorage.setItem('cg_role',r);applyRole();}
