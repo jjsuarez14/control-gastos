@@ -3,24 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Test</title>
+<title>Test2</title>
 </head>
-<body style="margin:0;background:#0A0F1E;color:#fff;font:16px -apple-system,sans-serif;padding:40px 20px">
-<h1 style="color:#0EC9BC">✅ La página carga</h1>
-<p>Si ves esto en tu iPhone, el hosting y tu navegador funcionan bien.</p>
-<div id="out" style="margin-top:20px;font-size:13px;color:#8B9;white-space:pre-wrap;word-break:break-word"></div>
-<button id="fb" style="margin-top:20px;padding:14px 20px;background:#0EC9BC;color:#000;border:none;border-radius:10px;font-size:16px;font-weight:700">Probar Firebase</button>
-<div id="fbout" style="margin-top:16px;font-size:13px;color:#F97316;white-space:pre-wrap;word-break:break-word"></div>
+<body style="margin:0;background:#0A0F1E;color:#fff;font:15px -apple-system,sans-serif;padding:30px 18px">
+<h2 style="color:#0EC9BC;margin:0 0 12px">Diagnostico de la app</h2>
+<p style="margin:0 0 16px;color:#8B9">Cargando el codigo real de la app y capturando cualquier error...</p>
+<div id="out" style="font-size:13px;white-space:pre-wrap;word-break:break-word;line-height:1.6"></div>
 <script>
 var out=document.getElementById('out');
-out.textContent='userAgent:\n'+navigator.userAgent+'\n\nstandalone: '+(window.navigator.standalone)+'\nonLine: '+navigator.onLine+'\nlocalStorage: '+(typeof localStorage!=='undefined');
-document.getElementById('fb').addEventListener('click',function(){
-  var o=document.getElementById('fbout');
-  o.textContent='Cargando Firebase desde gstatic...';
-  import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js')
-    .then(function(m){ o.style.color='#0EC9BC'; o.textContent='✅ Firebase (import dinámico) SÍ carga. initializeApp='+(typeof m.initializeApp); })
-    .catch(function(e){ o.style.color='#F97316'; o.textContent='❌ Firebase NO carga (import dinámico bloqueado):\n'+(e&&e.message||e); });
-});
+function log(msg,color){ var d=document.createElement('div'); if(color)d.style.color=color; d.textContent=msg; out.appendChild(d); }
+log('1) Descargando index.html...','#0EC9BC');
+fetch('index.html?ts='+Date.now(),{cache:'no-store'})
+  .then(function(r){ return r.text(); })
+  .then(function(html){
+    log('2) Descargado ('+html.length+' bytes). Extrayendo el script principal...','#0EC9BC');
+    var m=html.match(/<script>([\s\S]*?)<\/script>/);
+    if(!m){ log('No se encontro <script>','#F97316'); return; }
+    var code=m[1];
+    log('3) Script extraido ('+code.length+' chars). Intentando PARSEAR...','#0EC9BC');
+    try{
+      new Function(code);
+      log('OK El script PARSEA sin error de sintaxis en este navegador.','#0EC9BC');
+      log('=> El problema NO es de sintaxis. Es de ejecucion/orden.','#8B9');
+    }catch(e){
+      log('ERROR DE SINTAXIS al parsear el script principal:','#F97316');
+      log('   '+(e&&e.message||e),'#F97316');
+      log('   (este es el motivo de la pantalla azul)','#F97316');
+    }
+  })
+  .catch(function(e){ log('Fallo al descargar index.html: '+(e&&e.message||e),'#F97316'); });
 </script>
 </body>
 </html>
