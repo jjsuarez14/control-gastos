@@ -266,7 +266,13 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v29 (2026-08-02)
+   CONTROL DE GASTOS — v30 (2026-08-05)
+   · Reconciliación tarea↔movimiento real: una tarea deja de contar como
+     pendiente si su movimiento ya está ejecutado (fin del doble conteo en
+     "Pdte. pagar" / "Disponible real"). Ej. agosto: Emma Colchón y Disney+
+     ya pagados dejaban el Disponible de Caixa en negativo falso.
+     Helper tieneMovEjecutado + tareaPendiente.
+   · (pendiente en esta versión: arranque iOS standalone — ver init())
    Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
 
    1. ON AIR — ciclo real de cobro cada 28 días (no mensual). Modelo por cobros
@@ -304,9 +310,43 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
    ═══════════════════════════════════════════════════════════════════════════ */
 const BAL={BBVA:135.12,CAIXA:4.14,TRM:0.10,TRJ:0.00,TRJA:0.00,EFECTIVO:0.00};
 const CAIXA_TDC={disponible:391.53,limite:500};
-function trjPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='TRJ'&&p.cat==='gasto'&&p.id!=='j-fmutuo'&&!p.done).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
-function caixaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='CAIXA'&&p.cat==='gasto'&&!p.done).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
-function bbvaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'))&&!p.done&&p.amt!=null).map(p=>({l:p.l,a:p.amt})):[];}
+// ── RECONCILIACIÓN TAREA ↔ MOVIMIENTO REAL (v30) ─────────────────────────────
+// Principio "Historial = Ejecución Real": una tarea del mes deja de estar
+// pendiente cuando su movimiento real YA existe en la cuenta, aunque nadie haya
+// marcado su checkbox (done). Antes, "pendiente" dependía solo de !p.done, así
+// que un gasto ya ejecutado (Emma Colchón, Disney+, etc.) se contaba DOS veces:
+// una porque el saldo ya bajó, y otra como "pendiente por pagar" → disponible
+// negativo falso. Aquí se cruza tarea↔movimiento por (monto + concepto
+// normalizado + misma cuenta + mes activo). Opción 1 confirmada por Jofre:
+// match estricto con normalización de labels (sin acentos, sin sufijos "· xxx"
+// ni cuotas "n/m"), para no saldar la tarea equivocada.
+function normLabelCG(s){
+  return String(s||'')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')   // sin acentos
+    .replace(/·.*$/,'')                                // quita "· Internet", "· 7/24"
+    .replace(/\b\d+\s*\/\s*\d+\b/g,'')                 // quita cuotas "7/24", "2/3"
+    .replace(/[^a-z0-9]+/g,' ')                        // solo alfanumérico
+    .trim();
+}
+// ¿La tarea p ya tiene su movimiento real ejecutado en su cuenta y mes activo?
+function tieneMovEjecutado(p){
+  if(!p||p.amt==null)return false;
+  const acc=p.acc; if(!acc)return false;
+  const list=MOVS[acc]||[];
+  const nl=normLabelCG(p.l);
+  const a=Math.round(Math.abs(p.amt)*100)/100;
+  return list.some(mv=>{
+    if(!movBelongsToMonth(mv,ACTIVE_ID))return false;
+    const mAbs=Math.round(Math.abs(parseEuro(mv.a))*100)/100;
+    return mAbs===a && normLabelCG(mv.l)===nl;
+  });
+}
+// Tarea genuinamente pendiente = no marcada done Y sin movimiento real que la salde.
+function tareaPendiente(p){ return !p.done && !tieneMovEjecutado(p); }
+function trjPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='TRJ'&&p.cat==='gasto'&&p.id!=='j-fmutuo'&&tareaPendiente(p)).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
+function caixaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='CAIXA'&&p.cat==='gasto'&&tareaPendiente(p)).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
+function bbvaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'))&&tareaPendiente(p)&&p.amt!=null).map(p=>({l:p.l,a:p.amt})):[];}
 // ── DISPONIBLE (v29, spec confirmada por Jofre) ──────────────────────────────
 // El problema previo: "Pdte. cobro" mezclaba GASTOS reales (salen a terceros)
 // con FONDEOS (cat:'enviar'/'retiro' — dinero que va de BBVA a otra cuenta
@@ -331,7 +371,7 @@ function fondeoEntrantePend(acc){
   const list=MONTH_PAGOS[ACTIVE_ID]||[];
   let sum=0;
   list.forEach(p=>{
-    if(p.done||p.amt==null)return;
+    if(p.amt==null||!tareaPendiente(p))return; // ya done o ya ejecutado el movimiento
     if(p.cat==='enviar'&&p.acc===acc&&p.src&&p.src!==acc)sum+=p.amt; // Enviar a <acc>
     else if(p.cat==='retiro'&&acc==='EFECTIVO')sum+=p.amt;           // Retirar efectivo → Efectivo
   });
@@ -342,7 +382,7 @@ function fondeoSalientePend(acc){
   const list=MONTH_PAGOS[ACTIVE_ID]||[];
   let sum=0;
   list.forEach(p=>{
-    if(p.done||p.amt==null)return;
+    if(p.amt==null||!tareaPendiente(p))return; // ya done o ya ejecutado el movimiento
     // 'enviar': el origen es src (BBVA). 'retiro': sale de BBVA hacia efectivo.
     if(p.cat==='enviar'&&(p.src||'BBVA')===acc)sum+=p.amt;
     else if(p.cat==='retiro'&&acc==='BBVA')sum+=p.amt;
@@ -354,7 +394,7 @@ function fondeoSalientePend(acc){
 function gastosPropiosPend(acc){
   const list=MONTH_PAGOS[ACTIVE_ID]||[];
   let sum=0;
-  list.forEach(p=>{ if(!p.done&&p.amt!=null&&p.cat==='gasto'&&p.acc===acc)sum+=p.amt; });
+  list.forEach(p=>{ if(p.amt!=null&&p.cat==='gasto'&&p.acc===acc&&tareaPendiente(p))sum+=p.amt; });
   return Math.round(sum*100)/100;
 }
 // Disponible unificado por cuenta (la fórmula única, para todas las cuentas):
@@ -2745,7 +2785,9 @@ async function saveState(){
       );
     });
     const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MOVS,CUOTAS_NUEVAS};
-    await _fbSetDoc(stateDocRef(),{json:JSON.stringify(state),updatedAt:Date.now()});
+    const stateJson=JSON.stringify(state);
+    await _fbSetDoc(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
+    guardarCacheLocal(stateJson); // mantener caché local al día tras escribir
     snapshotMovsBaseline();
     snapshotDetBaseline();
     snapshotPagosBaseline();
@@ -2928,6 +2970,26 @@ function applyState(s){
   // v28 — baseline de tareas tras reconstrucción completa, para el merge-by-delta.
   snapshotPagosBaseline();
 }
+// ── CACHÉ LOCAL DEL ÚLTIMO ESTADO BUENO (v30) ────────────────────────────────
+// FIX arranque iOS standalone: en la app instalada, los import() del SDK de
+// Firebase (gstatic) + signInAnonymously a veces tardan >2.5s en frío, así que
+// el bootLoader se retiraba dejando la UI VACÍA (o con seed), no la app real.
+// Solución: guardar en localStorage el último estado válido de Firestore y
+// pintar con él AL INSTANTE al abrir; Firestore luego refresca por realtime.
+// Son datos reales (última sesión buena), nunca inventados — solo se refrescan
+// al conectar. Aprobado por Jofre para ambos roles.
+const CG_CACHE_KEY='cg_laststate_v1';
+function guardarCacheLocal(jsonStr){
+  try{ if(jsonStr&&typeof jsonStr==='string')localStorage.setItem(CG_CACHE_KEY,jsonStr); }catch(e){}
+}
+function cargarCacheLocal(){
+  try{
+    const raw=localStorage.getItem(CG_CACHE_KEY);
+    if(!raw)return false;
+    applyState(JSON.parse(raw));
+    return true;
+  }catch(e){ return false; }
+}
 async function loadState(){
   try{
     if(!await fbReady)return false;
@@ -2935,6 +2997,7 @@ async function loadState(){
     if(!snap.exists())return false;
     const data=snap.data();if(!data||!data.json)return false;
     applyState(JSON.parse(data.json));
+    guardarCacheLocal(data.json); // refrescar caché con el estado bueno recién leído
     return true;
   }catch(e){return false;}
 }
@@ -2949,40 +3012,53 @@ function startRealtimeSync(){
     if(snap.metadata.hasPendingWrites)return; // eco de nuestro propio guardado, ya reflejado en pantalla
     if(!snap.exists())return;
     const data=snap.data();if(!data||!data.json)return;
-    try{applyState(JSON.parse(data.json));renderAll();}catch(e){}
+    try{applyState(JSON.parse(data.json));renderAll();guardarCacheLocal(data.json);}catch(e){}
   });
 }
 async function init(){
-  // FIX pantalla azul iPhone standalone: si loadState() (Firestore) se cuelga o
-  // lanza en el arranque, el bootLoader nunca se removía y la app quedaba en la
-  // pantalla azul de carga (había que cerrar y reabrir varias veces). Ahora:
-  //  1) timeout de seguridad que remueve el loader pase lo que pase (2.5s),
-  //  2) try/catch para que un error de red no deje la app colgada,
-  //  3) la UI se pinta con lo que haya (seed/caché) y realtime la actualiza.
+  // FIX arranque iOS standalone (v30). Antes: el bootLoader se retiraba a los
+  // 2.5s pase lo que pase; si Firebase aún no cargaba (frecuente en la app
+  // instalada, en frío), quedaba pantalla azul o UI vacía. Ahora:
+  //  1) Se pinta PRIMERO con la caché local del último estado bueno (datos
+  //     reales, instantáneo) → el usuario ve su app real de inmediato.
+  //  2) El bootLoader solo se retira cuando YA hay algo real pintado (caché o
+  //     Firestore), nunca dejando una UI vacía a la vista.
+  //  3) loadState (Firestore) corre en carrera contra un timeout; cuando llega,
+  //     actualiza; el realtime sync mantiene todo fresco después.
+  //  4) Si no hay caché y Firestore tarda, el loader se queda (con su spinner)
+  //     hasta que haya datos — mejor eso que una pantalla vacía y confusa.
   const bl=document.getElementById('bootLoader');
   let removed=false;
   const killLoader=()=>{ if(!removed&&bl){removed=true;bl.remove();} };
-  const safety=setTimeout(killLoader,2500); // red muerta → no dejar pantalla azul
+  let hayDatos=false;
+  const pintar=()=>{
+    try{
+      ensureMonthsAhead(ACTIVE_ID,3);
+      updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();updPrevCard();
+    }catch(e){ console.error('init render falló:',e&&e.message); }
+  };
+  try{ ensureBridgeTask('jun');ensureBridgeTask('jul'); }catch(e){}
+  // 1) Caché local → pintar app real al instante y quitar el loader.
   try{
-    ensureBridgeTask('jun');ensureBridgeTask('jul');
-    // loadState con carrera contra timeout: si Firestore tarda >8s, seguimos con
-    // lo que haya (el realtime sync lo actualizará al llegar la conexión).
+    if(cargarCacheLocal()){ hayDatos=true; pintar(); killLoader(); }
+  }catch(e){}
+  // Red de seguridad: si NO hubo caché, retirar el loader a los 8s aunque
+  // Firestore no responda, para no dejar la pantalla azul colgada para siempre.
+  const safety=setTimeout(killLoader,8000);
+  // 2) Firestore: carrera contra timeout. Al llegar, refresca sobre la caché.
+  try{
     await Promise.race([
       loadState(),
       new Promise(res=>setTimeout(res,8000))
     ]);
+    pintar();            // repintar con lo fresco de Firestore
+    hayDatos=true;
   }catch(e){
-    console.error('init loadState falló, arrancando con estado local:',e&&e.message);
+    console.error('init loadState falló, se mantiene la caché local:',e&&e.message);
   }
-  try{
-    ensureMonthsAhead(ACTIVE_ID,3);
-    updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
-    startRealtimeSync();
-  }catch(e){
-    console.error('init render falló:',e&&e.message);
-  }finally{
-    clearTimeout(safety);killLoader();
-  }
+  try{ startRealtimeSync(); }catch(e){ console.error('realtime init falló:',e&&e.message); }
+  clearTimeout(safety);
+  killLoader(); // en cualquier caso, ya hay datos (caché o Firestore) o pasaron 8s
 }
 const CG_PIN='1441';
 function setRole(r){localStorage.setItem('cg_role',r);applyRole();}
