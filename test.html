@@ -3,35 +3,56 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Test2</title>
+<title>Test3</title>
 </head>
-<body style="margin:0;background:#0A0F1E;color:#fff;font:15px -apple-system,sans-serif;padding:30px 18px">
-<h2 style="color:#0EC9BC;margin:0 0 12px">Diagnostico de la app</h2>
-<p style="margin:0 0 16px;color:#8B9">Cargando el codigo real de la app y capturando cualquier error...</p>
+<body style="margin:0;background:#0A0F1E;color:#fff;font:14px -apple-system,sans-serif;padding:26px 16px">
+<h2 style="color:#0EC9BC;margin:0 0 10px">Diagnostico de ejecucion</h2>
 <div id="out" style="font-size:13px;white-space:pre-wrap;word-break:break-word;line-height:1.6"></div>
 <script>
 var out=document.getElementById('out');
 function log(msg,color){ var d=document.createElement('div'); if(color)d.style.color=color; d.textContent=msg; out.appendChild(d); }
-log('1) Descargando index.html...','#0EC9BC');
+
+log('1) Descargando index.html real...','#0EC9BC');
 fetch('index.html?ts='+Date.now(),{cache:'no-store'})
   .then(function(r){ return r.text(); })
   .then(function(html){
-    log('2) Descargado ('+html.length+' bytes). Extrayendo el script principal...','#0EC9BC');
     var m=html.match(/<script>([\s\S]*?)<\/script>/);
-    if(!m){ log('No se encontro <script>','#F97316'); return; }
     var code=m[1];
-    log('3) Script extraido ('+code.length+' chars). Intentando PARSEAR...','#0EC9BC');
+    log('2) Ejecutando el script real y capturando el error exacto...','#0EC9BC');
+    // Necesita los mismos elementos del DOM que la app espera. Creamos un contenedor
+    // con lo minimo: pero mejor, inyectamos el HTML entero en el body para que existan.
+    // Extraemos el body de la app y lo insertamos oculto.
+    var bodyMatch=html.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    var appDom=bodyMatch?bodyMatch[1].replace(/<script>[\s\S]*?<\/script>/g,''):'';
+    var host=document.createElement('div');
+    host.style.cssText='position:absolute;left:-9999px;top:0;width:400px';
+    host.innerHTML=appDom;
+    document.body.appendChild(host);
+    log('3) DOM de la app inyectado. Ejecutando script...','#0EC9BC');
     try{
-      new Function(code);
-      log('OK El script PARSEA sin error de sintaxis en este navegador.','#0EC9BC');
-      log('=> El problema NO es de sintaxis. Es de ejecucion/orden.','#8B9');
+      // Ejecutar el script real en este contexto
+      (0,eval)(code);
+      log('OK El script se ejecuto sin lanzar error inmediato.','#0EC9BC');
+      log('=> El fallo puede ser asincrono (init). Revisa abajo.','#8B9');
     }catch(e){
-      log('ERROR DE SINTAXIS al parsear el script principal:','#F97316');
-      log('   '+(e&&e.message||e),'#F97316');
-      log('   (este es el motivo de la pantalla azul)','#F97316');
+      log('>>> ERROR DE EJECUCION CAPTURADO <<<','#F97316');
+      log('Mensaje: '+(e&&e.message||e),'#F97316');
+      if(e&&e.stack){ log('Stack:','#F97316'); log(String(e.stack).slice(0,600),'#F97316'); }
     }
   })
-  .catch(function(e){ log('Fallo al descargar index.html: '+(e&&e.message||e),'#F97316'); });
+  .catch(function(e){ log('Fallo: '+(e&&e.message||e),'#F97316'); });
+
+// Capturar tambien errores asincronos
+window.addEventListener('error',function(ev){
+  log('>>> ERROR GLOBAL <<<','#F97316');
+  log((ev.message||'?')+'  @linea '+(ev.lineno||'?')+':'+(ev.colno||'?'),'#F97316');
+  if(ev.error&&ev.error.stack) log(String(ev.error.stack).slice(0,500),'#F97316');
+},true);
+window.addEventListener('unhandledrejection',function(ev){
+  var r=ev.reason;
+  log('>>> PROMESA RECHAZADA <<<','#F97316');
+  log(String((r&&(r.stack||r.message))||r).slice(0,500),'#F97316');
+});
 </script>
 </body>
 </html>
