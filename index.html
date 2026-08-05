@@ -272,6 +272,34 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 </div>
 <script>
+// ── PANEL DE DIAGNÓSTICO (v31-diag) ──────────────────────────────────────────
+// Captura CUALQUIER error de arranque y lo muestra en pantalla (en vez de dejar
+// la pantalla azul muda). Sirve para ver en el propio iPhone qué está fallando.
+(function(){
+  function mostrarError(titulo, detalle){
+    try{
+      var d=document.getElementById('cgDiag');
+      if(!d){
+        d=document.createElement('div');
+        d.id='cgDiag';
+        d.style.cssText='position:fixed;inset:0;z-index:99999;background:#0A0F1E;color:#E5EDF7;font:12px/1.5 -apple-system,monospace;padding:24px 16px;overflow:auto;-webkit-overflow-scrolling:touch';
+        (document.body||document.documentElement).appendChild(d);
+      }
+      d.innerHTML='<div style="color:#F97316;font-weight:800;font-size:14px;margin-bottom:8px">⚠ Error de arranque</div>'
+        +'<div style="color:#8B6FDF;font-weight:700;margin-bottom:4px">'+String(titulo||'')+'</div>'
+        +'<pre style="white-space:pre-wrap;word-break:break-word;color:#E5EDF7;margin:0">'+String(detalle||'').replace(/</g,'&lt;')+'</pre>'
+        +'<div style="margin-top:12px;color:#6B85A8">userAgent:</div><pre style="white-space:pre-wrap;word-break:break-word;color:#6B85A8;margin:0">'+navigator.userAgent+'</pre>';
+    }catch(_){/* si ni esto funciona, no hay nada que hacer */}
+  }
+  window.addEventListener('error',function(ev){
+    mostrarError(ev.message||'error', (ev.filename||'')+':'+(ev.lineno||'')+':'+(ev.colno||'')+'\n'+((ev.error&&ev.error.stack)||''));
+  });
+  window.addEventListener('unhandledrejection',function(ev){
+    var r=ev.reason; mostrarError('Promesa rechazada', (r&&(r.stack||r.message))||String(r));
+  });
+  window.__cgDiagShow=mostrarError; // por si quiero llamarlo manualmente
+})();
+
 /* ═══════════════════════════════════════════════════════════════════════════
    CONTROL DE GASTOS — v31 (2026-08-05)
    · Anti-caché del HTML (metas no-cache): iOS standalone dejaba de servir la
@@ -3137,11 +3165,16 @@ function applyRole(){
   const p=new URLSearchParams(location.search).get('rol');
   if(p==='jofre'||p==='massiel')localStorage.setItem('cg_role',p);
 })();
-applyRole();
-init();
-document.getElementById('maov').style.background='rgba(3,5,12,.95)';
-document.getElementById('maov').querySelector('.ovc').style.background='#111827';
-document.getElementById('maov').querySelector('.ovc').style.borderColor='rgba(255,255,255,.1)';
+try{ applyRole(); }catch(e){ window.__cgDiagShow&&window.__cgDiagShow('applyRole() falló', (e&&e.stack)||e); }
+Promise.resolve().then(init).catch(e=>{ window.__cgDiagShow&&window.__cgDiagShow('init() falló', (e&&e.stack)||e); });
+try{
+  const maov=document.getElementById('maov');
+  if(maov){
+    maov.style.background='rgba(3,5,12,.95)';
+    const ovc=maov.querySelector('.ovc');
+    if(ovc){ ovc.style.background='#111827'; ovc.style.borderColor='rgba(255,255,255,.1)'; }
+  }
+}catch(e){ window.__cgDiagShow&&window.__cgDiagShow('estilos maov fallaron', (e&&e.stack)||e); }
 </script>
 </body>
 </html>
