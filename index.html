@@ -280,8 +280,15 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
    · Rol Massiel sin caché local: se queda en "Cargando tus datos…" hasta tener
      Firestore fresco; nunca ve datos viejos (opción 1 confirmada por Jofre).
      Rol Jofre mantiene caché para arranque instantáneo en el iPhone.
-   · (heredado v30) Reconciliación tarea↔movimiento real: una tarea deja de
-     contar como pendiente si su movimiento ya está ejecutado.
+   · Reconciliación tarea↔movimiento COMPLETA: además del cálculo del disponible,
+     ahora tasksFor() / updBbvaBadge() / updPrevCard() usan tareaPendiente(), así
+     la LISTA VISUAL "Tareas del mes" también oculta las ya ejecutadas (antes el
+     disponible se corregía pero la lista seguía mostrando duplicados: GENUA,
+     Amazon, Colegio·Extraescolar, Disney+, Emma Colchón).
+   · Fondo Mutuo agosto = 0 (escenario A): cuando la asignación del fondo está
+     destinada a Vacaciones y existe el hotel del mes, esos fondos ya están
+     comprometidos (se pagan desde BBVA) → disponible en TRJ = 0. Solo afecta
+     agosto; jun/jul/sep/oct/nov sin cambios.
    Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
 
    1. ON AIR — ciclo real de cobro cada 28 días (no mensual). Modelo por cobros
@@ -605,9 +612,9 @@ function askAmount(title,sub,defaultVal){
 }
 function closeAmtPrompt(){const el=document.getElementById('amtprompt');el.style.display='none';const r=amtPromptResolve;amtPromptResolve=null;if(r)r(null);}
 function confirmAmtPrompt(){const v=document.getElementById('amtprompt-input').value;document.getElementById('amtprompt').style.display='none';const r=amtPromptResolve;amtPromptResolve=null;if(r)r(v);}
-function updBbvaBadge(){const pend=PAGOS.filter(x=>!x.done&&(x.cat==='enviar'||x.cat==='retiro'||(x.cat==='gasto'&&x.acc==='BBVA'))).length;const tt=document.getElementById('bbva-task-txt');if(tt){tt.textContent=!nominaReg&&PAGOS.some(x=>x.cat==='ingreso'&&!x.done)?'Esperando nómina':pend>0?pend+' pendientes':'✓ Al día';tt.style.color=!nominaReg?'var(--t3)':pend>0?'var(--gd)':'var(--tl)';}}
+function updBbvaBadge(){const pend=PAGOS.filter(x=>tareaPendiente(x)&&(x.cat==='enviar'||x.cat==='retiro'||(x.cat==='gasto'&&x.acc==='BBVA'))).length;const tt=document.getElementById('bbva-task-txt');if(tt){tt.textContent=!nominaReg&&PAGOS.some(x=>x.cat==='ingreso'&&!x.done)?'Esperando nómina':pend>0?pend+' pendientes':'✓ Al día';tt.style.color=!nominaReg?'var(--t3)':pend>0?'var(--gd)':'var(--tl)';}}
 const ACC_META={BBVA:{n:'BBVA',c:'#4C8DFA',desc:'Cuenta principal'},CAIXA:{n:'Caixa',c:'#F97316',desc:'Renting + TDC'},TRJ:{n:'TR Jofre',c:'#8B6FDF',desc:'Fondo social'},TRM:{n:'TR Massiel',c:'#D4537E',desc:'Mercado'},TRJA:{n:'TR J.A.',c:'#22C55E',desc:'Fondo emergencia'},IBKR:{n:'IBKR',c:'#4C8DFA',desc:'Inversión bolsa'},EFECTIVO:{n:'Efectivo',c:'#9CA3AF',desc:'Retiros para pagos en efectivo'}};
-function tasksFor(accId){if(accId==='BBVA')return PAGOS.filter(p=>p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'));return PAGOS.filter(p=>p.cat==='gasto'&&p.acc===accId&&!p.done);}
+function tasksFor(accId){if(accId==='BBVA')return PAGOS.filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'))&&tareaPendiente(p));return PAGOS.filter(p=>p.cat==='gasto'&&p.acc===accId&&tareaPendiente(p));}
 function srcReady(accId){if(accId==='CAIXA'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='CAIXA');return t?t.done:true;}if(accId==='TRJ'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='TRJ');return t?t.done:true;}if(accId==='EFECTIVO'){const t=PAGOS.find(p=>p.cat==='retiro');return t?t.done:true;}return true;}
 function renderAccountOverlay(accId){
   currentOverlayAcc=accId;const d=ACC_META[accId];let balHTML='';
@@ -625,9 +632,9 @@ function renderAccountOverlay(accId){
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">${d.n}</div><div style="font-size:11px;color:var(--t2)">${d.desc}</div></div><button onclick="document.getElementById('aov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>${balHTML}`;
   let pend=[],waitMsg=null;
   if(mass){/* Massiel no ve tareas de gestion en ninguna cuenta */}
-  else if(accId==='BBVA'){if(nominaReg)pend=tasksFor('BBVA').filter(p=>!p.done);}
+  else if(accId==='BBVA'){if(nominaReg)pend=tasksFor('BBVA');}
   else if(accId==='IBKR'){pend=[];}
-  else if(srcReady(accId)){pend=tasksFor(accId).filter(p=>!p.done);}
+  else if(srcReady(accId)){pend=tasksFor(accId);}
   else{waitMsg=accId==='EFECTIVO'?'Pendiente de retirar el efectivo desde BBVA':'Pendiente de recibir la transferencia desde BBVA';}
   if(mass){/* saltar por completo el bloque de tareas/mensajes de estado */}
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
@@ -755,15 +762,33 @@ function fondoMutuoEntradas(monthId){
 const FONDO_MUTUO_CATS=['Vacaciones','Compartir Familiar'];
 function fondoMutuoConsumido(monthId){
   let c=0;
+  // 1) Gastos de vacaciones ya presupuestados como tarea del mes con
+  //    vacacion:true y YA pagados (cualquier cuenta).
   (MONTH_PAGOS[monthId]||[]).forEach(p=>{
-    if(p.acc==='TRJ'&&p.cat==='gasto'&&p.done&&p.vacacion&&p.amt>0)c+=p.amt;
+    if(p.cat==='gasto'&&p.done&&p.vacacion&&p.amt>0)c+=p.amt;
   });
+  // 2) Movimientos manuales de vacaciones/familiar que salen de TRJ.
   (MOVS.TRJ||[]).forEach(mv=>{
     if(mv.t)return; // solo salidas
     if(!FONDO_MUTUO_CATS.includes(mv.cat))return;
     if(!movBelongsToMonth(mv,monthId))return;
     c+=Math.abs(moneyFromStr(mv.a));
   });
+  // 3) Escenario A (confirmado por Jofre, excepción agosto): cuando la propia
+  //    ASIGNACIÓN del Fondo Mutuo está destinada a Vacaciones (su label lo dice),
+  //    esos fondos ya están COMPROMETIDOS con el hotel del mes aunque el hotel
+  //    siga pendiente y se pague desde BBVA. Si existe la tarea de hotel del mes
+  //    (label "Vacaciones..."), la asignación de vacaciones se da por consumida
+  //    hasta el monto del hotel. Así el Fondo Mutuo disponible en TRJ = 0.
+  const asigVacaciones=fondoMutuoEntradas(monthId)
+    .filter(x=>/vacacion/i.test(x.l))
+    .reduce((s,x)=>s+x.a,0);
+  if(asigVacaciones>0){
+    const hotelMes=(MONTH_PAGOS[monthId]||[])
+      .filter(p=>/vacacion/i.test(p.l||'')&&p.amt>0)
+      .reduce((s,p)=>s+p.amt,0);
+    if(hotelMes>0)c+=Math.min(asigVacaciones,hotelMes);
+  }
   return Math.round(c*100)/100;
 }
 function fondoMutuoDisponible(monthId){
@@ -2432,7 +2457,7 @@ async function toggleMassiel(id){
 }
 function updPrevCard(){
   const active=MONTHS[ACTIVE_ID];
-  const bbvaPend=PAGOS.filter(p=>!p.done&&p.cat!=='ingreso').length;
+  const bbvaPend=PAGOS.filter(p=>tareaPendiente(p)&&p.cat!=='ingreso').length;
   const nominaPend=PAGOS.some(p=>p.cat==='ingreso'&&!p.done);
   const massielPend=MASSIEL_TASKS.filter(t=>!massielDone[t.id]).length+(massielDone['m-biz']?0:1);
   const totalPend=bbvaPend+massielPend;
