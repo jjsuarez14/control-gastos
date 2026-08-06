@@ -20,10 +20,10 @@
 html,body{height:100%;background:#0A0F1E}
 .af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
 @media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd)}}
-.pg{position:absolute;top:0;left:0;right:0;bottom:68px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+.pg{position:absolute;top:env(safe-area-inset-top,0px);left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom,0px));overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
 .pgm{background:#EFF4FB}
-.nb{position:absolute;bottom:0;left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
+.nb{position:absolute;bottom:0;left:0;right:0;height:calc(68px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
 .nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
 .nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;transition:all .18s cubic-bezier(.2,.8,.2,1)}
 .nbi i{font-size:20px;color:var(--t3);transition:color .15s}
@@ -37,9 +37,9 @@ html,body{height:100%;background:#0A0F1E}
 .tp:active{transform:scale(.97)}
 .ts{background:linear-gradient(165deg,var(--s1),#0d1320);border:1px solid var(--bd);border-radius:17px;padding:17px;cursor:pointer;transition:transform .12s;box-shadow:var(--sh1)}
 .ts:active{transform:scale(.97)}
-.ov{position:absolute;inset:0;background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
+.ov{position:absolute;inset:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
 .ovc{background:var(--s1);border-radius:22px;margin:10px 10px 0;border:1px solid var(--bd);overflow:hidden;min-height:calc(100% - 20px);box-shadow:var(--sh2)}
-.ovbot{position:absolute;left:0;right:0;bottom:68px;background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
+.ovbot{position:absolute;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom,0px));background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
 .btng{background:linear-gradient(135deg,#F5C15C,var(--gd) 60%,#DE9E1E);color:#1a1204;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:0 6px 16px -4px rgba(232,170,34,.45);transition:transform .12s}
 .btng:active{transform:scale(.98)}
 .tbx{flex:1;padding:8px 4px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:1px solid var(--bd);color:var(--t3);transition:all .15s}
@@ -265,7 +265,19 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v37 (2026-08-06)
+   CONTROL DE GASTOS — v38 (2026-08-06)
+   · Sobre v37 (confirmado por Jofre: ya abre en Safari y en standalone/
+     pantalla de inicio — el fix del arranque era la causa real).
+   · FIX: safe-area-inset. viewport-fit=cover hace que el contenido se
+     dibuje borde a borde de la pantalla real; en Safari normal no se nota
+     porque el propio navegador reserva espacio arriba/abajo, pero en
+     standalone (ícono en pantalla de inicio) la app ocupa la pantalla
+     completa y el header chocaba con el reloj del status bar, y el nav
+     inferior quedaba pegado al home indicator. No existía ninguna
+     referencia a env(safe-area-inset-*) en todo el archivo. Se agregó
+     env(safe-area-inset-top/bottom, 0px) a .pg, .nb, .ovbot y .ov — con
+     fallback a 0px, así que en Safari normal (donde el inset es 0) no
+     cambia nada visualmente.
    · FIX RAÍZ del arranque colgado en iPhone standalone: init() esperaba
      loadState()->fbReady (3 import() de Firebase + login anónimo) SIN
      ningún límite de tiempo en toda la cadena de arranque (verificado:
