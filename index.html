@@ -267,14 +267,14 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
    CONTROL DE GASTOS — v35 (2026-08-05)
-   · FIX DEFINITIVO pantalla azul iOS: el bootLoader se quedaba pegado porque el
-     `await loadState()` (Firebase) NO resolvía en el WebKit del iPhone, y el
-     killLoader dependía de que ese await terminara (los setTimeout dentro de la
-     función async tampoco se disparaban de forma fiable). Diagnóstico vía iframe:
-     la app SÍ se pintaba (20 hijos) pero el loader seguía encima → azul.
-     Ahora init() PINTA y RETIRA el loader de forma SÍNCRONA, antes de cualquier
-     await; Firebase se carga después, aparte, y no puede bloquear el arranque.
-   · <head> sin metas de caché (idéntico a v29). Sin caché local, sin canario.
+   · CAUSA RAÍZ ENCONTRADA (pantalla azul iOS): la espera de autenticación usaba
+     onAuthStateChanged (un listener) dentro de `await new Promise(...)`. En el
+     WebKit del iPhone ese callback NO se disparaba → fbReady colgado para
+     siempre → toda la app esperando → "Cargando…" eterno. Prueba en el iPhone de
+     Jofre: signInAnonymously() como PROMESA directa resuelve en ~0.5s y lee
+     Firestore. FIX: se usa esa promesa directa (con timeout de respaldo), no el
+     listener. init() espera datos reales, pinta y retira el loader; nunca seed.
+   · <head> sin metas de caché (idéntico a v29).
    · SE CONSERVAN todos los fixes de datos: reconciliación tarea↔movimiento y
      Fondo Mutuo agosto = 0.
    Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
@@ -2604,9 +2604,18 @@ const fbReady=(async()=>{
     const auth=getAuth(app);
     db=getFirestore(app);
     _fbDoc=doc;_fbSetDoc=setDoc;_fbGetDoc=getDoc;_fbDeleteDoc=deleteDoc;_fbOnSnapshot=onSnapshot;
-    await new Promise((resolve)=>{
-      onAuthStateChanged(auth,u=>{if(u)resolve();else signInAnonymously(auth).catch(()=>resolve());});
-    });
+    // FIX cuelgue iOS/WebKit: antes se esperaba la auth con onAuthStateChanged
+    // (un listener). En algunos WebKit ese callback NO se dispara y el
+    // `await new Promise(...)` quedaba colgado para siempre → toda la app
+    // esperando fbReady → pantalla "Cargando…" eterna. La prueba en el iPhone de
+    // Jofre confirmó que signInAnonymously() como PROMESA directa resuelve en
+    // ~0.5s. Se usa ese patrón, con timeout de respaldo por si acaso.
+    if(!auth.currentUser){
+      await Promise.race([
+        signInAnonymously(auth).catch(function(e){ console.error('signInAnonymously:',e&&e.message); }),
+        new Promise(function(res){ setTimeout(res,6000); }) // respaldo: no colgar nunca
+      ]);
+    }
     return true;
   }catch(e){console.error('Firebase no disponible, sin persistencia compartida:',e);return false;}
 })();
@@ -3037,35 +3046,31 @@ function startRealtimeSync(){
     try{applyState(JSON.parse(data.json));renderAll();guardarCacheLocal(data.json);}catch(e){}
   });
 }
-function init(){
-  // FIX definitivo pantalla azul iOS: el bootLoader se quedaba pegado porque el
-  // await de loadState() podía no resolver en WebKit y el killLoader del finally
-  // nunca llegaba (y los setTimeout dentro de la función async tampoco se
-  // disparaban de forma fiable). Solución: PINTAR y RETIRAR el loader de forma
-  // SÍNCRONA aquí mismo, ANTES de cualquier await. Firebase se carga después,
-  // aparte, y no puede impedir que la app se muestre.
-  const bl=document.getElementById('bootLoader');
+async function init(){
+  // Con el fix del auth (fbReady ya no se cuelga), el arranque es directo:
+  // se mantiene "Cargando tus datos…" hasta tener el estado REAL de Firestore,
+  // entonces se pinta y se retira el loader. Nunca se muestra el seed.
+  // Si Firestore no llega, un timeout de respaldo retira el loader para no dejar
+  // pantalla azul (mostrará lo que haya, pero el caso normal es datos reales).
   var quitarLoader=function(){ try{ var b=document.getElementById('bootLoader'); if(b&&b.parentNode)b.parentNode.removeChild(b); }catch(e){} };
-  // 1) Pintar la UI con el estado que haya en memoria (seed) — 100% síncrono.
+  var pintar=function(){
+    try{
+      ensureMonthsAhead(ACTIVE_ID,3);
+      updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
+    }catch(e){}
+  };
+  try{ ensureBridgeTask('jun');ensureBridgeTask('jul'); }catch(e){}
+  var datosReales=false;
   try{
-    ensureBridgeTask('jun');ensureBridgeTask('jul');
-    ensureMonthsAhead(ACTIVE_ID,3);
-    updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
+    var ok=await Promise.race([
+      loadState(),                                        // true si cargó Firestore real
+      new Promise(function(res){ setTimeout(function(){res('timeout');},9000); })
+    ]);
+    datosReales=(ok===true);
   }catch(e){}
-  // 2) Retirar el loader YA (síncrono). La app queda visible pase lo que pase.
-  quitarLoader();
-  // 3) Firebase en segundo plano: al llegar, refresca la UI. Nunca bloquea nada.
-  (function cargarFirebaseEnSegundoPlano(){
-    var listo=false;
-    Promise.resolve().then(function(){
-      return Promise.race([ loadState(), new Promise(function(res){ setTimeout(res,8000); }) ]);
-    }).then(function(){
-      listo=true;
-      try{ ensureMonthsAhead(ACTIVE_ID,3); updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision(); }catch(e){}
-      try{ startRealtimeSync(); }catch(e){}
-      quitarLoader(); // por si acaso
-    }).catch(function(e){ try{ startRealtimeSync(); }catch(_){}; quitarLoader(); });
-  })();
+  pintar();               // pinta con datos reales si llegaron; si no, con lo que haya
+  quitarLoader();         // en cualquier caso, no dejar pantalla de carga colgada
+  try{ startRealtimeSync(); }catch(e){}
 }
 const CG_PIN='1441';
 function setRole(r){localStorage.setItem('cg_role',r);applyRole();}
