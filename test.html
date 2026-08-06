@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TestFB</title>
+<title>TestFB2</title>
 </head>
 <body style="margin:0;background:#0A0F1E;color:#fff;font:14px -apple-system,sans-serif;padding:26px 16px">
-<h2 style="color:#0EC9BC;margin:0 0 10px">Prueba: cuanto tarda Firebase</h2>
+<h2 style="color:#0EC9BC;margin:0 0 10px">Prueba Firebase (clave real)</h2>
 <div id="out" style="font-size:14px;white-space:pre-wrap;word-break:break-word;line-height:1.7"></div>
 <script>
 var out=document.getElementById('out');
@@ -14,32 +14,37 @@ function log(m,c){var d=document.createElement('div');if(c)d.style.color=c;d.tex
 var t0=Date.now();
 function ms(){return ((Date.now()-t0)/1000).toFixed(1)+'s';}
 
-var cfg={apiKey:"AIzaSyDummy",authDomain:"control-gastos-jofre.firebaseapp.com",projectId:"control-gastos-jofre"};
+var cfg={apiKey:"AIzaSyCUqFUjsV881VyE8vqUXkiWe0Y3UTQRT1I",authDomain:"control-gastos-jofre.firebaseapp.com",projectId:"control-gastos-jofre",storageBucket:"control-gastos-jofre.firebasestorage.app",messagingSenderId:"918073876245",appId:"1:918073876245:web:5b30a58af0b9a00b93d31c"};
 
-log('['+ms()+'] Importando firebase-app...','#0EC9BC');
-import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js').then(function(appMod){
-  log('['+ms()+'] firebase-app OK. Importando firestore...','#0EC9BC');
-  return import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js').then(function(fsMod){
-    log('['+ms()+'] firestore OK. Importando auth...','#0EC9BC');
-    return import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js').then(function(authMod){
-      log('['+ms()+'] auth OK. Inicializando app...','#0EC9BC');
-      var app=appMod.initializeApp(cfg);
-      var auth=authMod.getAuth(app);
-      log('['+ms()+'] Autenticando (signInAnonymously)...','#0EC9BC');
-      return authMod.signInAnonymously(auth).then(function(){
-        log('['+ms()+'] AUTH OK.','#0EC9BC');
-        log('>>> Firebase completo funciona en tu telefono ('+ms()+') <<<','#0EC9BC');
-      }).catch(function(e){
-        log('['+ms()+'] signInAnonymously FALLO: '+(e&&e.code||e&&e.message||e),'#F97316');
-        log('>>> ESTE es el problema: la autenticacion anonima falla <<<','#F97316');
-      });
+log('['+ms()+'] Cargando Firebase...','#0EC9BC');
+Promise.all([
+  import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
+  import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js'),
+  import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js')
+]).then(function(mods){
+  var appMod=mods[0], fsMod=mods[1], authMod=mods[2];
+  log('['+ms()+'] Modulos OK. Init + auth...','#0EC9BC');
+  var app=appMod.initializeApp(cfg);
+  var auth=authMod.getAuth(app);
+  return authMod.signInAnonymously(auth).then(function(){
+    log('['+ms()+'] AUTH OK. Leyendo Firestore...','#0EC9BC');
+    var db=fsMod.getFirestore(app);
+    var ref=fsMod.doc(db,'budgetApp','state');
+    return fsMod.getDoc(ref).then(function(snap){
+      if(snap.exists()){
+        var d=snap.data();
+        var st=JSON.parse(d.json);
+        log('['+ms()+'] >>> FIRESTORE OK <<<','#0EC9BC');
+        log('BBVA real: '+(st.BAL&&st.BAL.BBVA)+' | Caixa: '+(st.BAL&&st.BAL.CAIXA),'#0EC9BC');
+        log('TODO FUNCIONA en tu telefono ('+ms()+')','#0EC9BC');
+      }else{ log('['+ms()+'] doc no existe','#F97316'); }
     });
+  }).catch(function(e){
+    log('['+ms()+'] AUTH FALLO: '+(e&&e.code||e&&e.message||e),'#F97316');
   });
-}).catch(function(e){
-  log('['+ms()+'] FALLO import: '+(e&&e.message||e),'#F97316');
-});
+}).catch(function(e){ log('['+ms()+'] FALLO: '+(e&&e.message||e),'#F97316'); });
 
-setTimeout(function(){ if(out.textContent.indexOf('AUTH OK')<0 && out.textContent.indexOf('FALLO')<0){ log('['+ms()+'] >>> SIGUE COLGADO tras 10s. Firebase no responde en este navegador. <<<','#F97316'); } },10000);
+setTimeout(function(){ if(out.textContent.indexOf('FIRESTORE OK')<0 && out.textContent.indexOf('FALLO')<0){ log('['+ms()+'] >>> COLGADO tras 12s <<<','#F97316'); } },12000);
 </script>
 </body>
 </html>
