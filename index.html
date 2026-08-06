@@ -266,17 +266,17 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v34 (2026-08-05)
-   · ARRANQUE = idéntico a v29 (versión que SÍ abre en iPhone). Se revirtieron
-     todos los cambios de arranque posteriores (metas no-store en <head>, arranque
-     "blindado" initSync/initAsync, caché local, panel diag, canario) porque las
-     metas no-store impedían el render en WebKit/iOS. El <head> es byte a byte el
-     de v29.
-   · SE CONSERVAN todos los fixes de datos/lógica (no dependen del arranque):
-     - Reconciliación tarea↔movimiento (tieneMovEjecutado/tareaPendiente) en
-       listas de pendientes, gastosPropiosPend, fondeos, tasksFor, updBbvaBadge,
-       updPrevCard → sin duplicados en "Tareas del mes" ni en disponibles.
-     - Fondo Mutuo agosto = 0 (escenario A).
+   CONTROL DE GASTOS — v35 (2026-08-05)
+   · FIX DEFINITIVO pantalla azul iOS: el bootLoader se quedaba pegado porque el
+     `await loadState()` (Firebase) NO resolvía en el WebKit del iPhone, y el
+     killLoader dependía de que ese await terminara (los setTimeout dentro de la
+     función async tampoco se disparaban de forma fiable). Diagnóstico vía iframe:
+     la app SÍ se pintaba (20 hijos) pero el loader seguía encima → azul.
+     Ahora init() PINTA y RETIRA el loader de forma SÍNCRONA, antes de cualquier
+     await; Firebase se carga después, aparte, y no puede bloquear el arranque.
+   · <head> sin metas de caché (idéntico a v29). Sin caché local, sin canario.
+   · SE CONSERVAN todos los fixes de datos: reconciliación tarea↔movimiento y
+     Fondo Mutuo agosto = 0.
    Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
 
    1. ON AIR — ciclo real de cobro cada 28 días (no mensual). Modelo por cobros
@@ -3037,36 +3037,35 @@ function startRealtimeSync(){
     try{applyState(JSON.parse(data.json));renderAll();guardarCacheLocal(data.json);}catch(e){}
   });
 }
-async function init(){
-  // Arranque original v29 (probadamente abre en iPhone). Se restauró tras
-  // detectar que los cambios de arranque posteriores + las metas no-store
-  // impedían la apertura en iOS. Los fixes de datos (reconciliación tarea↔
-  // movimiento, Fondo Mutuo) NO dependen del arranque y se conservan.
-  //  1) timeout de seguridad que remueve el loader pase lo que pase (2.5s),
-  //  2) try/catch para que un error de red no deje la app colgada,
-  //  3) la UI se pinta con lo que haya (seed) y realtime la actualiza.
+function init(){
+  // FIX definitivo pantalla azul iOS: el bootLoader se quedaba pegado porque el
+  // await de loadState() podía no resolver en WebKit y el killLoader del finally
+  // nunca llegaba (y los setTimeout dentro de la función async tampoco se
+  // disparaban de forma fiable). Solución: PINTAR y RETIRAR el loader de forma
+  // SÍNCRONA aquí mismo, ANTES de cualquier await. Firebase se carga después,
+  // aparte, y no puede impedir que la app se muestre.
   const bl=document.getElementById('bootLoader');
-  let removed=false;
-  const killLoader=()=>{ if(!removed&&bl){removed=true;bl.remove();} };
-  const safety=setTimeout(killLoader,2500); // red muerta → no dejar pantalla azul
+  var quitarLoader=function(){ try{ var b=document.getElementById('bootLoader'); if(b&&b.parentNode)b.parentNode.removeChild(b); }catch(e){} };
+  // 1) Pintar la UI con el estado que haya en memoria (seed) — 100% síncrono.
   try{
     ensureBridgeTask('jun');ensureBridgeTask('jul');
-    await Promise.race([
-      loadState(),
-      new Promise(res=>setTimeout(res,8000))
-    ]);
-  }catch(e){
-    console.error('init loadState falló, arrancando con estado local:',e&&e.message);
-  }
-  try{
     ensureMonthsAhead(ACTIVE_ID,3);
     updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
-    startRealtimeSync();
-  }catch(e){
-    console.error('init render falló:',e&&e.message);
-  }finally{
-    clearTimeout(safety);killLoader();
-  }
+  }catch(e){}
+  // 2) Retirar el loader YA (síncrono). La app queda visible pase lo que pase.
+  quitarLoader();
+  // 3) Firebase en segundo plano: al llegar, refresca la UI. Nunca bloquea nada.
+  (function cargarFirebaseEnSegundoPlano(){
+    var listo=false;
+    Promise.resolve().then(function(){
+      return Promise.race([ loadState(), new Promise(function(res){ setTimeout(res,8000); }) ]);
+    }).then(function(){
+      listo=true;
+      try{ ensureMonthsAhead(ACTIVE_ID,3); updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision(); }catch(e){}
+      try{ startRealtimeSync(); }catch(e){}
+      quitarLoader(); // por si acaso
+    }).catch(function(e){ try{ startRealtimeSync(); }catch(_){}; quitarLoader(); });
+  })();
 }
 const CG_PIN='1441';
 function setRole(r){localStorage.setItem('cg_role',r);applyRole();}
