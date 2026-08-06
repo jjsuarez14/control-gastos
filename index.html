@@ -17,9 +17,8 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0A0F1E;--s1:#111826;--s2:#172035;--bd:#1C2D46;--bd2:#253858;--gd:#E8AA22;--gd2:rgba(232,170,34,.11);--tl:#0EC9BC;--tl2:rgba(14,201,188,.1);--rd:#F04545;--rd2:rgba(240,69,69,.1);--or:#F97316;--or2:rgba(249,115,22,.1);--pu:#8B6FDF;--pu2:rgba(139,111,223,.1);--bl:#4C8DFA;--bl2:rgba(76,141,250,.1);--gn:#22C55E;--gn2:rgba(34,197,94,.1);--pk:#D4537E;--pk2:rgba(212,83,126,.1);--t1:#E2EAF8;--t2:#6B85A8;--t3:#36506A;--fs:'Inter',-apple-system,sans-serif;--fd:'Manrope','Inter',-apple-system,sans-serif;--sh1:0 1px 2px rgba(0,0,0,.24),0 10px 28px -14px rgba(0,0,0,.55);--sh2:0 2px 6px rgba(0,0,0,.28),0 16px 36px -16px rgba(0,0,0,.6);}
-html{height:100%}
-body{min-height:100%;height:100dvh;background:#0A0F1E;margin:0}
-.af{width:100%;max-width:480px;height:100%;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
+html,body{height:100%;background:#0A0F1E}
+.af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
 @media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd)}}
 .pg{position:absolute;top:0;left:0;right:0;bottom:68px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
@@ -40,7 +39,7 @@ body{min-height:100%;height:100dvh;background:#0A0F1E;margin:0}
 .ts:active{transform:scale(.97)}
 .ov{position:absolute;inset:0;background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
 .ovc{background:var(--s1);border-radius:22px;margin:10px 10px 0;border:1px solid var(--bd);overflow:hidden;min-height:calc(100% - 20px);box-shadow:var(--sh2)}
-.ovbot{position:absolute;left:0;right:0;bottom:0;background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
+.ovbot{position:absolute;left:0;right:0;bottom:68px;background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
 .btng{background:linear-gradient(135deg,#F5C15C,var(--gd) 60%,#DE9E1E);color:#1a1204;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:0 6px 16px -4px rgba(232,170,34,.45);transition:transform .12s}
 .btng:active{transform:scale(.98)}
 .tbx{flex:1;padding:8px 4px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:1px solid var(--bd);color:var(--t3);transition:all .15s}
@@ -266,15 +265,28 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v36 (2026-08-05)
-   · ARRANQUE RESTAURADO A v10 (versión que abre 100% en iPhone, confirmada por
-     Jofre). La causa de la pantalla azul fue un cambio de sesiones anteriores en
-     las metas del <head> al ajustar el posicionamiento en pantalla: se había
-     quitado viewport-fit=cover y cambiado apple-mobile-web-app-status-bar-style
-     de black-translucent a "default". Restaurados ambos a los valores de v10.
-     También se revirtió init/loadState/fbReady/realtime a la forma de v10 y se
-     quitaron añadidos posteriores (metas no-store, caché local).
-   · SE CONSERVAN todos los fixes de datos (no tocan el arranque):
+   CONTROL DE GASTOS — v37 (2026-08-06)
+   · FIX RAÍZ del arranque colgado en iPhone standalone: init() esperaba
+     loadState()->fbReady (3 import() de Firebase + login anónimo) SIN
+     ningún límite de tiempo en toda la cadena de arranque (verificado:
+     ni un solo setTimeout/Promise.race existía en fbReady/loadState/init;
+     los únicos setTimeout del archivo eran de UI). Si el import() se
+     colgaba en el arranque en frío del WebView standalone de iOS, el
+     bootLoader nunca se retiraba -> pantalla "Cargando tus datos…" fija
+     para siempre. No era un problema de CSS ni de metas del <head>. Fix:
+     init() corre loadState() contra un límite de 6s; gane quien gane, el
+     bootLoader se retira siempre. Si ganó el límite, se pinta con la
+     semilla embebida y loadState() sigue viva en segundo plano — al
+     llegar Firestore se refresca con datos reales y arranca el realtime
+     sync. Ver init().
+   · También se restauraron las 3 reglas CSS a los valores exactos de v10
+     (html,body height:100%; .af height:100dvh; .ovbot bottom:68px) —
+     diagnosticadas en la sesión anterior pero nunca aplicadas al archivo
+     real hasta ahora. Corrección preventiva, no la causa principal.
+   · FIX sumaNetaMovs (Opción B, decidida por Jofre, no aplicada hasta
+     ahora): clasifica entrada/salida por el signo real de mv.a, no por el
+     flag mv.t. Corrige el desfase fantasma de 20,00€ en auditarCuenta.
+   · SE CONSERVAN todos los fixes de datos previos (no tocan el arranque):
      reconciliación tarea↔movimiento y Fondo Mutuo agosto = 0.
    Cambios de LÓGICA respecto a v28 (todos validados con node --check + jsdom):
 
@@ -441,11 +453,16 @@ let nominaReg=true;
 // estos valores son los que hacen que sistema == banca.
 const SALDO_APERTURA={BBVA:1009.33,CAIXA:104.17,TRJ:0.19,TRM:-176.07,TRJA:0,EFECTIVO:0};
 function sumaNetaMovs(acc){
+  // v37 — FIX (Opción B, decidida por Jofre): clasificar entrada/salida por
+  // el signo REAL de mv.a, no por el flag mv.t (que no es confiable: puede
+  // quedar desalineado del signo real, como pasó con "Devolución - Reserva
+  // Vacaciones" +€10,00 marcado t:false, generando un desfase fantasma de
+  // 20,00€ en auditarCuenta aunque el saldo real siempre estuvo correcto).
   const list=MOVS[acc]||[];
   let entradas=0,salidas=0;
   list.forEach(mv=>{
-    const val=Math.abs(parseEuro(mv.a));
-    if(mv.t)entradas+=val; else salidas+=val;
+    const val=parseEuro(mv.a);
+    if(val>=0)entradas+=val; else salidas+=Math.abs(val);
   });
   entradas=Math.round(entradas*100)/100;
   salidas=Math.round(salidas*100)/100;
@@ -3023,16 +3040,39 @@ function startRealtimeSync(){
   });
 }
 async function init(){
-  // init IDÉNTICO al de v10 (versión que abre 100% en iPhone, confirmado por
-  // Jofre). Se restauró tras detectar que los cambios de arranque posteriores
-  // + el cambio de metas del viewport (viewport-fit/status-bar) rompían la
-  // apertura en iOS. Los fixes de datos NO están aquí; se conservan aparte.
+  // v37 — FIX RAÍZ del arranque colgado en iPhone standalone.
+  // Causa real verificada: init() esperaba loadState() (que a su vez espera
+  // fbReady: 3 import() del SDK de Firebase + login anónimo) SIN ningún
+  // límite de tiempo en toda la cadena. En el arranque en frío del WebView
+  // standalone de iOS (DNS/TLS sin caché, o cualquier import() que se
+  // cuelgue) init() nunca llegaba a la línea que retira el bootLoader ->
+  // spinner "Cargando tus datos…" fijo para siempre. No era una cuestión de
+  // CSS ni de metas del <head>: era una promesa sin cota de tiempo.
+  // Fix: se corre una carrera entre loadState() y un límite de 6s. Gane
+  // quien gane, el bootLoader se retira siempre. Si ganó el límite (Firestore
+  // no respondió a tiempo), la app se pinta con la semilla ya embebida en el
+  // código (nunca datos inventados) y loadState() sigue viva en segundo
+  // plano: en cuanto Firestore responda, se refresca con datos reales y
+  // recién ahí arranca el realtime sync, sin que el usuario tenga que hacer
+  // nada.
   ensureBridgeTask('jun');ensureBridgeTask('jul');
-  const loaded=await loadState();
+  const loadP=loadState();
+  let timedOut=false;
+  await Promise.race([
+    loadP,
+    new Promise(resolve=>setTimeout(()=>{timedOut=true;resolve('timeout');},6000))
+  ]).catch(()=>{});
   ensureMonthsAhead(ACTIVE_ID,3);
   updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
-  startRealtimeSync();
   const bl=document.getElementById('bootLoader');if(bl)bl.remove();
+  if(timedOut){
+    loadP.then(ok=>{
+      if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
+      startRealtimeSync();
+    }).catch(()=>{});
+  }else{
+    startRealtimeSync();
+  }
 }
 const CG_PIN='1441';
 function setRole(r){localStorage.setItem('cg_role',r);applyRole();}
