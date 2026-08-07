@@ -69,7 +69,7 @@ html,body{height:100%;background:#0A0F1E}
 .role-btn{width:100%;max-width:260px;padding:16px;border-radius:15px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);font-size:15px;font-weight:700;cursor:pointer}
 .role-btn.jofre{border-color:var(--gd);color:var(--gd)}
 .role-btn.massiel{border-color:var(--pk);color:var(--pk)}
-.role-switch{position:absolute;bottom:76px;right:14px;font-size:9px;color:var(--t3);text-decoration:underline;cursor:pointer;z-index:5}
+.role-switch{position:absolute;bottom:calc(76px + env(safe-area-inset-bottom,0px));right:14px;font-size:9px;color:var(--t3);text-decoration:underline;cursor:pointer;z-index:5}
 body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.role-massiel .fabw,body.role-massiel #p-i,body.role-massiel #p-p,body.role-massiel #p-h,body.role-massiel .role-switch{display:none!important}
 </style>
 </head>
@@ -265,7 +265,34 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v38 (2026-08-06)
+   CONTROL DE GASTOS — v39 (2026-08-06)
+   · FIX: .role-switch ("Cambiar usuario") tenía bottom:76px fijo -- al
+     crecer el nav con el safe-area (v38) quedó pisado por dentro de la
+     barra en vez de flotar arriba. Ahora respeta env(safe-area-inset-bottom)
+     igual que el nav.
+   · FIX Massiel — Servicios: el detalle (al tocar la categoría) ahora
+     muestra SOLO lo ya pagado, misma fuente que el total (antes el total
+     sumaba lo pagado pero el detalle mostraba el plan completo -> no
+     cuadraban). Ver serviciosEjecutadosDelMes.
+   · FIX Massiel — Personales: solo sus items estructurados (Uñas, Bono
+     Transporte, Peluquería J.A. compartida). Antes se colaban movimientos
+     sueltos de Jofre sin dueño asignado ("Recarga - Bono EMT"), tanto en el
+     total como en el detalle nivel 2 (categoriaNivel2Rows) y nivel 3
+     (showMaSubDetail) -- los 3 caminos corregidos.
+   · FIX Massiel — Ahorro: ahora es una sola categoría de nivel 1; Carro/Moto
+     y Compartir Familiar viven como líneas de nivel 2 dentro de ella. Fondo
+     Mutuo se relabeleó "· asignación mensual" para distinguirlo del gasto
+     real (Vacaciones), que casi siempre lo supera.
+   · FIX ON AIR: ONAIR_SCHEDULE reescrito con la tabla real del portal del
+     gimnasio (confirmada por Jofre) -- sin recargo de +10 por ciclo,
+     43,96€/cobro real, Mantenimiento Anual (10€) como cargo independiente
+     de calendario en octubre, no de ciclo. buildMonthPagos ahora también
+     genera la tarea de mantenimiento (antes se habría perdido en silencio).
+     Nota: sep/oct ya se habían generado una vez con el modelo viejo -- puede
+     hacer falta limpiar 4 entradas de delta en Firestore aparte (pendiente
+     confirmación explícita, ver conversación).
+   · CONSERVADO de v38: fix de arranque (timeout de 6s en init/loadState),
+     CSS restaurada a v10, sumaNetaMovs (Opción B).
    · Sobre v37 (confirmado por Jofre: ya abre en Safari y en standalone/
      pantalla de inicio — el fix del arranque era la causa real).
    · FIX: safe-area-inset. viewport-fit=cover hace que el contenido se
@@ -975,6 +1002,9 @@ function buildMonthPagos(id){
       const lbl=mens.length>1?('Mensualidad On Air ('+(i+1)+'/'+mens.length+')'):'Mensualidad On Air';
       pushDirect(lbl,'BBVA',c.monto);
     });
+    cobros.filter(c=>c.tipo==='mantenimiento').forEach(c=>{
+      pushDirect('Mantenimiento Anual - On Air','BBVA',c.monto);
+    });
     // Resto de gimnasios que NO sean On Air (por si se agrega otro gimnasio).
     gimItems.forEach(it=>{ if(!/on air/i.test(it.l||'')) handleTaggedItem(it.l,it.tag,it.a); });
   }
@@ -1392,17 +1422,29 @@ const PISCINA_SCHEDULE={sep:57,nov:97,ene:97,abr:97};
 //                     3ª cuota del año desde el alta)
 //   cuota 4 (26/10) → oct: 43,99
 //   cuota 5+ → 43,99 estándar (el +10 anual reaparece en la 13ª cuota: jul/27)
-const ONAIR_MENSUALIDAD_DEFAULT=43.99;
+const ONAIR_MENSUALIDAD_DEFAULT=43.96;
+const ONAIR_SCHEDULE={
+  // v39 — Reescrito con la tabla REAL del portal del gimnasio (confirmada
+  // por Jofre). El modelo anterior asumía un recargo de +10€ en el "3er
+  // ciclo" (sep 43.99+53.99, oct 53.99) -- eso era una suposición nuestra,
+  // no lo que factura el gimnasio. La realidad: cuota fija 43,96€/ciclo
+  // (28 días), y un cargo de Mantenimiento Anual de 10€ INDEPENDIENTE, en
+  // fecha fija de calendario (07/10/26), no atado al conteo de ciclos.
+  // Matrícula + Fianza/Garantía de agosto ya están pagadas y registradas
+  // como movimiento en BBVA ("Garantia - On Air", 5/8) -- no se agregan acá
+  // como cobro nuevo para no duplicar.
+  ago:[{tipo:'matricula',monto:30},{tipo:'mensualidad',monto:19.96}],
+  sep:[{tipo:'mensualidad',monto:43.96},{tipo:'mensualidad',monto:43.96}],
+  oct:[{tipo:'mensualidad',monto:43.96},{tipo:'mantenimiento',monto:10}]
+  // nov+ → 1 mensualidad default (43,96). El mantenimiento anual es un cargo
+  // de calendario del gimnasio, no de ciclo -- revisar si se repite en oct/27
+  // cuando llegue esa fecha (no asumir).
+};
 // Cobros por mes-sistema: cada mes lista sus cobros con {tipo, monto}.
 // tipo 'matricula' → tarea "Matrícula - On Air" (Caixa, ya pagada).
 // tipo 'mensualidad' → tarea "Mensualidad On Air" (BBVA). Si un mes tiene 2
-// mensualidades se generan 2 tareas numeradas.
-const ONAIR_SCHEDULE={
-  ago:[{tipo:'matricula',monto:30},{tipo:'mensualidad',monto:19.96}],
-  sep:[{tipo:'mensualidad',monto:43.99},{tipo:'mensualidad',monto:53.99}],
-  oct:[{tipo:'mensualidad',monto:43.99}]
-  // nov+ → 1 mensualidad default (43,99); el +10 anual vuelve en jul/27
-};
+// mensualidades se generan 2 tareas numeradas. tipo 'mantenimiento' → tarea
+// "Mantenimiento Anual - On Air" (BBVA, cargo fijo independiente).
 // Devuelve los cobros del mes como lista normalizada de líneas.
 // Cada línea: {tipo:'matricula'|'mensualidad', monto:Number}
 function onairCobrosDelMes(id){
@@ -2055,6 +2097,20 @@ function tareasGastoEjecutadas(id,cat){
     return categoriaDeTarea(p.l)===cat;
   }).map(p=>({l:p.l,a:p.amt}));
 }
+// v39 — Fuente ÚNICA para "Servicios" ejecutado (Casa): la usan tanto el
+// total de categoriaFijosDetalle como el detalle de showMaSubDetail, para
+// que nunca vuelvan a desalinearse (antes el total sumaba solo lo pagado
+// pero el detalle mostraba el plan completo -> no cuadraban).
+function serviciosEjecutadosDelMes(id){
+  const tareas=tareasGastoEjecutadas(id,'Casa').filter(t=>!/^Arriendo/i.test(t.l));
+  const out=tareas.map(t=>({l:t.l,a:t.a}));
+  if(fijoCasaEjecutado(id,/^Luz$/i)){
+    const luzPlan=itemsForKey('servicios',id).find(x=>x.l==='Luz');
+    const yaEsta=tareas.some(t=>/^Luz$/i.test(t.l));
+    if(luzPlan&&!yaEsta)out.push({l:'Luz',a:luzPlan.a});
+  }
+  return out;
+}
 function categoriaFijosDetalle(cat,id){
   const cs=catsBySuffix(id);const out=[];
   const futuro=esMesFuturo(id);
@@ -2073,13 +2129,8 @@ function categoriaFijosDetalle(cat,id){
     if(cat==='Casa'){
       // Arriendo + Luz: por tarea individual (jul/jun) o agrupados en Ma. Lara.
       if(cs.arr&&fijoCasaEjecutado(id,/^Arriendo/i))out.push({l:'Arriendo',a:cs.arr.a,drill:null});
-      // Resto de servicios de Casa: cada tarea 'gasto' done que mapea a Casa,
-      // salvo Arriendo/Luz (ya arriba) — se agrupan bajo "Servicios".
-      const luzEjec=fijoCasaEjecutado(id,/^Luz$/i);
-      const servTareas=tareasGastoEjecutadas(id,'Casa').filter(t=>!/^Arriendo/i.test(t.l));
-      let servTotal=servTareas.reduce((s,t)=>s+t.a,0);
-      // Luz vía Ma. Lara no aparece como tarea propia: sumarla desde el plan.
-      if(luzEjec){const luzPlan=itemsForKey('servicios',id).find(x=>x.l==='Luz');const yaEsta=servTareas.some(t=>/^Luz$/i.test(t.l));if(luzPlan&&!yaEsta)servTotal+=luzPlan.a;}
+      // Servicios: fuente única serviciosEjecutadosDelMes (ver arriba).
+      const servTotal=Math.round(serviciosEjecutadosDelMes(id).reduce((s,x)=>s+x.a,0)*100)/100;
       if(servTotal>0)out.push({l:'Servicios',a:servTotal,drill:{key:'servicios',label:'Servicios',backCat:'Casa'}});
     }else if(cat==='Baby J.A.'){
       const t=tareasGastoEjecutadas(id,'Baby J.A.');const tot=t.reduce((s,x)=>s+x.a,0);
@@ -2087,9 +2138,26 @@ function categoriaFijosDetalle(cat,id){
     }else if(cat==='Remesas'){
       const t=tareasGastoEjecutadas(id,'Remesas');const tot=t.reduce((s,x)=>s+x.a,0);
       if(tot>0)out.push({l:'Remesas',a:tot,drill:{key:'remesas',label:'Remesas',backCat:'Remesas'}});
+    }else if(cat==='Personales'){
+      // v39 — Vista de Massiel: SOLO sus items estructurados o compartidos
+      // (Uñas, Bono Transporte, Peluquería J.A.), nunca movimientos sueltos
+      // de Jofre ("Recarga - Bono EMT", etc.) que no tienen dueño asignado
+      // y antes se colaban por el matcheo genérico de tareasGastoEjecutadas.
+      // Vista de Jofre: sin cambios, todo lo 'gasto' done que mapea acá.
+      if(maovEsVistaMassiel){
+        itemsForKey('personales',id).filter(x=>x.group!=='jofre').forEach(x=>{
+          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&p.done&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
+          if(t)out.push({l:x.l,a:t.amt,drill:null});
+        });
+      }else{
+        tareasGastoEjecutadas(id,'Personales').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
+      }
     }else if(cat==='Ahorro'){
       // Ahorro (50/50) por ejecución de sus depósitos. Fondo Emergencia,
-      // Inversión/IBKR. (Renting->Carro/Moto, Fondo Mutuo->Compartir Familiar.)
+      // Inversión/IBKR. (Renting->Carro/Moto, Fondo Mutuo->Compartir Familiar
+      // en la vista de Jofre.) v39 — en la vista de Massiel, Carro/Moto y
+      // Compartir Familiar se consolidan AQUÍ como líneas de nivel 2: ella ve
+      // "Ahorro" como una sola categoría de nivel 1.
       itemsForKey('ahorro',id).forEach(x=>{
         if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
         let hecho=false;
@@ -2098,14 +2166,20 @@ function categoriaFijosDetalle(cat,id){
         else hecho=tareaEnviarDone(id,new RegExp(x.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'));
         if(hecho)out.push({l:x.l,a:x.a,drill:null});
       });
+      if(maovEsVistaMassiel){
+        categoriaFijosDetalle('Carro/Moto',id).forEach(r=>out.push(r));
+        categoriaFijosDetalle('Compartir Familiar',id).forEach(r=>out.push(r));
+      }
     }else if(cat==='Compartir Familiar'){
-      // Fondo Mutuo (depósito TR Jofre done) + Vacaciones (tarea propia done).
+      // Fondo Mutuo: esto es la ASIGNACIÓN mensual (depósito TR Jofre done),
+      // no el gasto real -- casi siempre se gasta más del fondo de lo que
+      // entra ese mes (ver líneas de Vacaciones abajo, que sí son gasto real).
       const fm=itemsForKey('ahorro',id).find(x=>/Fondo Mutuo/i.test(x.l));
-      if(fm&&tareaEnviarDone(id,/TR Jofre/i))out.push({l:'Fondo Mutuo',a:fm.a,drill:null});
+      if(fm&&tareaEnviarDone(id,/TR Jofre/i))out.push({l:'Fondo Mutuo · asignación mensual',a:fm.a,drill:null});
       tareasGastoEjecutadas(id,'Compartir Familiar').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
     }else{
       // Resto de categorías (Salud, Deporte, Trabajo, Carro/Moto, Vacaciones,
-      // Personales, Mercado, Adicionales): sus tareas 'gasto' done mapeadas.
+      // Mercado, Adicionales): sus tareas 'gasto' done mapeadas.
       tareasGastoEjecutadas(id,cat).forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
     }
     // Cuotas de esta categoría que YA se pagaron (su tarea done). Se muestra el
@@ -2143,7 +2217,7 @@ function categoriaFijosDetalle(cat,id){
     if(cs.rem)out.push({l:'Remesas',a:itemsForKey('remesas',id).reduce((s,x)=>s+x.a,0),drill:{key:'remesas',label:'Remesas',backCat:'Remesas'}});
   }else if(cat==='Compartir Familiar'){
     const fm=itemsForKey('ahorro',id).find(x=>/Fondo Mutuo/i.test(x.l));
-    if(fm)out.push({l:fm.l,a:fm.a,drill:null});
+    if(fm)out.push({l:'Fondo Mutuo · asignación mensual',a:fm.a,drill:null});
   }else if(cat==='Vacaciones'){
     itemsForKey('ahorro',id).filter(x=>x.key==='vacaciones').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }else if(cat==='Ahorro'){
@@ -2151,6 +2225,10 @@ function categoriaFijosDetalle(cat,id){
       if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
       out.push({l:x.l,a:x.a,drill:null});
     });
+    if(maovEsVistaMassiel){
+      categoriaFijosDetalle('Carro/Moto',id).forEach(r=>out.push(r));
+      categoriaFijosDetalle('Compartir Familiar',id).forEach(r=>out.push(r));
+    }
   }else if(cat==='Personales'){
     itemsForKey('personales',id).filter(x=>x.id!=='per1'&&x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }
@@ -2347,7 +2425,7 @@ function categoriaGroupTotal(cat,id){
 // Categorias que Massiel puede ver: solo donde tiene responsabilidad real
 // (55/45, 50/50, o sus propios items). Deporte/Trabajo/Remesas/Adicionales
 // son 100% Jofre o sin regla de reparto -> quedan fuera de su vista.
-const CATS_MASSIEL_VISIBLE=['Mercado','Baby J.A.','Salud','Casa','Carro/Moto','Compartir Familiar','Vacaciones','Personales','Ahorro'];
+const CATS_MASSIEL_VISIBLE=['Mercado','Baby J.A.','Salud','Casa','Vacaciones','Personales','Ahorro'];
 function categoriasVisibles(){
   // No depende de quien esta logueado (Jofre puede entrar a la seccion de
   // Massiel para monitorear) -- depende de por donde se entro: si vino del
@@ -2368,6 +2446,12 @@ function categoriaNivel1HTML(id){
 function categoriaNivel2Rows(cat,id){
   if(esMesFuturo(id)){
     return categoriaFijosDetalle(cat,id).map(f=>Object.assign({tipo:'Estimado'},f));
+  }
+  // v39 — Personales en la vista de Massiel: nunca movimientos sueltos de
+  // MOVS (sin dueño asignado, podían ser gasto de Jofre colándose en su
+  // vista) -- solo sus items estructurados, ya filtrados por dueño arriba.
+  if(cat==='Personales'&&maovEsVistaMassiel){
+    return categoriaFijosDetalle(cat,id).map(f=>Object.assign({tipo:'Pagado'},f));
   }
   if(CATEGORIAS_POOL.includes(cat)){
     return movimientosVariablesDelMes(id).filter(m=>m.cat===cat).map(r=>({l:r.l,a:r.a,drill:null,tipo:'Registro'}));
@@ -2416,14 +2500,22 @@ function showMaSubDetail(monthId,key,label,backCat){
   const items=itemsForKey(key,monthId);
   let rows;
   if(key==='personales'){
+    // v39 — Massiel nunca ve el grupo 'jofre' (Barbería, GENUA·Fisio, etc.).
     const groups={jofre:[],massiel:[],compartida:[]};
     items.forEach(x=>{(groups[x.group]||groups.compartida).push(x);});
+    if(maovEsVistaMassiel)groups.jofre=[];
     rows=Object.keys(GROUP_META_MA).map(g=>{
       if(!groups[g].length)return'';
       const meta=GROUP_META_MA[g];
       const sub=groups[g].reduce((s,x)=>s+x.a,0);
       return `<div style="padding:10px 0 4px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:10px;font-weight:700;color:${meta.c};letter-spacing:.07em">${meta.l}</div><div style="font-size:11px;font-weight:700;color:${meta.c}">${fmtE(sub)}</div></div>${groups[g].map(maRowHTML).join('')}`;
     }).join('');
+  }else if(key==='servicios'&&!esMesFuturo(monthId)){
+    // v39 — Ejecución real: SOLO lo ya pagado (misma fuente que el total de
+    // arriba, serviciosEjecutadosDelMes) -- nunca más el plan completo, que
+    // era lo que hacía que el detalle no coincidiera con el total.
+    const ejec=serviciosEjecutadosDelMes(monthId).map(x=>({l:x.l,a:x.a,d:'Pagado'}));
+    rows=ejec.length?ejec.map(maRowHTML).join(''):'<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">Nada pagado todavía este mes</div>';
   }else if(key==='servicios'){
     const rest=items.filter(x=>x.group!=='suscripciones');
     const subs=items.filter(x=>x.group==='suscripciones');
