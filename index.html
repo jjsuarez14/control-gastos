@@ -265,7 +265,12 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v41 (2026-08-07) — DIAGNÓSTICO TEMPORAL de safe-area/altura añadido al final del body, quitar tras leer datos.
+   CONTROL DE GASTOS — v42 (2026-08-07)
+   · Se quitó el diagnóstico temporal de v41. Datos reales medidos en el
+     iPhone de Jofre (standalone): SAB=34px, gapBelowNb=0 -- NO hay hueco de
+     layout. Lo que se veía "flotando" es el propio fondo de .nb ocupando la
+     zona reservada por iOS para el gesto de inicio (home indicator), igual
+     que cualquier app nativa. No era un bug; no se toca más este área.
    · REVERTIDO: el safe-area del FONDO (.nb, .pg-bottom, .ovbot, .ov-bottom,
      .role-switch) que agregué en v38/v39 causaba un nav "flotante"/muy alto
      -- se volvió exactamente a los valores fijos que ya estaban confirmados
@@ -3225,34 +3230,6 @@ init();
 document.getElementById('maov').style.background='rgba(3,5,12,.95)';
 document.getElementById('maov').querySelector('.ovc').style.background='#111827';
 document.getElementById('maov').querySelector('.ovc').style.borderColor='rgba(255,255,255,.1)';
-</script>
-<!-- v41 — DIAGNÓSTICO TEMPORAL, quitar después de leer los datos. No toca
-     nada de la app, solo mide y muestra en pantalla los valores reales de
-     safe-area/altura que da tu iPhone en standalone, para no seguir
-     adivinando CSS. -->
-<div id="cg-debug" style="position:fixed;left:4px;bottom:2px;z-index:99999;background:#000;color:#0f0;font-size:9px;line-height:1.4;padding:5px 7px;border-radius:6px;font-family:monospace;opacity:.92;pointer-events:none;--sab:env(safe-area-inset-bottom,0px);--sat:env(safe-area-inset-top,0px);max-width:96vw;white-space:pre-wrap"></div>
-<script>
-(function(){
-  var el=document.getElementById('cg-debug');
-  function upd(){
-    var cs=getComputedStyle(el);
-    var af=document.querySelector('.af');
-    var nb=document.querySelector('.nb');
-    var r=af?af.getBoundingClientRect():null;
-    var nr=nb?nb.getBoundingClientRect():null;
-    var standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone;
-    el.textContent=
-      'SAB='+cs.getPropertyValue('--sab')+' SAT='+cs.getPropertyValue('--sat')+'\n'+
-      'innerH='+window.innerHeight+' visualVH='+(window.visualViewport?Math.round(window.visualViewport.height):'-')+' docClientH='+document.documentElement.clientHeight+'\n'+
-      'afH='+(r?Math.round(r.height):'?')+' afTop='+(r?Math.round(r.top):'?')+' afBottom='+(r?Math.round(r.bottom):'?')+'\n'+
-      'nbH='+(nr?Math.round(nr.height):'?')+' nbBottom='+(nr?Math.round(nr.bottom):'?')+' gapBelowNb='+(nr?Math.round(window.innerHeight-nr.bottom):'?')+'\n'+
-      'standalone='+standalone+' DPR='+window.devicePixelRatio;
-  }
-  upd();
-  window.addEventListener('resize',upd);
-  window.addEventListener('orientationchange',upd);
-  setTimeout(upd,400);setTimeout(upd,1200);setTimeout(upd,2500);
-})();
 </script>
 </body>
 </html>
