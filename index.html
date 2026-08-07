@@ -20,10 +20,10 @@
 html,body{height:100%;background:#0A0F1E}
 .af{width:100%;max-width:480px;height:100dvh;margin:0 auto;background:radial-gradient(120% 55% at 50% -8%,#1a2340 0%,var(--bg) 48%),var(--bg);overflow:hidden;position:relative;font-family:var(--fs)}
 @media (min-width:481px){.af{height:min(100dvh,800px);margin-top:max(0px,calc((100dvh - 800px)/2));border-radius:24px;border:1px solid var(--bd)}}
-.pg{position:absolute;top:env(safe-area-inset-top,0px);left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom,0px));overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+.pg{position:absolute;top:env(safe-area-inset-top,0px);left:0;right:0;bottom:68px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .pg.on{display:block}
 .pgm{background:#EFF4FB}
-.nb{position:absolute;bottom:0;left:0;right:0;height:calc(68px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
+.nb{position:absolute;bottom:0;left:0;right:0;height:68px;background:var(--s1);border-top:1px solid var(--bd);display:flex;align-items:center}
 .nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
 .nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;transition:all .18s cubic-bezier(.2,.8,.2,1)}
 .nbi i{font-size:20px;color:var(--t3);transition:color .15s}
@@ -37,9 +37,9 @@ html,body{height:100%;background:#0A0F1E}
 .tp:active{transform:scale(.97)}
 .ts{background:linear-gradient(165deg,var(--s1),#0d1320);border:1px solid var(--bd);border-radius:17px;padding:17px;cursor:pointer;transition:transform .12s;box-shadow:var(--sh1)}
 .ts:active{transform:scale(.97)}
-.ov{position:absolute;inset:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
+.ov{position:absolute;inset:0;padding-top:env(safe-area-inset-top,0px);background:rgba(5,8,18,.93);z-index:30;overflow-y:auto;display:none}
 .ovc{background:var(--s1);border-radius:22px;margin:10px 10px 0;border:1px solid var(--bd);overflow:hidden;min-height:calc(100% - 20px);box-shadow:var(--sh2)}
-.ovbot{position:absolute;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom,0px));background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
+.ovbot{position:absolute;left:0;right:0;bottom:68px;background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;max-height:92%;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
 .btng{background:linear-gradient(135deg,#F5C15C,var(--gd) 60%,#DE9E1E);color:#1a1204;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:0 6px 16px -4px rgba(232,170,34,.45);transition:transform .12s}
 .btng:active{transform:scale(.98)}
 .tbx{flex:1;padding:8px 4px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:1px solid var(--bd);color:var(--t3);transition:all .15s}
@@ -69,7 +69,7 @@ html,body{height:100%;background:#0A0F1E}
 .role-btn{width:100%;max-width:260px;padding:16px;border-radius:15px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);font-size:15px;font-weight:700;cursor:pointer}
 .role-btn.jofre{border-color:var(--gd);color:var(--gd)}
 .role-btn.massiel{border-color:var(--pk);color:var(--pk)}
-.role-switch{position:absolute;bottom:calc(76px + env(safe-area-inset-bottom,0px));right:14px;font-size:9px;color:var(--t3);text-decoration:underline;cursor:pointer;z-index:5}
+.role-switch{position:absolute;bottom:76px;right:14px;font-size:9px;color:var(--t3);text-decoration:underline;cursor:pointer;z-index:5}
 body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.role-massiel .fabw,body.role-massiel #p-i,body.role-massiel #p-p,body.role-massiel #p-h,body.role-massiel .role-switch{display:none!important}
 </style>
 </head>
@@ -265,7 +265,20 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v39 (2026-08-06)
+   CONTROL DE GASTOS — v40 (2026-08-06)
+   · REVERTIDO: el safe-area del FONDO (.nb, .pg-bottom, .ovbot, .ov-bottom,
+     .role-switch) que agregué en v38/v39 causaba un nav "flotante"/muy alto
+     -- se volvió exactamente a los valores fijos que ya estaban confirmados
+     funcionando (68px/76px). Se CONSERVA el safe-area de ARRIBA (.pg-top,
+     .ov-top), confirmado funcionando por captura real (el header ya no choca
+     con el reloj del status bar). No se vuelve a tocar el fondo sin evidencia
+     concreta de qué falla exactamente.
+   · FIX (real, no introducido por mí, ya existía): normLabelCG borraba
+     fracciones "N/M" sin distinguir series numeradas de tareas (Barbería
+     (1/4)..(4/4), Mensualidad On Air (1/2)/(2/2)) de cuotas reales. Todas las
+     numeradas normalizaban igual + mismo monto -> tieneMovEjecutado marcaba
+     las 4 como saldadas en cuanto pagabas UNA. Se quitó esa línea (las cuotas
+     reales ya se limpian por el "·" que va antes de su fracción).
    · FIX: .role-switch ("Cambiar usuario") tenía bottom:76px fijo -- al
      crecer el nav con el safe-area (v38) quedó pisado por dentro de la
      barra en vez de flotar arriba. Ahora respeta env(safe-area-inset-bottom)
@@ -379,7 +392,13 @@ function normLabelCG(s){
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')   // sin acentos
     .replace(/·.*$/,'')                                // quita "· Internet", "· 7/24"
-    .replace(/\b\d+\s*\/\s*\d+\b/g,'')                 // quita cuotas "7/24", "2/3"
+    // v39 — se quitó el .replace de fracciones "N/M" que vivía acá: colisionaba
+    // series de tareas numeradas SIN "·" (Barbería (1/4)..(4/4), Mensualidad On
+    // Air (1/2)/(2/2)) -- todas normalizaban igual y con el mismo monto, así que
+    // al pagar UNA, tieneMovEjecutado marcaba las 4 como saldadas. Las cuotas
+    // reales (Nike, Xirivella, etc.) siempre llevan "·" antes de la fracción, así
+    // que ya quedan limpias con la línea de arriba; esta regex era redundante
+    // para su propósito y solo rompía las series numeradas.
     .replace(/[^a-z0-9]+/g,' ')                        // solo alfanumérico
     .trim();
 }
