@@ -227,7 +227,6 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
       <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--gd2),transparent);border:1.5px solid var(--gd);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:800;color:var(--gd);font-size:15px">J</div>
     </div>
   </div>
-  <div id="stale-banner" style="display:none;margin:10px 18px 0;padding:8px 12px;border-radius:12px;background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.3);display:flex;align-items:center;gap:8px"><i class="ti ti-refresh" style="font-size:13px;color:var(--gd);animation:spin 1.2s linear infinite"></i><span style="font-size:11px;color:var(--gd);font-weight:600">Actualizando datos… los saldos en pantalla pueden no ser los actuales todavía</span></div>
   <div style="padding:16px 18px 0">
     <div class="tp" onclick="showA('BBVA')" style="background:linear-gradient(135deg,#0f2040,#172035)">
       <svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.4;pointer-events:none"><path d="M0,75 C40,72 55,55 85,58 C115,61 130,40 165,42 C195,44 210,25 240,26 C265,27 280,14 300,8" fill="none" stroke="url(#sg-bbva)" stroke-width="2.5" stroke-linecap="round" filter="url(#sf-glow)"/><circle cx="300" cy="8" r="3.5" fill="#4C8DFA" filter="url(#sf-glow)"/></svg>
@@ -289,16 +288,15 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v45 (2026-08-08)
-   · v45 FIX: el banner "Actualizando datos…" podía quedarse para siempre
-     si la conexión realmente no resolvía (no solo lenta) -- ahora, a los 25s
-     más, cambia a un aviso de error con acción clara para recargar.
+   CONTROL DE GASTOS — v46 (2026-08-08)
+   · v46 FIX: se revirtió el banner "Actualizando datos…" (v44/v45) --
+     quedaba visible de forma indefinida, sin resolverse ni pasar a error.
+     Vuelta al comportamiento silencioso: si el arranque cae al timeout de
+     6s, la app sigue con caché/semilla y se actualiza sola en cuanto
+     Firestore responde, sin avisos en pantalla.
    · v43: sparklines decorativos por cuenta + donut real de Categorías + campana.
    · v44 FIX: "A partir de aquí" no existía para ítems NUEVOS (saveAddItem
      nunca consultaba applyMode) -- ahora sí propaga a meses futuros.
-   · v44 FIX: banner "Actualizando datos…" cuando el arranque cae al
-     timeout de 6s y muestra la semilla -- antes se veía indistinguible de
-     saldo real por hasta 20-30s en conexiones lentas.
    · Se quitó el diagnóstico temporal de v41. Datos reales medidos en el
      iPhone de Jofre (standalone): SAB=34px, gapBelowNb=0 -- NO hay hueco de
      layout. Lo que se veía "flotando" es el propio fondo de .nb ocupando la
@@ -3266,28 +3264,10 @@ async function init(){
   updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
   const bl=document.getElementById('bootLoader');if(bl)bl.remove();
   if(timedOut){
-    const sb=document.getElementById('stale-banner');if(sb)sb.style.display='flex';
-    // v45 — FIX: si loadP nunca se asienta (conexión realmente colgada, no
-    // solo lenta), el banner se quedaba esperando para siempre sin salida.
-    // A los 25s más (31s desde el arranque) se convierte en un aviso de
-    // error con acción clara: tocar para recargar.
-    const stuckTimer=setTimeout(()=>{
-      const sb4=document.getElementById('stale-banner');
-      if(sb4){
-        sb4.innerHTML='<i class="ti ti-alert-triangle" style="font-size:13px;color:var(--rd)"></i><span style="font-size:11px;color:var(--rd);font-weight:600">No se pudo conectar. Toca para reintentar.</span>';
-        sb4.style.background='rgba(239,68,68,.12)';sb4.style.borderColor='rgba(239,68,68,.3)';sb4.style.cursor='pointer';sb4.style.pointerEvents='auto';
-        sb4.onclick=()=>location.reload();
-      }
-    },25000);
     loadP.then(ok=>{
-      clearTimeout(stuckTimer);
       if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
-      const sb2=document.getElementById('stale-banner');if(sb2)sb2.style.display='none';
       startRealtimeSync();
-    }).catch(()=>{
-      clearTimeout(stuckTimer);
-      const sb3=document.getElementById('stale-banner');if(sb3)sb3.style.display='none';
-    });
+    }).catch(()=>{});
   }else{
     startRealtimeSync();
   }
