@@ -33,6 +33,7 @@ html,body{height:100%;background:#0A0F1E}
 .fab{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#F5C15C,var(--gd) 55%,#D69412);border:3px solid var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:-22px;box-shadow:0 6px 20px -2px rgba(232,170,34,.55),0 2px 6px rgba(0,0,0,.3);transition:transform .15s}
 .fab:active{transform:scale(.94)}
 .fab i{font-size:22px;color:#1a1204}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .tp{background:linear-gradient(165deg,var(--s2),var(--s1));border:1px solid var(--bd2);border-radius:20px;padding:20px;cursor:pointer;transition:transform .12s;box-shadow:var(--sh1);position:relative;overflow:hidden}
 .tp:active{transform:scale(.97)}
 .ts{background:linear-gradient(165deg,var(--s1),#0d1320);border:1px solid var(--bd);border-radius:17px;padding:17px;cursor:pointer;transition:transform .12s;box-shadow:var(--sh1);position:relative;overflow:hidden}
@@ -192,6 +193,13 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
       <div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.06em;margin-bottom:8px">CUENTA · genera tarea pendiente en</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="add-cuenta-wrap"></div>
     </div>
+    <div style="margin-bottom:16px" id="add-apply-block">
+      <div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.06em;margin-bottom:8px">APLICA</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="add-apply-wrap">
+        <div class="resp-item on-comp" onclick="selApply(this,'solo')">Solo este mes</div>
+        <div class="resp-item" onclick="selApply(this,'desde')">A partir de aquí</div>
+      </div>
+    </div>
     <button class="btng" onclick="saveAddItem()">Agregar</button>
   </div>
 </div>
@@ -219,6 +227,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
       <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--gd2),transparent);border:1.5px solid var(--gd);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:800;color:var(--gd);font-size:15px">J</div>
     </div>
   </div>
+  <div id="stale-banner" style="display:none;margin:10px 18px 0;padding:8px 12px;border-radius:12px;background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.3);display:flex;align-items:center;gap:8px"><i class="ti ti-refresh" style="font-size:13px;color:var(--gd);animation:spin 1.2s linear infinite"></i><span style="font-size:11px;color:var(--gd);font-weight:600">Actualizando datos… los saldos en pantalla pueden no ser los actuales todavía</span></div>
   <div style="padding:16px 18px 0">
     <div class="tp" onclick="showA('BBVA')" style="background:linear-gradient(135deg,#0f2040,#172035)">
       <svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.4;pointer-events:none"><path d="M0,75 C40,72 55,55 85,58 C115,61 130,40 165,42 C195,44 210,25 240,26 C265,27 280,14 300,8" fill="none" stroke="url(#sg-bbva)" stroke-width="2.5" stroke-linecap="round" filter="url(#sf-glow)"/><circle cx="300" cy="8" r="3.5" fill="#4C8DFA" filter="url(#sf-glow)"/></svg>
@@ -280,7 +289,13 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v42 (2026-08-07)
+   CONTROL DE GASTOS — v44 (2026-08-08)
+   · v43: sparklines decorativos por cuenta + donut real de Categorías + campana.
+   · v44 FIX: "A partir de aquí" no existía para ítems NUEVOS (saveAddItem
+     nunca consultaba applyMode) -- ahora sí propaga a meses futuros.
+   · v44 FIX: banner "Actualizando datos…" cuando el arranque cae al
+     timeout de 6s y muestra la semilla -- antes se veía indistinguible de
+     saldo real por hasta 20-30s en conexiones lentas.
    · Se quitó el diagnóstico temporal de v41. Datos reales medidos en el
      iPhone de Jofre (standalone): SAB=34px, gapBelowNb=0 -- NO hay hueco de
      layout. Lo que se veía "flotando" es el propio fondo de .nb ocupando la
@@ -1650,7 +1665,7 @@ function renderCuentaWrap(){
   document.getElementById('add-cuenta-wrap').innerHTML=CUENTA_OPTS.map((o,i)=>`<div class="resp-item${i===0?' on-comp':''}" onclick="selAddCuenta(this,${o.v===null?'null':`'${o.v}'`})">${o.l}</div>`).join('');
 }
 function selAddCuenta(el,val){document.querySelectorAll('#add-cuenta-wrap .resp-item').forEach(e=>e.classList.remove('on-comp'));el.classList.add('on-comp');addCuentaSel=val;}
-function openAddSubItem(){addMode='sub';document.getElementById('add-title').textContent='Nuevo ítem';document.getElementById('add-rule-label').textContent='REGLA DE REPARTO';document.getElementById('add-name').value='';document.getElementById('add-amount').value='';const rules=['55/45','50/50','Solo Jofre','Solo Massiel'];addRuleSel=rules[0];document.getElementById('add-rule-wrap').innerHTML=rules.map((r,i)=>`<div class="resp-item${i===0?' on-comp':''}" onclick="selAddRule(this,'${r}')">${r}</div>`).join('');document.getElementById('add-rule-block').style.display='';document.getElementById('add-cuenta-block').style.display='';renderCuentaWrap();document.getElementById('addModal').style.display='flex';}
+function openAddSubItem(){addMode='sub';applyMode='solo';document.getElementById('add-title').textContent='Nuevo ítem';document.getElementById('add-rule-label').textContent='REGLA DE REPARTO';document.getElementById('add-name').value='';document.getElementById('add-amount').value='';const rules=['55/45','50/50','Solo Jofre','Solo Massiel'];addRuleSel=rules[0];document.getElementById('add-rule-wrap').innerHTML=rules.map((r,i)=>`<div class="resp-item${i===0?' on-comp':''}" onclick="selAddRule(this,'${r}')">${r}</div>`).join('');document.getElementById('add-rule-block').style.display='';document.getElementById('add-cuenta-block').style.display='';renderCuentaWrap();const aab=document.getElementById('add-apply-block');if(aab){aab.style.display='';document.querySelectorAll('#add-apply-wrap .resp-item').forEach((el,i)=>el.classList.toggle('on-comp',i===0));}document.getElementById('addModal').style.display='flex';}
 function openEdit(itemId,label,currentAmt){editingId=itemId;applyMode='solo';document.getElementById('edit-title').textContent='Editar';document.getElementById('edit-name').value=label||'';document.getElementById('edit-amount').value=currentAmt||'';document.querySelectorAll('.edit-modal .resp-item').forEach((el,i)=>{el.classList.remove('on-comp');if(i===0)el.classList.add('on-comp');});document.getElementById('editModal').style.display='flex';}
 function closeEdit(){document.getElementById('editModal').style.display='none';}
 function selApply(el,mode){document.querySelectorAll('.edit-modal .resp-item').forEach(e=>e.classList.remove('on-comp'));el.classList.add('on-comp');applyMode=mode;}
@@ -1774,7 +1789,7 @@ function saveEdit(){
   }
   closeEdit();toast('✓ Cambio guardado — totales actualizados','var(--tl)');saveState();
 }
-function openAddItem(mode){addMode=mode;document.getElementById('add-title').textContent=mode==='cat'?'Nuevo gasto fijo':'Nueva cuota / servicio';document.getElementById('add-rule-label').textContent=mode==='cat'?'REGLA DE REPARTO':'CUENTA';document.getElementById('add-name').value='';document.getElementById('add-amount').value='';const rules=mode==='cat'?['55/45','50/50','Solo Jofre','Solo Massiel']:['BBVA','Caixa','TR Jofre'];addRuleSel=rules[0];document.getElementById('add-rule-wrap').innerHTML=rules.map((r,i)=>`<div class="resp-item${i===0?' on-comp':''}" onclick="selAddRule(this,'${r}')">${r}</div>`).join('');document.getElementById('add-rule-block').style.display='';if(mode==='cat'){document.getElementById('add-cuenta-block').style.display='';renderCuentaWrap();}else{document.getElementById('add-cuenta-block').style.display='none';}document.getElementById('addModal').style.display='flex';}
+function openAddItem(mode){addMode=mode;applyMode='solo';document.getElementById('add-title').textContent=mode==='cat'?'Nuevo gasto fijo':'Nueva cuota / servicio';document.getElementById('add-rule-label').textContent=mode==='cat'?'REGLA DE REPARTO':'CUENTA';document.getElementById('add-name').value='';document.getElementById('add-amount').value='';const rules=mode==='cat'?['55/45','50/50','Solo Jofre','Solo Massiel']:['BBVA','Caixa','TR Jofre'];addRuleSel=rules[0];document.getElementById('add-rule-wrap').innerHTML=rules.map((r,i)=>`<div class="resp-item${i===0?' on-comp':''}" onclick="selAddRule(this,'${r}')">${r}</div>`).join('');document.getElementById('add-rule-block').style.display='';if(mode==='cat'){document.getElementById('add-cuenta-block').style.display='';renderCuentaWrap();}else{document.getElementById('add-cuenta-block').style.display='none';}const aab=document.getElementById('add-apply-block');if(aab)aab.style.display='none';document.getElementById('addModal').style.display='flex';}
 function selAddRule(el,val){document.querySelectorAll('#add-rule-wrap .resp-item').forEach(e=>e.classList.remove('on-comp'));el.classList.add('on-comp');addRuleSel=val;}
 function closeAddItem(){document.getElementById('addModal').style.display='none';}
 function syncPagoForNewItem(monthId,label,tag,amt){
@@ -1808,6 +1823,25 @@ function saveAddItem(){
       DET_EXTRA[currentFxKey]=DET_EXTRA[currentFxKey]||{};
       DET_EXTRA[currentFxKey][currentMonth]=DET_EXTRA[currentFxKey][currentMonth]||[];
       DET_EXTRA[currentFxKey][currentMonth].push(item);
+    }
+    // v44 — FIX RAÍZ: "A partir de aquí" no existía para ítems NUEVOS (solo
+    // funcionaba al editar uno que ya existiera en meses futuros). Ahora, si
+    // se eligió 'desde', se agrega la MISMA copia (mismo id) a cada mes
+    // posterior en MONTH_ORDER, creando su override si aún no existe.
+    if(applyMode==='desde'&&currentMonth){
+      let idx=MONTH_ORDER.indexOf(currentMonth);if(idx<0)idx=0;
+      for(let i=idx+1;i<MONTH_ORDER.length;i++){
+        const mid=MONTH_ORDER[i];
+        const copy=Object.assign({},item);
+        const ovF=DET_MONTH_OVERRIDES[currentFxKey]&&DET_MONTH_OVERRIDES[currentFxKey][mid];
+        if(ovF){
+          ovF.push(copy);
+        }else{
+          DET_MONTH_OVERRIDES[currentFxKey]=DET_MONTH_OVERRIDES[currentFxKey]||{};
+          DET_MONTH_OVERRIDES[currentFxKey][mid]=itemsForKey(currentFxKey,mid).map(x=>Object.assign({},x));
+          DET_MONTH_OVERRIDES[currentFxKey][mid].push(copy);
+        }
+      }
     }
     if(currentMonth){recalcMonthTotals(currentMonth);syncPagoForNewItem(currentMonth,name,addCuentaSel,amt);}
     closeAddItem();refreshFxView();if(currentMonth)openMov(currentMonth);renderPrevision();updBbvaBadge();
@@ -3229,10 +3263,14 @@ async function init(){
   updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
   const bl=document.getElementById('bootLoader');if(bl)bl.remove();
   if(timedOut){
+    const sb=document.getElementById('stale-banner');if(sb)sb.style.display='flex';
     loadP.then(ok=>{
       if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
+      const sb2=document.getElementById('stale-banner');if(sb2)sb2.style.display='none';
       startRealtimeSync();
-    }).catch(()=>{});
+    }).catch(()=>{
+      const sb3=document.getElementById('stale-banner');if(sb3)sb3.style.display='none';
+    });
   }else{
     startRealtimeSync();
   }
