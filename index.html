@@ -288,12 +288,19 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONTROL DE GASTOS — v46 (2026-08-08)
+   CONTROL DE GASTOS — v47 (2026-08-08)
+   · v47 FIX RAÍZ: el arranque podía mostrar saldos viejos (el seed
+     embebido en el código, no datos reales) por hasta ~1 min mientras
+     Firestore respondía. Ahora se implementa de verdad el caché local que
+     v30 solo dejó documentado: cada vez que llega un estado bueno de
+     Firestore (loadState, realtime sync o el propio saveState) se guarda
+     en localStorage. Al abrir, init() aplica ese caché DE INMEDIATO y
+     sin esperar nada -- se ve la última sesión real al instante, no el
+     seed viejo -- y Firestore sigue refrescando en segundo plano igual
+     que antes. Solo un dispositivo sin caché previo (primera vez) usa el
+     camino viejo de carrera de 6s.
    · v46 FIX: se revirtió el banner "Actualizando datos…" (v44/v45) --
      quedaba visible de forma indefinida, sin resolverse ni pasar a error.
-     Vuelta al comportamiento silencioso: si el arranque cae al timeout de
-     6s, la app sigue con caché/semilla y se actualiza sola en cuanto
-     Firestore responde, sin avisos en pantalla.
    · v43: sparklines decorativos por cuenta + donut real de Categorías + campana.
    · v44 FIX: "A partir de aquí" no existía para ítems NUEVOS (saveAddItem
      nunca consultaba applyMode) -- ahora sí propaga a meses futuros.
@@ -3023,6 +3030,7 @@ async function saveState(){
     const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MOVS,CUOTAS_NUEVAS};
     const stateJson=JSON.stringify(state);
     await _fbSetDoc(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
+    try{localStorage.setItem(STORAGE_KEY,stateJson);}catch(e){}
     snapshotMovsBaseline();
     snapshotDetBaseline();
     snapshotPagosBaseline();
@@ -3220,6 +3228,7 @@ async function loadState(){
     if(!snap.exists())return false;
     const data=snap.data();if(!data||!data.json)return false;
     applyState(JSON.parse(data.json));
+    try{localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
     return true;
   }catch(e){return false;}
 }
@@ -3234,27 +3243,38 @@ function startRealtimeSync(){
     if(snap.metadata.hasPendingWrites)return; // eco de nuestro propio guardado, ya reflejado en pantalla
     if(!snap.exists())return;
     const data=snap.data();if(!data||!data.json)return;
-    try{applyState(JSON.parse(data.json));renderAll();}catch(e){}
+    try{applyState(JSON.parse(data.json));renderAll();localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
   });
 }
 async function init(){
-  // v37 — FIX RAÍZ del arranque colgado en iPhone standalone.
-  // Causa real verificada: init() esperaba loadState() (que a su vez espera
-  // fbReady: 3 import() del SDK de Firebase + login anónimo) SIN ningún
-  // límite de tiempo en toda la cadena. En el arranque en frío del WebView
-  // standalone de iOS (DNS/TLS sin caché, o cualquier import() que se
-  // cuelgue) init() nunca llegaba a la línea que retira el bootLoader ->
-  // spinner "Cargando tus datos…" fijo para siempre. No era una cuestión de
-  // CSS ni de metas del <head>: era una promesa sin cota de tiempo.
-  // Fix: se corre una carrera entre loadState() y un límite de 6s. Gane
-  // quien gane, el bootLoader se retira siempre. Si ganó el límite (Firestore
-  // no respondió a tiempo), la app se pinta con la semilla ya embebida en el
-  // código (nunca datos inventados) y loadState() sigue viva en segundo
-  // plano: en cuanto Firestore responda, se refresca con datos reales y
-  // recién ahí arranca el realtime sync, sin que el usuario tenga que hacer
-  // nada.
+  // v37 — FIX histórico del arranque colgado en iPhone standalone. Ver v47
+  // más abajo para el mecanismo actual (caché local + fallback de carrera).
   ensureBridgeTask('jun');ensureBridgeTask('jul');
+  // v47 — FIX RAÍZ de "saldos viejos por casi un minuto": antes de esperar
+  // nada de Firestore, se aplica el último estado bueno guardado en
+  // localStorage (si existe). Es dato real de la última sesión buena de
+  // ESTE dispositivo, no el seed embebido en el código -- el primer
+  // pintado ya es correcto y no hay que elegir entre esperar o mostrar
+  // algo desactualizado.
+  let hadCache=false;
+  try{
+    const cached=localStorage.getItem(STORAGE_KEY);
+    if(cached){applyState(JSON.parse(cached));hadCache=true;}
+  }catch(e){}
   const loadP=loadState();
+  if(hadCache){
+    ensureMonthsAhead(ACTIVE_ID,3);
+    updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
+    const bl=document.getElementById('bootLoader');if(bl)bl.remove();
+    loadP.then(ok=>{
+      if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
+      startRealtimeSync();
+    }).catch(()=>{});
+    return;
+  }
+  // Sin caché previo (primer uso en este dispositivo): mismo mecanismo de
+  // siempre -- carrera de 6s contra Firestore; si pierde, se pinta con el
+  // seed embebido y se refresca sola en cuanto Firestore responda.
   let timedOut=false;
   await Promise.race([
     loadP,
