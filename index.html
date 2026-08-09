@@ -60,7 +60,7 @@ html,body{height:100%;background:#0A0F1E}
 .cuota-card{background:linear-gradient(165deg,var(--s2),var(--s1));border:1px solid var(--bd);border-radius:16px;padding:13px;margin-bottom:8px;box-shadow:var(--sh1)}
 .edit-modal{position:absolute;inset:0;background:rgba(5,8,18,.96);z-index:50;display:none;align-items:flex-end}
 .edit-sheet{background:var(--s1);border-radius:24px 24px 0 0;border:1px solid var(--bd2);border-bottom:none;width:100%;padding:20px;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
-.mov-full{position:absolute;inset:0;background:var(--bg);z-index:25;display:none;flex-direction:column}
+.mov-full{position:absolute;inset:0;padding-top:env(safe-area-inset-top,0px);background:var(--bg);z-index:25;display:none;flex-direction:column}
 .mov-full.on{display:flex}
 .mov-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .role-gate{position:absolute;inset:0;background:var(--bg);z-index:200;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px;text-align:center}
@@ -288,6 +288,18 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
+   CONTROL DE GASTOS — v48 (2026-08-09)
+   · v48 FIX: compras "Aplazado fin de mes" (TDC) no dejaban ningún rastro
+     en los totales del mes de liquidación -- quedaban solo en el historial
+     de movimientos y en el disponible de la tarjeta, sin sumar a la
+     responsabilidad de nadie. Ahora se registran también como cuota única
+     (1/1) en el mes en que liquida, igual que cualquier otra cuota -- entra
+     a repartoMes() automáticamente, sin depender de acordarse.
+   · v48 FIX: .mov-full (pantalla de detalle de cada mes) no tenía el
+     padding-top: env(safe-area-inset-top) que sí tienen .pg y .ov -- el
+     header se dibujaba debajo de la barra de estado del teléfono (reloj,
+     batería), superponiéndose. Se alinea con el mismo tratamiento que las
+     demás pantallas.
    CONTROL DE GASTOS — v47 (2026-08-08)
    · v47 FIX RAÍZ: el arranque podía mostrar saldos viejos (el seed
      embebido en el código, no datos reales) por hasta ~1 min mientras
@@ -2790,7 +2802,7 @@ function saveReg(){
     regMov(reg.account,label,reg.amount,true,reg.category);
   }
   else if(!reg.isCuota){regMov(reg.account,label,reg.amount,false,reg.category);}
-  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined});if(reg.account==='CAIXA')regCaixaCard(label,reg.amount);}
+  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined});if(reg.account==='CAIXA')regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0});}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
   // v28 — Al terminar de registrar, devolver al usuario a DONDE ESTABA:
