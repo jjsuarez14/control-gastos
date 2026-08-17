@@ -781,9 +781,15 @@ function renderAccountOverlay(accId){
   // (auditarCuenta / auditarTodo), consultable por consola para diagnóstico.
   // NO se renderiza en la UI: el saldo ya está cuadrado contra banca real y un
   // panel visible solo generaría ruido en la pantalla de Jofre.
-  const movs=ordenarMovsPorFecha(MOVS[accId]||[]).slice(0,8);
+  // v51 — Antes esto mostraba solo los últimos 8 movimientos de la cuenta,
+  // sin importar el mes (podían ser de meses distintos y aun así ocultar
+  // movimientos reales del mes actual). Ahora muestra TODOS los movimientos
+  // del mes en curso, sin límite -- para meses anteriores está Historial.
+  // Disponible para Jofre y Massiel por igual (esta sección no está gateada
+  // por `mass`). Ver auditoría CDG(9), pto. "Mercado/TRM no cuadra".
+  const movs=ordenarMovsPorFecha((MOVS[accId]||[]).filter(mv=>movBelongsToMonth(mv,ACTIVE_ID)));
   html+=`<div style="padding:0 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">MOVIMIENTOS</div>`;
-  if(movs.length){movs.forEach(t=>{html+=`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:34px;flex-shrink:0;text-align:center">${t.dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${t.l}</div><div style="font-size:13px;font-weight:700;color:${t.t?'var(--tl)':'var(--rd)'};">${t.a}</div></div>`;});}
+  if(movs.length){movs.forEach(t=>{const cat=resolverCategoriaMovimiento(t,accId);html+=`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:34px;flex-shrink:0;text-align:center">${t.dt}</div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${t.l}</div><div style="font-size:9px;color:var(--t3);margin-top:1px">${cat}</div></div><div style="font-size:13px;font-weight:700;color:${t.t?'var(--tl)':'var(--rd)'};">${t.a}</div></div>`;});}
   else html+='<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos aún</div>';
   html+='</div>';
   if(!mass||accId==='TRM'){html+=`<div style="padding:14px 16px"><button class="btng" onclick="document.getElementById('aov').style.display='none';openReg('${accId}')">+ Registrar movimiento</button></div>`;}
@@ -2102,14 +2108,6 @@ function showMaForecast(){
 }
 const GROUP_META_MA={jofre:{l:'JOFRE',c:'#4C8DFA'},massiel:{l:'MASSIEL',c:'#D4537E'},compartida:{l:'COMPARTIDA',c:'#22C55E'}};
 function cuotasForMassiel(id){return cuotasFor(id).filter(c=>{const t=c.tags||[];return t.includes('50/50')||t.includes('Solo Massiel');});}
-function maCuotaRowHTML(c){
-  const t=c.tags||[];const total=moneyFromStr(c.amt);
-  const suParte=t.includes('Solo Massiel')?total:Math.round(total*0.5*100)/100;
-  return `<div style="border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:13px;font-weight:600;color:#fff">${c.l}</div><div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">${c.prog} · ${t.includes('Solo Massiel')?'100% tuya':'50% tuya'}</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:#D4537E">${fmtE(suParte)}</div><div style="font-size:9px;color:rgba(255,255,255,.35)">de ${c.amt} total</div></div></div><div class="btr"><div class="bfl" style="width:${c.pct}%;background:${c.warn?'#0EC9BC':'#8B6FDF'}"></div></div></div>`;
-}
-// v49 — Versión Jofre de la fila de cuota: monto TOTAL completo (nunca
-// partido), con badge de a quién corresponde en vez de lenguaje "tuya"
-// (que asumía que quien mira es Massiel). Ver auditoría CDG(9).
 function jofreCuotaRowHTML(c){
   const t=c.tags||[];const total=moneyFromStr(c.amt);
   const respLabel=t.includes('Solo Jofre')?'Solo Jofre':(t.includes('Solo Massiel')?'Solo Massiel':'50/50');
@@ -2613,12 +2611,14 @@ function showMaMonthDetail(id,backTo){
   const total=esMesFuturo(id)
     ?(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0)
     :mesGastoTotalReal(id);
-  // v49 — Cuotas: la vista de Massiel (maovEsVistaMassiel=true) sigue filtrando
-  // a lo suyo (50/50 + Solo Massiel) y partiendo el monto a la mitad. La vista
-  // de Jofre (backTo!=='forecast') muestra TODAS las cuotas del mes con su
-  // monto TOTAL completo, sin partir -- ver auditoría CDG(9), pto. Emma Colchón.
+  // v51 — CORRECCIÓN de v49: Massiel NO debe ver montos partidos a la mitad
+  // en NADA — el criterio de Jofre es que ella vea el monto TOTAL real de
+  // aquello en lo que tiene responsabilidad (aunque su % sea distinto), nunca
+  // una fracción calculada. cuotasForMassiel ya filtra a lo que es de ella
+  // (50/50 + Solo Massiel); acá solo cambiamos el render a monto completo
+  // para ambas vistas. maCuotaRowHTML (partía a la mitad) queda retirada.
   const cuotasLista=maovEsVistaMassiel?cuotasForMassiel(id):cuotasFor(id);
-  const cuotaRowFn=maovEsVistaMassiel?maCuotaRowHTML:jofreCuotaRowHTML;
+  const cuotaRowFn=jofreCuotaRowHTML;
   const cuotasVacioTxt=maovEsVistaMassiel?'Sin cuotas a tu cargo este mes':'Sin cuotas este mes';
   const cuotasHTML=cuotasLista.length?cuotasLista.map(cuotaRowFn).join(''):`<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">${cuotasVacioTxt}</div>`;
   const tabsHTML=`<button class="tbx on" id="mamt1" onclick="sMTma(1)">Categorías</button><button class="tbx" id="mamt2" onclick="sMTma(2)">Cuotas</button>`;
