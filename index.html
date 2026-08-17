@@ -3072,7 +3072,12 @@ function mergeItemArrays(freshArr,savedArr){
   const merged=freshArr.map(fi=>{
     const si=savedArr.find(x=>x.id===fi.id);
     if(!si)return fi;
-    return Object.assign({},fi,{a:si.a!=null?si.a:fi.a,l:si.l||fi.l,d:si.d!=null?si.d:fi.d});
+    // v50 — 'tipo' (ej. 'especial') es un campo editable a mano igual que
+    // a/l/d, pero se estaba perdiendo en cada recarga porque el merge solo
+    // copiaba esos tres campos desde lo guardado. Root cause del bug donde
+    // el flag "especial" de agosto (y probablemente el de julio) desaparecía
+    // silenciosamente tras cualquier saveState/applyState -- ver auditoría CDG(9).
+    return Object.assign({},fi,{a:si.a!=null?si.a:fi.a,l:si.l||fi.l,d:si.d!=null?si.d:fi.d,tipo:si.tipo!==undefined?si.tipo:fi.tipo});
   });
   savedArr.forEach(si=>{if(!freshIds.has(si.id)&&/^custom-/.test(si.id))merged.push(si);});
   return merged;
