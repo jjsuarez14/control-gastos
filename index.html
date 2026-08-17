@@ -250,7 +250,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
     <div class="ts" onclick="showA('EFECTIVO')"><svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.3;pointer-events:none"><path d="M0,55 C40,56 60,52 90,53 C120,54 140,48 170,49 C200,50 220,46 250,47 C270,47 285,44 300,42" fill="none" stroke="url(#sg-ef)" stroke-width="2" stroke-linecap="round" filter="url(#sf-glow)"/></svg><div style="position:relative;z-index:1"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><div style="width:22px;height:22px;border-radius:7px;background:#9CA3AF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-cash" style="font-size:12px;color:#9CA3AF"></i></div><div style="font-size:10px;font-weight:700;color:var(--t3);letter-spacing:.04em">EFECTIVO</div></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-efectivo">€0,00</div><div style="font-size:11px;color:var(--t2);margin-top:5px">Retiros BBVA</div></div></div>
   </div>
   <div style="padding:16px 18px 0">
-    <button onclick="openMov(ACTIVE_ID)" style="width:100%;background:var(--s2);border:1px solid var(--bd2);border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer"><div style="width:34px;height:34px;border-radius:11px;background:var(--pu2);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-layout-grid" style="font-size:17px;color:var(--pu)"></i></div><div style="flex:1;text-align:left"><div style="font-size:12px;font-weight:700;color:var(--t1)">Categorías</div><div style="font-size:10px;color:var(--t2)">Desglose del mes por categoría</div></div><svg id="cat-donut" width="40" height="40" viewBox="0 0 40 40" style="flex-shrink:0"></svg><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3)"></i></button>
+    <button onclick="showMaMonthDetail(ACTIVE_ID,'close')" style="width:100%;background:var(--s2);border:1px solid var(--bd2);border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer"><div style="width:34px;height:34px;border-radius:11px;background:var(--pu2);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-layout-grid" style="font-size:17px;color:var(--pu)"></i></div><div style="flex:1;text-align:left"><div style="font-size:12px;font-weight:700;color:var(--t1)">Categorías</div><div style="font-size:10px;color:var(--t2)">Desglose del mes por categoría</div></div><svg id="cat-donut" width="40" height="40" viewBox="0 0 40 40" style="flex-shrink:0"></svg><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3)"></i></button>
   </div>
   <div style="height:18px"></div>
 </div>
@@ -1935,9 +1935,12 @@ function histCardHTML(id,label,accent){
 function renderHist(){
   const el=document.getElementById('hist-body');if(!el)return;
   const ai=MONTH_ORDER.indexOf(ACTIVE_ID);
-  // v27 — Historial = meses pasados + el mes ACTUAL (activo). Los futuros (sep+)
-  // NO entran. El mes activo arranca en 0 y crece según se registra ejecución.
-  const meses=ai>=0?MONTH_ORDER.slice(0,ai+1):[];
+  // v49 — Historial = SOLO meses cerrados (pasados). El mes ACTUAL (activo) ya
+  // no duplica acá: su detalle real en vivo vive en el tile "Categorías" del
+  // Home (showMaMonthDetail), que muestra exactamente lo mismo pero
+  // actualizado en tiempo real. Antes esto repetía Previsión sin aportar nada
+  // nuevo -- ver auditoría CDG(9).
+  const meses=ai>=0?MONTH_ORDER.slice(0,ai):[];
   if(!meses.length){el.innerHTML='<div style="padding:24px 4px;text-align:center;color:var(--t3);font-size:12px">Aún no hay meses en el historial. Se irá llenando al registrar cada nómina.</div>';return;}
   const accents=['var(--tl)','var(--gd)','var(--or)','var(--pu)','var(--bl)','var(--pk)'];
   // Orden: más reciente arriba -> el activo primero, luego los cerrados.
@@ -2103,6 +2106,14 @@ function maCuotaRowHTML(c){
   const t=c.tags||[];const total=moneyFromStr(c.amt);
   const suParte=t.includes('Solo Massiel')?total:Math.round(total*0.5*100)/100;
   return `<div style="border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:13px;font-weight:600;color:#fff">${c.l}</div><div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">${c.prog} · ${t.includes('Solo Massiel')?'100% tuya':'50% tuya'}</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:#D4537E">${fmtE(suParte)}</div><div style="font-size:9px;color:rgba(255,255,255,.35)">de ${c.amt} total</div></div></div><div class="btr"><div class="bfl" style="width:${c.pct}%;background:${c.warn?'#0EC9BC':'#8B6FDF'}"></div></div></div>`;
+}
+// v49 — Versión Jofre de la fila de cuota: monto TOTAL completo (nunca
+// partido), con badge de a quién corresponde en vez de lenguaje "tuya"
+// (que asumía que quien mira es Massiel). Ver auditoría CDG(9).
+function jofreCuotaRowHTML(c){
+  const t=c.tags||[];const total=moneyFromStr(c.amt);
+  const respLabel=t.includes('Solo Jofre')?'Solo Jofre':(t.includes('Solo Massiel')?'Solo Massiel':'50/50');
+  return `<div style="border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:13px;font-weight:600;color:#fff">${c.l}</div><div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">${c.prog} · ${respLabel}</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:#4C8DFA">${fmtE(total)}</div></div></div><div class="btr"><div class="bfl" style="width:${c.pct}%;background:${c.warn?'#0EC9BC':'#8B6FDF'}"></div></div></div>`;
 }
 function sMTma(n){[1,2,3].forEach(i=>{const b=document.getElementById('mamt'+i),t=document.getElementById('mamt-tab'+i);if(b)b.classList.remove('on');if(t)t.classList.remove('on');});const b=document.getElementById('mamt'+n),t=document.getElementById('mamt-tab'+n);if(b)b.classList.add('on');if(t)t.classList.add('on');}
 function maRowHTML(x){return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="flex:1"><div style="font-size:13px;color:#fff">${x.l}</div><div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">${x.d}</div></div><div style="font-size:13px;font-weight:700;color:${x.a>0?'#0EC9BC':'rgba(255,255,255,.3)'}">${fmtE(x.a)}</div></div>`;}
@@ -2602,8 +2613,14 @@ function showMaMonthDetail(id,backTo){
   const total=esMesFuturo(id)
     ?(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0)
     :mesGastoTotalReal(id);
-  const cuotasMa=cuotasForMassiel(id);
-  const cuotasHTML=cuotasMa.length?cuotasMa.map(maCuotaRowHTML).join(''):'<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">Sin cuotas a tu cargo este mes</div>';
+  // v49 — Cuotas: la vista de Massiel (maovEsVistaMassiel=true) sigue filtrando
+  // a lo suyo (50/50 + Solo Massiel) y partiendo el monto a la mitad. La vista
+  // de Jofre (backTo!=='forecast') muestra TODAS las cuotas del mes con su
+  // monto TOTAL completo, sin partir -- ver auditoría CDG(9), pto. Emma Colchón.
+  const cuotasLista=maovEsVistaMassiel?cuotasForMassiel(id):cuotasFor(id);
+  const cuotaRowFn=maovEsVistaMassiel?maCuotaRowHTML:jofreCuotaRowHTML;
+  const cuotasVacioTxt=maovEsVistaMassiel?'Sin cuotas a tu cargo este mes':'Sin cuotas este mes';
+  const cuotasHTML=cuotasLista.length?cuotasLista.map(cuotaRowFn).join(''):`<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">${cuotasVacioTxt}</div>`;
   const tabsHTML=`<button class="tbx on" id="mamt1" onclick="sMTma(1)">Categorías</button><button class="tbx" id="mamt2" onclick="sMTma(2)">Cuotas</button>`;
   document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="maovBack()" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${d.name}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">${esMesFuturo(id)?'Estimación · solo lectura':'Solo lectura'} · gasto total ${fmtE(total)}</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:10px 16px 0;display:flex;gap:6px">${tabsHTML}</div><div class="gtab on" id="mamt-tab1"><div style="padding:14px 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">${isMassielRole()?'TU APORTE':'APORTE MASSIEL'}</div><div style="font-size:20px;font-weight:800;color:#D4537E">${fmtAporte(aporteTotales(id).massiel)}</div></div><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">APORTE JOFRE</div><div style="font-size:20px;font-weight:800;color:#4C8DFA">${fmtAporte(aporteTotales(id).jofre)}</div></div></div><div style="padding:0 16px 8px"><div style="background:rgba(14,201,188,.08);border:1px solid rgba(14,201,188,.2);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:#0EC9BC;font-weight:700;letter-spacing:.06em;margin-bottom:3px">AHORRANDO ESTE MES</div><div style="font-size:9px;color:rgba(255,255,255,.4)">Renting · Fondo Emergencia · Fondo Mutuo · IBKR</div></div><div style="font-size:18px;font-weight:800;color:#0EC9BC">${fmtE(ahorroTotal)}</div></div></div><div style="padding:6px 16px 16px">${categoriaNivel1HTML(id)}</div></div><div class="gtab" id="mamt-tab2" style="padding:14px 16px 16px">${cuotasHTML}</div>`;
   document.getElementById('maov').style.display='block';
@@ -3014,7 +3031,7 @@ async function saveState(){
               const freshTasks=freshLiviano.map(lp=>{
                 const base=genById[lp.id];
                 return base?Object.assign({},base,{done:lp.done,amt:lp.amt!=null?lp.amt:base.amt})
-                           :{id:lp.id,l:lp.l,acc:lp.acc,cat:lp.cat,amt:lp.amt,done:lp.done};
+                           :{id:lp.id,l:lp.l,acc:lp.acc,cat:lp.cat,amt:lp.amt,done:lp.done,vacacion:lp.vacacion};
               });
               MONTH_PAGOS[k]=mergePagosConDelta(freshTasks,MONTH_PAGOS_BASELINE[k],MONTH_PAGOS[k]);
             });
@@ -3036,7 +3053,7 @@ async function saveState(){
       pagosByMonth[k]=MONTH_PAGOS[k].map(p=>
         freshIds.has(p.id)
           ?{id:p.id,done:p.done,amt:p.amt}
-          :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done}
+          :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
       );
     });
     const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MOVS,CUOTAS_NUEVAS};
@@ -3138,7 +3155,7 @@ function applyState(s){
       if(!p){
         // Si el guardado trae l/acc/cat propios (item custom), se reconstruye tal cual --
         // nunca con placeholders inventados.
-        p=sp.l?{id:sp.id,l:sp.l,acc:sp.acc||'BBVA',amt:sp.amt,cat:sp.cat||'gasto',done:sp.done}:{id:sp.id,l:sp.id,acc:'BBVA',amt:sp.amt,cat:'ingreso',done:sp.done};
+        p=sp.l?{id:sp.id,l:sp.l,acc:sp.acc||'BBVA',amt:sp.amt,cat:sp.cat||'gasto',done:sp.done,vacacion:sp.vacacion}:{id:sp.id,l:sp.id,acc:'BBVA',amt:sp.amt,cat:'ingreso',done:sp.done};
         MONTH_PAGOS[k].push(p);
       }
       p.done=sp.done;
@@ -3155,7 +3172,7 @@ function applyState(s){
       }else if(sp.amt!=null){
         p.amt=sp.amt;                    // done o no-fondeo: respetar guardado
       }
-      if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;
+      if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;if(sp.vacacion!==undefined)p.vacacion=sp.vacacion;
     });
   });
   // ── Auto-saneamiento (v16): corrige datos custom viejos que la lógica nueva ya no debe
