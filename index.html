@@ -1116,6 +1116,31 @@ function buildMonthPagos(id){
     if(it.tag==='EFECTIVO'){ if(it.a>0)efectivoItems.push({label:it.l,total:it.a,inc:it.efInc||10}); return; }
     handleTaggedItem(it.l,it.tag,it.a);
   });
+  // ── Tareas espejo de Massiel (v56) ──────────────────────────────────────
+  // YouTube, Remesas y los ítems 100% de Massiel en Personales/Gimnasios no
+  // tienen tag (CB/TR/BBVA) — por diseño, no son fondeo desde una cuenta real
+  // de Jofre — así que nunca pasaban por handleTaggedItem y jamás generaban
+  // tarea en MONTH_PAGOS. Resultado: aunque Previsión tuviera el dato, nunca
+  // se veían como "ya pagado" en Servicios/Remesas/Personales. Estas tareas
+  // usan acc:'MASSIEL' (cuenta ficticia, no es un banco real) — existen solo
+  // para que categoriaFijosDetalle/tareasGastoEjecutadas las vea ejecutadas
+  // cuando Massiel marca su tarea correspondiente en toggleMassiel(). Quedan
+  // A PROPÓSITO fuera de updBbvaBadge/bbvaPendienteList/tasksFor (todos
+  // filtran por acc real) y updPrevCard excluye acc==='MASSIEL' de su conteo
+  // — su progreso ya lo refleja el panel de Massiel (massielDone), contarlas
+  // ahí también sería duplicar.
+  {
+    const ytAmt=ytEurAmount(id);
+    if(ytAmt>0)list.push({id:p+'yt-massiel',l:'YouTube',acc:'MASSIEL',amt:ytAmt,cat:'gasto',done:false});
+    const remAmt=Math.round(itemsForKey('remesas',id).reduce((s,x)=>s+x.a,0)*100)/100;
+    if(remAmt>0)list.push({id:p+'remesas-massiel',l:'Remesas',acc:'MASSIEL',amt:remAmt,cat:'gasto',done:false});
+    itemsForKey('personales',id).filter(x=>x.group==='massiel').forEach(x=>{
+      if(x.a>0)list.push({id:p+'mtask-'+x.id,l:x.l,acc:'MASSIEL',amt:x.a,cat:'gasto',done:false});
+    });
+    itemsForKey('gimnasios',id).filter(x=>x.group==='massiel'&&!/bizum/i.test(x.d||'')).forEach(x=>{
+      if(x.a>0)list.push({id:p+'mtask-'+(x.id||'gymm'),l:x.l,acc:'MASSIEL',amt:x.a,cat:'gasto',done:false});
+    });
+  }
   cuotasFor(id).forEach(c=>{
     const tag=(c.tags&&c.tags.includes('Caixa'))?'CB':((c.tags&&c.tags.includes('TR Jofre'))?'TR':'BBVA');
     handleTaggedItem(c.l+(c.prog?' · '+c.prog:''),tag,moneyFromStr(c.amt));
@@ -1211,10 +1236,18 @@ function ensureMonthsAhead(fromId,n){
   }
 }
 let HISTORIAL=[];
-function advanceMonth(newId,nominaAmt){
+async function advanceMonth(newId,nominaAmt){
   const oldId=ACTIVE_ID;
   HISTORIAL.unshift({id:oldId,name:MONTHS[oldId].name,jofre:MONTHS[oldId].jofre,massiel:MONTHS[oldId].massiel});
   ensureMonthDefined(newId);
+  // TC del mes (v56): se busca y congela ACÁ, al registrar la nómina / iniciar
+  // el mes — ANTES de buildMonthPagos(newId), que ya usa ytEurAmount(newId)
+  // para la tarea espejo de YouTube. Si ya estaba fijado (no debería, mes
+  // nuevo) o el fetch falla, se deja como está y m-yt cae al fallback manual.
+  if(!ytTCMes[newId]){
+    const tc=await fetchTC();
+    if(tc)ytTCMes[newId]=tc;
+  }
   // Fix (jul-30): el check anterior -- "ya tiene algun item cat:gasto/enviar,
   // entonces no reconstruir" -- se satisfacia falsamente con UN SOLO item
   // custom preexistente (ej. la tarea de Vacaciones ya cargada de antemano
@@ -2054,6 +2087,28 @@ let massielDone={'m-yt':true,'m-rem':true,'m-per':true,'m-mrc':true,'m-biz':true
 let massielApplied={}; // T4: monto aplicado por tarea, para revertir exacto al desmarcar
 let ytTCMes={jun:1034};
 let maovMode=null;
+// TC EUR→CLP: fuente open.er-api.com (ExchangeRate-API open access), gratis,
+// sin key, sin registro, incluye CLP, actualiza 1x/día. Se llama UNA VEZ por
+// mes desde advanceMonth() al registrar la nómina — el valor queda congelado
+// en ytTCMes[mes] para todo el mes. Si falla (sin internet, API caída),
+// devuelve null y m-yt cae al prompt manual como red de seguridad — nunca
+// se inventa un TC.
+async function fetchTC(){
+  try{
+    const res=await fetch('https://open.er-api.com/v6/latest/EUR');
+    if(!res.ok)return null;
+    const data=await res.json();
+    const clp=data&&data.rates&&data.rates.CLP;
+    return (typeof clp==='number'&&clp>0)?clp:null;
+  }catch(e){return null;}
+}
+// Monto EUR del pago de YouTube (11.000 CLP fijo, convertido al TC congelado
+// del mes). Única fuente para el panel de Massiel Y para la tarea espejo de
+// buildMonthPagos — evita que ambos calculen distinto.
+function ytEurAmount(id){
+  const tc=ytTCMes[id];
+  return tc?Math.round((11000/tc)*100)/100:12.00;
+}
 function syncMassielTaskAmounts(id){
   // m-rem y m-mrc antes quedaban con el monto fijo con el que se armó el
   // panel la primera vez (ej. Remesas siempre en €190) y NO seguían lo que
@@ -2067,7 +2122,7 @@ function syncMassielTaskAmounts(id){
   const mrcCat=(MONTHS[id].cats||[]).find(c=>c.l==='Mercado');
   if(mrcTask&&mrcCat)mrcTask.amt=mrcCat.a;
   const ytTask=MASSIEL_TASKS.find(t=>t.id==='m-yt');
-  if(ytTask){const tc=ytTCMes[id];ytTask.amt=tc?Math.round((11000/tc)*100)/100:12.00;}
+  if(ytTask)ytTask.amt=ytEurAmount(id);
   const perTask=MASSIEL_TASKS.find(t=>t.id==='m-per');
   if(perTask){
     // Solo lo que es 100% de ella: grupo "massiel" en Personales (Uñas,
@@ -2103,7 +2158,9 @@ function renderMaTasksInto(){
   let html=`<div style="padding:16px 16px 4px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">Tareas de ${MONTHS[ACTIVE_ID].name.split(' ')[0].toLowerCase()}</div><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">${allDone?'Completadas':doneCount+'/5 marcadas'}</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:10px 16px 16px">`;
   MASSIEL_TASKS.forEach(t=>{
     const d=!!massielDone[t.id];
-    const sub=t.id==='m-yt'&&ytTCMes[ACTIVE_ID]?'TC: '+ytTCMes[ACTIVE_ID]+' · '+fmtE(t.amt):t.sub;
+    const sub=t.id==='m-yt'&&ytTCMes[ACTIVE_ID]?'TC: '+ytTCMes[ACTIVE_ID]+' · '+fmtE(t.amt)
+      :t.id==='m-rem'&&ytTCMes[ACTIVE_ID]?Math.round(t.amt*ytTCMes[ACTIVE_ID]).toLocaleString('es-ES')+' CLP a transferir · TC '+ytTCMes[ACTIVE_ID]
+      :t.sub;
     html+=`<div onclick="toggleMassiel('${t.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08);cursor:pointer"><div style="width:20px;height:20px;border-radius:6px;border:2px solid ${d?'#0EC9BC':'rgba(255,255,255,.3)'};background:${d?'#0EC9BC':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${d?'<i class="ti ti-check" style="font-size:13px;color:#064E3B"></i>':''}</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#fff;${d?'opacity:.5;text-decoration:line-through':''}">${t.l}</div><div style="font-size:10px;color:rgba(255,255,255,.45);margin-top:1px">${sub}</div></div><div style="font-size:13px;font-weight:700;color:${d?'rgba(255,255,255,.4)':'#fff'}">${fmtE(t.amt)}</div></div>`;
   });
   const bizDone=!!massielDone['m-biz'];
@@ -2212,7 +2269,7 @@ function fijoCasaEjecutado(id,pattern){
 // Adicionales solo si llegaran sueltas. "Enviar a Ma. Lara" agrupa Arriendo+Luz
 // (Casa) — se trata en el desglose de ejecución, no acá.
 const TAREA_CAT_RULES=[
-  {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Limpieza/i,cat:'Casa'},
+  {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Limpieza|^YouTube/i,cat:'Casa'},
   {re:/^Colegio/i,cat:'Baby J.A.'},
   {re:/On Air|^Sweat|^Fisiosalud|^Odontolog/i,cat:'Salud'},
   {re:/^GENUA|CB Xirivella|^Deporte/i,cat:'Deporte'},
@@ -2730,18 +2787,36 @@ function showMaSubDetailGroup(monthId,groupKey,backCat){
   document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="showMaSubDetail('${monthId}','servicios','Servicios','${backCat||''}')" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${meta.title}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">Solo lectura</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:6px 16px 16px"><div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.1)"><div style="font-size:12px;font-weight:700;color:#fff">Total ${meta.title}</div><div style="font-size:15px;font-weight:800;color:#fff">${fmtE(total)}</div></div>${rows}</div>`;
   document.getElementById('maov').style.display='block';
 }
+// Marca/desmarca como "ejecutado" en la categoría real de Previsión (Casa,
+// Remesas, Personales, Salud) la tarea espejo que buildMonthPagos ya generó
+// con acc:'MASSIEL' (id = <mes>-<idSuffix>). Si por lo que sea todavía no
+// existe (edición manual, mes recién creado antes del primer render), se crea
+// con el label real recibido — nunca con un placeholder inventado. Al marcar
+// done, se congela el monto real con que se marcó (mismo patrón que ya usan
+// m-mrc/m-biz vía massielApplied) para que futuros cambios en Previsión no
+// alteren retroactivamente lo que ya se registró como pagado.
+function marcarCategoriaMassiel(idSuffix,label,done,amt){
+  const fullId=ACTIVE_ID+'-'+idSuffix;
+  const arr=MONTH_PAGOS[ACTIVE_ID]=MONTH_PAGOS[ACTIVE_ID]||[];
+  let p=arr.find(x=>x.id===fullId);
+  if(!p){p={id:fullId,l:label,acc:'MASSIEL',amt:amt,cat:'gasto',done:false};arr.push(p);}
+  p.done=done;
+  if(done&&amt!=null)p.amt=amt;
+}
 async function toggleMassiel(id){
   if(id==='m-biz'){const ready=MASSIEL_TASKS.every(t=>massielDone[t.id]);if(!ready&&!massielDone['m-biz']){toast('Primero marca las otras 4 tareas','var(--gd)');return;}}
-  if(id==='m-yt'&&!massielDone[id]){
-    const tcRaw=await askAmount('Tipo de cambio de hoy','CLP por 1 EUR — ej: 1034');
+  if(id==='m-yt'&&!massielDone[id]&&!ytTCMes[ACTIVE_ID]){
+    // Fallback (v56): el TC ya se busca solo al iniciar el mes (advanceMonth).
+    // Esto solo dispara si ese fetch automático falló — red de seguridad,
+    // nunca se inventa el valor.
+    const tcRaw=await askAmount('Tipo de cambio de hoy','No se pudo obtener el TC automático — ingrésalo manualmente. CLP por 1 EUR, ej: 1034');
     if(tcRaw==null){return;}
     const tcClean=String(tcRaw).trim().replace(/\s/g,'').replace(/\./g,'').replace(',','.');
     const tcNum=parseFloat(tcClean);
     if(tcClean===''||isNaN(tcNum)||tcNum<=0){toast('TC inválido: "'+tcRaw+'" no es un número válido','var(--rd)');return;}
-    const eurAmt=parseFloat((11000/tcNum).toFixed(2));
-    MASSIEL_TASKS[0].amt=eurAmt;ytTCMes[ACTIVE_ID]=tcNum;
-    toast('YouTube '+fmtE(eurAmt),'var(--tl)');
+    ytTCMes[ACTIVE_ID]=tcNum;
   }
+  syncMassielTaskAmounts(ACTIVE_ID);
   const turningOn=!massielDone[id];
   massielDone[id]=turningOn;
   // T4/error-6: al desmarcar hay que revertir EXACTAMENTE el monto con que se
@@ -2750,15 +2825,27 @@ async function toggleMassiel(id){
   massielApplied=massielApplied||{};
   if(id==='m-mrc'){const t=MASSIEL_TASKS.find(x=>x.id==='m-mrc');const amt=turningOn?t.amt:(massielApplied['m-mrc']!=null?massielApplied['m-mrc']:t.amt);regMov('TRM','Mercado · aporte Massiel',amt,turningOn);massielApplied['m-mrc']=turningOn?amt:null;}
   if(id==='m-biz'){const amt=turningOn?calcBizum():(massielApplied['m-biz']!=null?massielApplied['m-biz']:calcBizum());regMov('BBVA','Bizum de Massiel',amt,turningOn);massielApplied['m-biz']=turningOn?amt:null;}
+  // v56 — m-yt/m-rem/m-per ya NO registran movimiento en ninguna cuenta (no es
+  // dinero que sale de una cuenta de Jofre): quedan como "ejecutado" en su
+  // categoría real de Previsión, visible en Historial/Categorías para ambos.
+  if(id==='m-yt'){const t=MASSIEL_TASKS.find(x=>x.id==='m-yt');marcarCategoriaMassiel('yt-massiel','YouTube',turningOn,t.amt);}
+  if(id==='m-rem'){const t=MASSIEL_TASKS.find(x=>x.id==='m-rem');marcarCategoriaMassiel('remesas-massiel','Remesas',turningOn,t.amt);}
+  if(id==='m-per'){
+    itemsForKey('personales',ACTIVE_ID).filter(x=>x.group==='massiel').forEach(x=>marcarCategoriaMassiel('mtask-'+x.id,x.l,turningOn,x.a));
+    itemsForKey('gimnasios',ACTIVE_ID).filter(x=>x.group==='massiel'&&!/bizum/i.test(x.d||'')).forEach(x=>marcarCategoriaMassiel('mtask-'+(x.id||'gymm'),x.l,turningOn,x.a));
+  }
   renderMaTile();if(maovMode==='tasks')renderMaTasksInto();updPrevCard();saveState();
 }
 function updPrevCard(){
   const active=MONTHS[ACTIVE_ID];
-  const bbvaPend=PAGOS.filter(p=>tareaPendiente(p)&&p.cat!=='ingreso').length;
+  // v56 — excluye acc:'MASSIEL' (tareas espejo de m-yt/m-rem/m-per en
+  // buildMonthPagos): su pendiente/hecho ya lo cuenta massielPend vía
+  // massielDone; contarlas también acá duplicaría el total y el %.
+  const bbvaPend=PAGOS.filter(p=>tareaPendiente(p)&&p.cat!=='ingreso'&&p.acc!=='MASSIEL').length;
   const nominaPend=PAGOS.some(p=>p.cat==='ingreso'&&!p.done);
   const massielPend=MASSIEL_TASKS.filter(t=>!massielDone[t.id]).length+(massielDone['m-biz']?0:1);
   const totalPend=bbvaPend+massielPend;
-  const totalAll=PAGOS.length+MASSIEL_TASKS.length+1;
+  const totalAll=PAGOS.filter(p=>p.acc!=='MASSIEL').length+MASSIEL_TASKS.length+1;
   const pct=Math.max(0,Math.round(((totalAll-totalPend)/totalAll)*100));
   const wrap=document.getElementById('prev-active-wrap');if(!wrap)return;
   const total=active.cats.reduce((s,c)=>s+c.a,0);
