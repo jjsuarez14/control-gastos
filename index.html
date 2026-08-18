@@ -2587,17 +2587,23 @@ function categoriaNivel2Rows(cat,id){
   if(esMesFuturo(id)){
     return categoriaFijosDetalle(cat,id).map(f=>Object.assign({tipo:'Estimado'},f));
   }
-  // v39 — Personales en la vista de Massiel: nunca movimientos sueltos de
-  // MOVS (sin dueño asignado, podían ser gasto de Jofre colándose en su
-  // vista) -- solo sus items estructurados, ya filtrados por dueño arriba.
-  if(cat==='Personales'&&maovEsVistaMassiel){
-    return categoriaFijosDetalle(cat,id).map(f=>Object.assign({tipo:'Pagado'},f));
-  }
   if(CATEGORIAS_POOL.includes(cat)){
     return movimientosVariablesDelMes(id).filter(m=>m.cat===cat).map(r=>({l:r.l,a:r.a,drill:null,tipo:'Registro'}));
   }
   const rows=categoriaFijosDetalle(cat,id).map(f=>Object.assign({tipo:'Fijo'},f));
-  movimientosVariablesDelMes(id).filter(m=>m.cat===cat).forEach(r=>rows.push({l:r.l,a:r.a,drill:null,tipo:'Registro'}));
+  // v55 — Antes había un parche (v39) que en la vista de Massiel excluía TODO
+  // movimiento suelto del detalle de Personales -- de ahí que el total
+  // mostrara un monto pero el detalle apareciera vacío. Era un workaround de
+  // cuando los movimientos sueltos no tenían dueño asignado. Ahora que existe
+  // `group` (ownership), el detalle usa el MISMO filtro que ya usa el total
+  // (categoriaSpendForMonth) -- consistentemente para Personales Y Salud, no
+  // solo Personales. Así el detalle SIEMPRE coincide con lo que suma arriba,
+  // y de paso deja de filtrarse gasto privado de Jofre en Salud (que antes sí
+  // se colaba en el detalle aunque ya no sumara al total). Ver auditoría
+  // CDG(10), "por qué no se ve el detalle".
+  movimientosVariablesDelMes(id).filter(m=>m.cat===cat)
+    .filter(m=>!(maovEsVistaMassiel&&MIXED_OWNERSHIP_CATS.includes(cat)&&m.group==='jofre'))
+    .forEach(r=>rows.push({l:r.l,a:r.a,drill:null,tipo:'Registro'}));
   return rows;
 }
 function showCategoriaNivel2(id,cat){
