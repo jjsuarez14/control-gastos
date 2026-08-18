@@ -2617,7 +2617,16 @@ function maovBack(){if(maovBackTo==='forecast')showMaForecast();else document.ge
 function showMaMonthDetail(id,backTo){
   maovMode='monthDetail';
   maovBackTo=backTo||'close';
-  maovEsVistaMassiel=(maovBackTo==='forecast');
+  // v53 — CORRECCIÓN DE RAÍZ: maovEsVistaMassiel estaba atado a backTo
+  // ('forecast' vs 'close'), una decisión de NAVEGACIÓN, no de identidad.
+  // El único punto de entrada real de Massiel en su Home usa backTo:'close'
+  // (igual que el tile de Jofre), así que este flag NUNCA daba true para
+  // ella en la práctica -- ningún filtro (categorías privadas de Jofre,
+  // Cuotas, ownership de Personales/Salud) se aplicaba jamás en su vista
+  // real. Filtrar debe depender de QUIÉN mira (isMassielRole()), nunca de
+  // CÓMO llegó -- maovBackTo queda solo para el botón "atrás". Ver
+  // auditoría CDG(10), "Personales sigue en blanco".
+  maovEsVistaMassiel=isMassielRole();
   const d=MONTHS[id];if(!d)return;
   const ahorro=itemsForKey('ahorro',id);
   const ahorroTotal=ahorro.reduce((s,x)=>s+x.a,0);
