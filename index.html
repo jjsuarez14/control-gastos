@@ -2617,16 +2617,21 @@ function maovBack(){if(maovBackTo==='forecast')showMaForecast();else document.ge
 function showMaMonthDetail(id,backTo){
   maovMode='monthDetail';
   maovBackTo=backTo||'close';
-  // v53 — CORRECCIÓN DE RAÍZ: maovEsVistaMassiel estaba atado a backTo
-  // ('forecast' vs 'close'), una decisión de NAVEGACIÓN, no de identidad.
-  // El único punto de entrada real de Massiel en su Home usa backTo:'close'
-  // (igual que el tile de Jofre), así que este flag NUNCA daba true para
-  // ella en la práctica -- ningún filtro (categorías privadas de Jofre,
-  // Cuotas, ownership de Personales/Salud) se aplicaba jamás en su vista
-  // real. Filtrar debe depender de QUIÉN mira (isMassielRole()), nunca de
-  // CÓMO llegó -- maovBackTo queda solo para el botón "atrás". Ver
-  // auditoría CDG(10), "Personales sigue en blanco".
-  maovEsVistaMassiel=isMassielRole();
+  // v54 — CORRECCIÓN de v53: isMassielRole() mira el ROL DE SESIÓN (URL /
+  // body class), que es fijo durante toda la sesión. Pero Jofre puede entrar
+  // al tile de Massiel DESDE SU PROPIO ROL, vía el tab "Massiel" del nav
+  // (nb-m/#p-m) -- sin cambiar de sesión. En ese caso isMassielRole() sigue
+  // dando false y el filtro no se aplicaba, aunque Jofre esté ahí
+  // específicamente para ver EXACTAMENTE lo que ella ve.
+  // v55 — Ajuste: depende de AMBAS señales, no de una sola.
+  //   · Massiel siempre entra por su URL (rol=massiel) -> SIEMPRE filtrado,
+  //     sin importar en qué tab esté (por robustez, no solo por el tab activo).
+  //   · Jofre entra desde su propia sesión -> filtra SOLO si está parado en
+  //     el tab "Massiel" (#p-m), previsualizando; en su tab 'i' ve lo suyo
+  //     sin filtrar.
+  // Ver auditoría CDG(10), "Personales sigue en blanco" + "debería depender
+  // de ambos".
+  maovEsVistaMassiel=isMassielRole()||(document.getElementById('p-m')?.classList.contains('on')||false);
   const d=MONTHS[id];if(!d)return;
   const ahorro=itemsForKey('ahorro',id);
   const ahorroTotal=ahorro.reduce((s,x)=>s+x.a,0);
@@ -2649,7 +2654,7 @@ function showMaMonthDetail(id,backTo){
   const cuotasVacioTxt=maovEsVistaMassiel?'Sin cuotas a tu cargo este mes':'Sin cuotas este mes';
   const cuotasHTML=cuotasLista.length?cuotasLista.map(cuotaRowFn).join(''):`<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">${cuotasVacioTxt}</div>`;
   const tabsHTML=`<button class="tbx on" id="mamt1" onclick="sMTma(1)">Categorías</button><button class="tbx" id="mamt2" onclick="sMTma(2)">Cuotas</button>`;
-  document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="maovBack()" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${d.name}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">${esMesFuturo(id)?'Estimación · solo lectura':'Solo lectura'} · gasto total ${fmtE(total)}</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:10px 16px 0;display:flex;gap:6px">${tabsHTML}</div><div class="gtab on" id="mamt-tab1"><div style="padding:14px 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">${isMassielRole()?'TU APORTE':'APORTE MASSIEL'}</div><div style="font-size:20px;font-weight:800;color:#D4537E">${fmtAporte(aporteTotales(id).massiel)}</div></div><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">APORTE JOFRE</div><div style="font-size:20px;font-weight:800;color:#4C8DFA">${fmtAporte(aporteTotales(id).jofre)}</div></div></div><div style="padding:0 16px 8px"><div style="background:rgba(14,201,188,.08);border:1px solid rgba(14,201,188,.2);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:#0EC9BC;font-weight:700;letter-spacing:.06em;margin-bottom:3px">AHORRANDO ESTE MES</div><div style="font-size:9px;color:rgba(255,255,255,.4)">Renting · Fondo Emergencia · Fondo Mutuo · IBKR</div></div><div style="font-size:18px;font-weight:800;color:#0EC9BC">${fmtE(ahorroTotal)}</div></div></div><div style="padding:6px 16px 16px">${categoriaNivel1HTML(id)}</div></div><div class="gtab" id="mamt-tab2" style="padding:14px 16px 16px">${cuotasHTML}</div>`;
+  document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><button onclick="maovBack()" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chevron-left" style="font-size:15px;color:rgba(255,255,255,.6)"></i></button><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">${d.name}</div><div style="font-size:10px;color:rgba(255,255,255,.4)">${esMesFuturo(id)?'Estimación · solo lectura':'Solo lectura'} · gasto total ${fmtE(total)}</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:10px 16px 0;display:flex;gap:6px">${tabsHTML}</div><div class="gtab on" id="mamt-tab1"><div style="padding:14px 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">${maovEsVistaMassiel?'TU APORTE':'APORTE MASSIEL'}</div><div style="font-size:20px;font-weight:800;color:#D4537E">${fmtAporte(aporteTotales(id).massiel)}</div></div><div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px"><div style="font-size:9px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:.06em;margin-bottom:4px">APORTE JOFRE</div><div style="font-size:20px;font-weight:800;color:#4C8DFA">${fmtAporte(aporteTotales(id).jofre)}</div></div></div><div style="padding:0 16px 8px"><div style="background:rgba(14,201,188,.08);border:1px solid rgba(14,201,188,.2);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:#0EC9BC;font-weight:700;letter-spacing:.06em;margin-bottom:3px">AHORRANDO ESTE MES</div><div style="font-size:9px;color:rgba(255,255,255,.4)">Renting · Fondo Emergencia · Fondo Mutuo · IBKR</div></div><div style="font-size:18px;font-weight:800;color:#0EC9BC">${fmtE(ahorroTotal)}</div></div></div><div style="padding:6px 16px 16px">${categoriaNivel1HTML(id)}</div></div><div class="gtab" id="mamt-tab2" style="padding:14px 16px 16px">${cuotasHTML}</div>`;
   document.getElementById('maov').style.display='block';
 }
 function showMaSubDetail(monthId,key,label,backCat){
