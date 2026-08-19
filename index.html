@@ -2461,8 +2461,10 @@ function categoriaFijosDetalle(cat,id){
       if(fm&&tareaEnviarDone(id,/TR Jofre/i))out.push({l:'Fondo Mutuo · asignación mensual',a:fm.a,drill:null});
       tareasGastoEjecutadas(id,'Compartir Familiar').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
     }else if(cat==='Deporte'){
-      // GENUA (id 'per6' en 'personales') SÍ trae group -- mismo patrón que
-      // Personales: en la vista de Massiel, solo si group!=='jofre'.
+      // GENUA (id 'per6' en 'personales') es 100% Jofre hoy (group:'jofre'),
+      // cero responsabilidad de Massiel -- se filtra item por item (ver
+      // MIXED_ITEM_FILTERED_CATS). Si algún día se agrega un ítem compartido o
+      // de ella en Deporte, esto ya lo recoge automáticamente.
       if(maovEsVistaMassiel){
         itemsForKey('personales',id).filter(x=>x.id==='per6').filter(x=>x.group!=='jofre').forEach(x=>{
           const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&p.done&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
@@ -2471,24 +2473,17 @@ function categoriaFijosDetalle(cat,id){
       }else{
         tareasGastoEjecutadas(id,'Deporte').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
       }
-    }else if(cat==='Carro/Moto'){
-      // Renting (dentro de 'ahorro') -- confirmado por Jofre: 50/50 (group
-      // 'compartida'), igual patrón que Personales/Deporte.
-      if(maovEsVistaMassiel){
-        itemsForKey('ahorro',id).filter(x=>/Renting/i.test(x.l)).filter(x=>x.group!=='jofre').forEach(x=>{
-          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&p.done&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
-          if(t)out.push({l:x.l,a:t.amt,drill:null});
-        });
-      }else{
-        tareasGastoEjecutadas(id,'Carro/Moto').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
-      }
     }else{
-      // Resto de categorías (Salud, Trabajo, Vacaciones, Mercado, Adicionales):
-      // sus tareas 'gasto' done mapeadas. NOTA -- Salud (On Air) queda fuera del
-      // filtro por ahora: la mensualidad/matrícula es una tarea COMBINADA (no
-      // por persona; la mitad de Massiel vuelve por Bizum), sin un ítem
-      // ejecutado que se pueda filtrar por group como Deporte/Carro-Moto/
-      // Personales. Pendiente de definir con Jofre cómo mostrar solo su mitad.
+      // Resto de categorías: sus tareas 'gasto' done mapeadas, SIN filtrar por
+      // item (ver MIXED_FULL_VISIBILITY_CATS más arriba). Carro/Moto: Renting
+      // es 50/50 recurrente -- mientras exista, Massiel ve TODO lo de la
+      // categoría, no solo su mitad, porque ella aporta ahí todos los meses.
+      // Salud (On Air): hoy son 2 líneas 100% c/u (gym1 Jofre, gym2 Massiel)
+      // bajo el MISMO gimnasio combinado -- Massiel ve las dos mientras siga
+      // combinado (confirmado por Jofre 19-ago-2026). Si en el futuro ella
+      // cambia de gimnasio (nombre/monto de su línea ya no coincide con el
+      // combo actual), pasaría a filtrarse item por item como Deporte/
+      // Personales -- avisar cuando eso ocurra para ajustar el código.
       tareasGastoEjecutadas(id,cat).forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
     }
     // Cuotas de esta categoría que YA se pagaron (su tarea done). Si la cuota
@@ -2664,7 +2659,7 @@ function categoriaSpendForMonth(id){
     // sumar a su total -- igual que ya se filtraba para los ítems
     // estructurados (categoriaFijosDetalle). Sin este filtro, gasto personal
     // de Jofre se colaba en el total que ve Massiel.
-    if(maovEsVistaMassiel&&MIXED_OWNERSHIP_CATS.includes(m.cat)&&m.group==='jofre')return;
+    if(maovEsVistaMassiel&&MIXED_ITEM_FILTERED_CATS.includes(m.cat)&&m.group!=='massiel'&&m.group!=='compartida')return;
     totals[m.cat]=Math.round((totals[m.cat]+m.a)*100)/100;
   });
   return totals;
@@ -2685,6 +2680,21 @@ const CATEGORIAS_POOL=['Mercado','Compartir Familiar'];
 // (categoriaSpendForMonth). Regla de default sugerida por Jofre: movimientos
 // en TR Massiel son compartidos por default (esa cuenta es el fondo familiar).
 const MIXED_OWNERSHIP_CATS=['Personales','Salud','Deporte','Carro/Moto'];
+// Dentro de las mixtas, dos comportamientos distintos para la vista de
+// Massiel (confirmado por Jofre 19-ago-2026):
+// - ITEM_FILTERED: ve SOLO lo que tiene su responsabilidad explícita (group
+//   'massiel'/'compartida'); todo lo demás -- incluido sin group asignado --
+//   se oculta por defecto. Son categorías sin un ancla compartida fija: en
+//   Personales cada gasto suelto es independiente; en Deporte hoy GENUA es
+//   100% Jofre, cero responsabilidad de ella.
+// - FULL_VISIBILITY: mientras tenga responsabilidad activa YA establecida en
+//   la categoría (Renting 50/50 en Carro/Moto; su mitad del gym combinado en
+//   Salud), ve TODO lo registrado ahí sin filtrar item por item -- es
+//   evidencia de cuánto se gasta en total en algo donde ella aporta, no solo
+//   "su parte" (ej. si Jofre asume un pago compartido por timing del Bizum,
+//   igual debe verse).
+const MIXED_ITEM_FILTERED_CATS=['Personales','Deporte'];
+const MIXED_FULL_VISIBILITY_CATS=['Salud','Carro/Moto'];
 // v26 — Suma las dotaciones REALES (movimientos "aporte/dotación") que llenan
 // el fondo de un pool en el mes. Es lo que efectivamente se depositó, no el
 // presupuesto teórico. Usa la MISMA detección que el filtro de gasto.
@@ -2794,7 +2804,7 @@ function categoriaNivel2Rows(cat,id){
   // se colaba en el detalle aunque ya no sumara al total). Ver auditoría
   // CDG(10), "por qué no se ve el detalle".
   movimientosVariablesDelMes(id).filter(m=>m.cat===cat)
-    .filter(m=>!(maovEsVistaMassiel&&MIXED_OWNERSHIP_CATS.includes(cat)&&m.group==='jofre'))
+    .filter(m=>!(maovEsVistaMassiel&&MIXED_ITEM_FILTERED_CATS.includes(cat)&&m.group!=='massiel'&&m.group!=='compartida'))
     .forEach(r=>rows.push({l:r.l,a:r.a,drill:null,tipo:'Registro'}));
   return rows;
 }
@@ -3036,7 +3046,18 @@ function renderRegSummary(){
   const cuotaCuenta=reg.cuotaCuentaDeduccion?ACC_META[reg.cuotaCuentaDeduccion].n:accName;
   if(reg.type==='t'){
     const rows=[['Tipo','Tarea futura'],['Descripción',reg.desc||reg.category],['Monto',fmtE(reg.amount)],['Categoría',reg.category],['Cuenta pago',accName],['Mes',reg.tareaMes&&MONTHS[reg.tareaMes]?MONTHS[reg.tareaMes].name:'—'],['Responsabilidad',POOL_FUNDED_CATS.includes(reg.category)?'Cubierta por el Fondo Mutuo':(reg.tareaRule||'—')]];
-    return `<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CONFIRMAR</div>`+rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)"><div style="font-size:12px;color:var(--t2)">${r[0]}</div><div style="font-size:12px;color:var(--t1);font-weight:600;text-align:right">${r[1]}</div></div>`).join('');
+    // Aviso NO bloqueante (pedido por Jofre 19-ago): si una tarea del pool
+    // supera lo que se está asignando a Fondo Mutuo ese mes, mostrar una
+    // advertencia -- Jofre decide si igual confirma (puede saber que se
+    // repone después), pero no debe crearse a ciegas sin verlo.
+    let warnHTML='';
+    if(reg.tareaMes&&POOL_FUNDED_CATS.includes(reg.category)){
+      const asignacion=fondoMutuoEntradas(reg.tareaMes).reduce((s,x)=>s+x.a,0);
+      if(reg.amount>asignacion){
+        warnHTML=`<div style="padding:10px 12px;border-radius:12px;background:rgba(240,69,69,.1);border:1px solid rgba(240,69,69,.3);margin-bottom:12px;font-size:11px;color:var(--rd)">⚠ Esto supera la asignación de Fondo Mutuo de ${MONTHS[reg.tareaMes].name}: ${fmtE(asignacion)} asignado ese mes vs ${fmtE(reg.amount)} de esta tarea.</div>`;
+      }
+    }
+    return `<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CONFIRMAR</div>`+warnHTML+rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)"><div style="font-size:12px;color:var(--t2)">${r[0]}</div><div style="font-size:12px;color:var(--t1);font-weight:600;text-align:right">${r[1]}</div></div>`).join('');
   }
   let rows=[['Tipo',reg.type==='g'?'Gasto':'Ingreso']];
   if(reg.desc)rows.push(['Descripción',reg.desc]);
