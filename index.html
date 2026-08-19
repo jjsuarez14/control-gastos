@@ -779,7 +779,7 @@ function renderAccountOverlay(accId){
   else{waitMsg=accId==='EFECTIVO'?'Pendiente de retirar el efectivo desde BBVA':'Pendiente de recibir la transferencia desde BBVA';}
   if(mass){/* saltar por completo el bloque de tareas/mensajes de estado */}
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
-  else if(pend.length){html+=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;pend.forEach(p=>{html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i></div>`;});html+='</div>';}
+  else if(pend.length){html+=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;pend.forEach(p=>{const canDel=p.cat==='gasto'&&!p.sistema;const delIcon=canDel?`<i class="ti ti-trash" onclick="event.stopPropagation();deleteTareaPendiente('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--rd);padding:4px 2px 4px 6px;cursor:pointer"></i>`:'';html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i>${delIcon}</div>`;});html+='</div>';}
   else{html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--tl2);border:1px solid rgba(14,201,188,.25);display:flex;gap:8px;align-items:center"><i class="ti ti-check" style="font-size:15px;color:var(--tl)"></i><div style="font-size:12px;color:var(--tl);font-weight:600">Sin tareas pendientes</div></div></div>`;}
   // La auditoría balance-vs-movimientos existe como cálculo interno
   // (auditarCuenta / auditarTodo), consultable por consola para diagnóstico.
@@ -1063,12 +1063,21 @@ function splitFromCuotaTags(tags){
 function tagToAcc(tag){return tag==='CB'?'CAIXA':tag==='TR'?'TRJ':tag==='BBVA'?'BBVA':null;}
 function buildMonthPagos(id){
   const list=[];const p=id+'-';let caixaSum=0,trjSum=0,malaraSum=0;
+  // Tareas eliminadas a mano por Jofre desde una cuenta ("TAREAS DEL MES" ->
+  // ícono de papelera). Se filtran ACÁ, en el punto donde se generan, para que
+  // el monto eliminado tampoco quede sumado en su agregado "Enviar a X" — igual
+  // razonamiento que el bug de doble conteo de Decathlon/Centauro (sep-2026).
+  const removedSet=new Set(MONTH_PAGOS_REMOVED[id]||[]);
+  function computeTaskId(label){return p+label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
   function pushDirect(label,acc,amt,extra){
     if(!(amt>0))return;
-    list.push(Object.assign({id:p+label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''),l:label,acc,amt:Math.round(amt*100)/100,cat:'gasto',done:false},extra||{}));
+    const tid=computeTaskId(label);
+    if(removedSet.has(tid))return;
+    list.push(Object.assign({id:tid,l:label,acc,amt:Math.round(amt*100)/100,cat:'gasto',done:false},extra||{}));
   }
   function handleTaggedItem(label,tag,amt){
     if(!(amt>0))return;
+    if(removedSet.has(computeTaskId(label)))return;
     const acc=tagToAcc(tag);
     if(!acc)return;
     if(acc==='CAIXA'){caixaSum+=amt;pushDirect(label,'CAIXA',amt);}
@@ -1149,7 +1158,9 @@ function buildMonthPagos(id){
   // que NO entran en "Enviar a TR Jofre" (no es dinero entrante; consumen fondo).
   (HOTEL_TAREAS[id]||[]).forEach(h=>{
     if(!(h.a>0))return;
-    list.push({id:p+h.id,l:h.l,acc:'TRJ',amt:Math.round(h.a*100)/100,cat:'gasto',done:false,vacacion:true});
+    const tid=p+h.id;
+    if(removedSet.has(tid))return;
+    list.push({id:tid,l:h.l,acc:'TRJ',amt:Math.round(h.a*100)/100,cat:'gasto',done:false,vacacion:true});
   });
   // Aplazados TDC pagados con cargo al Fondo Mutuo: NO son cuota individual
   // (no van a la pestana Cuotas ni a repartoMes -- ya estan cubiertos por el
@@ -1158,12 +1169,26 @@ function buildMonthPagos(id){
   // liquidarlo) y dejar su tarea de auditoria en TR Jofre.
   (FONDO_MUTUO_CAIXA[id]||[]).forEach(x=>{
     if(!(x.a>0))return;
+    const tid=p+x.idTrj;
+    if(removedSet.has(tid))return;
     caixaSum+=x.a;
-    list.push({id:p+x.idTrj,l:x.lTrj,acc:'TRJ',amt:Math.round(x.a*100)/100,cat:'gasto',done:false,vacacion:true});
+    list.push({id:tid,l:x.lTrj,acc:'TRJ',amt:Math.round(x.a*100)/100,cat:'gasto',done:false,vacacion:true});
+  });
+  (TAREAS_PROGRAMADAS[id]||[]).forEach(x=>{
+    if(!(x.a>0))return;
+    const tid=p+x.id;
+    if(removedSet.has(tid))return;
+    if(x.pool){
+      // Tarea puntual en categoría cubierta por el pool (Ahorro/Compartir
+      // Familiar/Vacaciones): suma al agregado de la cuenta elegida, NO pasa
+      // por cuotas/repartoMes -- mismo patrón que FONDO_MUTUO_CAIXA.
+      if(x.acc==='CAIXA')caixaSum+=x.a;else if(x.acc==='TRJ')trjSum+=x.a;
+      list.push({id:tid,l:x.l,acc:x.acc,amt:Math.round(x.a*100)/100,cat:'gasto',done:false,programada:true});
+    }
   });
   const ahorroItems=itemsForKey('ahorro',id);
   const renting=ahorroItems.find(x=>x.l==='Renting');
-  if(renting&&renting.a>0){caixaSum+=renting.a;pushDirect('Renting','CAIXA',RENTING_MENSUAL);}
+  if(renting&&renting.a>0&&!removedSet.has(computeTaskId('Renting'))){caixaSum+=renting.a;pushDirect('Renting','CAIXA',RENTING_MENSUAL);}
   // Efectivo dinámico: cada ítem (Barbería/Limpieza) genera N tareas = total/inc en la cuenta EFECTIVO;
   // 'Retirar efectivo' (BBVA) = suma total de todo el efectivo del mes.
   let efectivoSum=0;
@@ -1186,7 +1211,7 @@ function buildMonthPagos(id){
   if(inv&&inv.a>0)pushDirect('Enviar a IBKR','BBVA',inv.a,{cat:'enviar'});
   if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false});
   if(trjSum>0)list.unshift({id:p+'eac-tr',l:'Enviar a TR Jofre',acc:'TRJ',src:'BBVA',amt:Math.round(trjSum*100)/100,cat:'enviar',done:false});
-  if(malaraSum>0)list.unshift({id:p+'eac-malara',l:'Enviar a Ma. Lara',acc:'BBVA',amt:Math.round(malaraSum*100)/100,cat:'gasto',done:false});
+  if(malaraSum>0)list.unshift({id:p+'eac-malara',l:'Enviar a Ma. Lara',acc:'BBVA',amt:Math.round(malaraSum*100)/100,cat:'gasto',done:false,sistema:true});
   const nid=nextMonthId(id);const meta=monthMeta(nid);
   list.push({id:'nom-next-'+id,l:'Registrar nómina de '+(meta?meta.name:nid),acc:'BBVA',amt:null,cat:'ingreso',done:false,nextId:nid});
   return list;
@@ -1440,13 +1465,13 @@ const DET_MONTH_OVERRIDES={
   ahorro:{
     jul:[
       {id:'aho3',l:'Fondo Mutuo (TR Jofre)',a:100,d:'TR Jofre · confirmado'},
-      {id:'aho-renting-jul',l:'Renting',a:400,d:'Caixa'}
+      {id:'aho-renting-jul',l:'Renting',a:400,d:'Caixa',group:'compartida'}
     ],
     ago:[
       {id:'aho-vacaciones-ago',l:'Fondo Mutuo · Vacaciones',a:600,d:'TR Jofre · 100% (excepción agosto)'}
     ],
     sep:[
-      {id:'aho-caixa-sep',l:'Renting',a:400,d:'Caixa'},
+      {id:'aho-caixa-sep',l:'Renting',a:400,d:'Caixa',group:'compartida'},
       {id:'aho-fmutuo-sep',l:'Fondo Mutuo',a:200,d:'TR Jofre · excepción septiembre (incluye Cumpleaños Massiel 200)'},
       {id:'aho-emerg-sep',l:'Fondo Emergencia',a:100,d:'TR J.A. · excepción septiembre'}
     ]
@@ -1478,7 +1503,7 @@ function ahorroSplit(total){
 }
 function ahorroItemsFromSplit(total,tag){
   const s=ahorroSplit(total);
-  const items=[{id:'aho-caixa-'+tag,l:'Renting',a:s.caixa,d:'Caixa'}];
+  const items=[{id:'aho-caixa-'+tag,l:'Renting',a:s.caixa,d:'Caixa',group:'compartida'}];
   if(s.emergencia>0)items.push({id:'aho-emerg-'+tag,l:'Fondo Emergencia',a:s.emergencia,d:'TR J.A. · 50% del resto'});
   if(s.fondoMutuo>0)items.push({id:'aho-fmutuo-'+tag,l:'Fondo Mutuo',a:s.fondoMutuo,d:'TR Jofre · 25% del resto'});
   if(s.inversion>0)items.push({id:'aho-inv-'+tag,l:'Inversión',a:s.inversion,d:'IBKR · 25% del resto'});
@@ -1627,6 +1652,28 @@ const HOTEL_TAREAS={
 const FONDO_MUTUO_CAIXA={
   sep:[{idTrj:'pago-decathlon-fmutuo',lTrj:'Pago - Decatlón JA & Massiel',a:31.71},{idTrj:'pago-centauro-fmutuo',lTrj:'Pago - Centauro - Rent a Car',a:75.71}]
 };
+// MONTH_PAGOS_REMOVED: tareas de MONTH_PAGOS eliminadas a mano por Jofre desde
+// una cuenta (papelera en "TAREAS DEL MES"). {monthId:[taskId,...]}. Solo
+// crece (ratchet), igual que DET_MONTH_REMOVED -- una vez eliminada, no
+// reaparece. buildMonthPagos la consulta en cada punto donde genera una
+// tarea, ANTES de sumar al agregado "Enviar a X", para no dejarlo inflado.
+const MONTH_PAGOS_REMOVED={};
+function markPagoRemoved(monthId,taskId){
+  MONTH_PAGOS_REMOVED[monthId]=MONTH_PAGOS_REMOVED[monthId]||[];
+  if(!MONTH_PAGOS_REMOVED[monthId].includes(taskId))MONTH_PAGOS_REMOVED[monthId].push(taskId);
+}
+// TAREAS_PROGRAMADAS: tareas puntuales que Jofre agrega él mismo desde el
+// botón "Registrar" (3ra opción, "Programar tarea"), para un mes actual o
+// futuro, SIN pasar por edición de código (a diferencia de HOTEL_TAREAS /
+// FONDO_MUTUO_CAIXA, que son hardcodeadas). {monthId:[{id,l,a,acc,pool,rule}]}.
+// pool:true -- categoría cubierta por el pool (Ahorro/Compartir Familiar/
+// Vacaciones): NO se pregunta reparto, suma directo al agregado "Enviar a X",
+// no pasa por cuotas/repartoMes (mismo patrón que FONDO_MUTUO_CAIXA). Ver
+// bloque en buildMonthPagos. pool:false -- se crea como cuota (ver saveReg).
+const TAREAS_PROGRAMADAS={};
+// Categorías donde el reparto ya está resuelto por el pool del Fondo Mutuo --
+// no tiene sentido volver a preguntar 55/45 / 50/50 al crear una tarea ahí.
+const POOL_FUNDED_CATS=['Ahorro','Compartir Familiar','Vacaciones'];
 function splitAmount(rule,amt){
   if(rule==='55/45')return{jofre:amt*0.55,massiel:amt*0.45};
   if(rule==='50/50')return{jofre:amt*0.5,massiel:amt*0.5};
@@ -1752,11 +1799,47 @@ function selApply(el,mode){document.querySelectorAll('.edit-modal .resp-item').f
 function baseArrayFor(key){return key==='servicios'?DET.serviciosBase:DET[key];}
 let pendingDelete=null;
 function deleteItem(key,itemId,label){
-  pendingDelete={key,itemId,label};
+  pendingDelete={key,itemId,label};pendingDeleteTarea=null;
   document.getElementById('del-desc').textContent='¿Eliminar "'+label+'"? Elige si es solo de '+(MONTHS[currentMonth]?MONTHS[currentMonth].name:'este mes')+' (ej. facturación bimestral que no aplica este mes) o una baja definitiva.';
   document.getElementById('delModal').style.display='flex';
 }
+// Eliminar una tarea pendiente de "TAREAS DEL MES" (cuenta -> ícono de
+// papelera). A diferencia de deleteItem (ítems DET de Categorías), estas
+// tareas viven en MONTH_PAGOS y se regeneran solas desde su fuente en cada
+// carga -- por eso NO se puede solo quitarlas del array (reaparecerían). Se
+// registran en MONTH_PAGOS_REMOVED, que buildMonthPagos respeta al generar.
+let pendingDeleteTarea=null;
+function deleteTareaPendiente(taskId,label,monto){
+  pendingDeleteTarea={taskId,label,monto};pendingDelete=null;
+  document.getElementById('del-desc').textContent='¿Eliminar "'+label+'" ('+fmtE(monto)+')? Elige si es solo de '+(MONTHS[ACTIVE_ID]?MONTHS[ACTIVE_ID].name:'este mes')+' o desde ahora en adelante.';
+  document.getElementById('delModal').style.display='flex';
+}
 function execDelete(mode){
+  if(pendingDeleteTarea){
+    const{taskId,label,monto}=pendingDeleteTarea;
+    document.getElementById('delModal').style.display='none';
+    pendingDeleteTarea=null;
+    const monthId=ACTIVE_ID;
+    const prefix=monthId+'-';
+    const suffix=taskId.indexOf(prefix)===0?taskId.slice(prefix.length):taskId;
+    markPagoRemoved(monthId,taskId);
+    if(mode==='desde'){
+      let idx=MONTH_ORDER.indexOf(monthId);if(idx<0)idx=0;
+      for(let i=idx+1;i<MONTH_ORDER.length;i++)markPagoRemoved(MONTH_ORDER[i],MONTH_ORDER[i]+'-'+suffix);
+    }
+    // Regenerar el mes desde la fuente (ahora sin esta tarea ni su aporte al
+    // agregado) preservando done/amt de lo demás -- mismo criterio que usa
+    // applyState al reconciliar: los "enviar" no-done se recalculan frescos,
+    // el resto respeta lo que ya había.
+    const prevById={};(MONTH_PAGOS[monthId]||[]).forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
+    const fresh=buildMonthPagos(monthId);
+    fresh.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!(np.cat==='enviar'&&!prev.done))np.amt=prev.amt;}});
+    MONTH_PAGOS[monthId]=fresh;
+    updBbvaBadge();updPrevCard();updTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);renderPrevision();
+    toast('✓ "'+label+'" eliminada'+(mode==='desde'?' desde '+MONTHS[monthId].name+' en adelante':' de '+MONTHS[monthId].name),'var(--tl)');
+    saveState();
+    return;
+  }
   if(!pendingDelete)return;
   const{key,itemId,label}=pendingDelete;
   document.getElementById('delModal').style.display='none';
@@ -2377,15 +2460,41 @@ function categoriaFijosDetalle(cat,id){
       const fm=itemsForKey('ahorro',id).find(x=>/Fondo Mutuo/i.test(x.l));
       if(fm&&tareaEnviarDone(id,/TR Jofre/i))out.push({l:'Fondo Mutuo · asignación mensual',a:fm.a,drill:null});
       tareasGastoEjecutadas(id,'Compartir Familiar').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
+    }else if(cat==='Deporte'){
+      // GENUA (id 'per6' en 'personales') SÍ trae group -- mismo patrón que
+      // Personales: en la vista de Massiel, solo si group!=='jofre'.
+      if(maovEsVistaMassiel){
+        itemsForKey('personales',id).filter(x=>x.id==='per6').filter(x=>x.group!=='jofre').forEach(x=>{
+          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&p.done&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
+          if(t)out.push({l:x.l,a:t.amt,drill:null});
+        });
+      }else{
+        tareasGastoEjecutadas(id,'Deporte').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
+      }
+    }else if(cat==='Carro/Moto'){
+      // Renting (dentro de 'ahorro') -- confirmado por Jofre: 50/50 (group
+      // 'compartida'), igual patrón que Personales/Deporte.
+      if(maovEsVistaMassiel){
+        itemsForKey('ahorro',id).filter(x=>/Renting/i.test(x.l)).filter(x=>x.group!=='jofre').forEach(x=>{
+          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&p.done&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
+          if(t)out.push({l:x.l,a:t.amt,drill:null});
+        });
+      }else{
+        tareasGastoEjecutadas(id,'Carro/Moto').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
+      }
     }else{
-      // Resto de categorías (Salud, Deporte, Trabajo, Carro/Moto, Vacaciones,
-      // Mercado, Adicionales): sus tareas 'gasto' done mapeadas.
+      // Resto de categorías (Salud, Trabajo, Vacaciones, Mercado, Adicionales):
+      // sus tareas 'gasto' done mapeadas. NOTA -- Salud (On Air) queda fuera del
+      // filtro por ahora: la mensualidad/matrícula es una tarea COMBINADA (no
+      // por persona; la mitad de Massiel vuelve por Bizum), sin un ítem
+      // ejecutado que se pueda filtrar por group como Deporte/Carro-Moto/
+      // Personales. Pendiente de definir con Jofre cómo mostrar solo su mitad.
       tareasGastoEjecutadas(id,cat).forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
     }
-    // Cuotas de esta categoría que YA se pagaron (su tarea done). Se muestra el
-    // monto REAL completo — Massiel ve lo mismo que Jofre; el filtro de qué
-    // categorías ve ella se aplica arriba (categoriasVisibles), no acá.
-    cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).forEach(c=>{
+    // Cuotas de esta categoría que YA se pagaron (su tarea done). Si la cuota
+    // es 100% de Jofre ('Solo Jofre'), no se muestra en la vista de Massiel --
+    // mismo criterio que ya aplicaba la rama de mes futuro más abajo.
+    cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
       if(tareaGastoDoneExacta(id,new RegExp(c.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i')))out.push({l:c.l,a:moneyFromStr(c.amt),drill:null});
     });
     return out.filter(x=>x.a>0);
@@ -2575,7 +2684,7 @@ const CATEGORIAS_POOL=['Mercado','Compartir Familiar'];
 // en el registro (nextAfter/renderReg), (b) filtrar qué ve Massiel
 // (categoriaSpendForMonth). Regla de default sugerida por Jofre: movimientos
 // en TR Massiel son compartidos por default (esa cuenta es el fondo familiar).
-const MIXED_OWNERSHIP_CATS=['Personales','Salud'];
+const MIXED_OWNERSHIP_CATS=['Personales','Salud','Deporte','Carro/Moto'];
 // v26 — Suma las dotaciones REALES (movimientos "aporte/dotación") que llenan
 // el fondo de un pool en el mes. Es lo que efectivamente se depositó, no el
 // presupuesto teórico. Usa la MISMA detección que el filtro de gasto.
@@ -2643,13 +2752,18 @@ function categoriaGroupTotal(cat,id){
 // Categorias que Massiel puede ver: solo donde tiene responsabilidad real
 // (55/45, 50/50, o sus propios items). Deporte/Trabajo/Remesas/Adicionales
 // son 100% Jofre o sin regla de reparto -> quedan fuera de su vista.
-const CATS_MASSIEL_VISIBLE=['Mercado','Baby J.A.','Salud','Casa','Vacaciones','Personales','Ahorro'];
+// Categorías con responsabilidad FIJA de Massiel -- siempre visibles, sin
+// excepción (confirmado por Jofre 18-ago-2026).
+const CATS_MASSIEL_VISIBLE=['Mercado','Baby J.A.','Casa','Compartir Familiar','Vacaciones','Ahorro'];
 function categoriasVisibles(){
   // No depende de quien esta logueado (Jofre puede entrar a la seccion de
   // Massiel para monitorear) -- depende de por donde se entro: si vino del
   // flujo de Massiel (Próximos meses / su forecast), se filtra a lo que a
   // ella le corresponde. Si vino de tu Historial, se ve todo.
-  return maovEsVistaMassiel?CATS.filter(c=>CATS_MASSIEL_VISIBLE.includes(c)):CATS;
+  // Las MIXED_OWNERSHIP_CATS (Deporte/Salud/Carro-Moto/Personales) se agregan
+  // acá también -- aparecen solo cuando su total (ya filtrado por group en
+  // categoriaGroupTotal) es >0 para ella ese mes, automático, sin preguntar.
+  return maovEsVistaMassiel?CATS.filter(c=>CATS_MASSIEL_VISIBLE.includes(c)||MIXED_OWNERSHIP_CATS.includes(c)):CATS;
 }
 function categoriaNivel1HTML(id){
   const totals=categoriasVisibles().map(c=>({c,total:categoriaGroupTotal(c,id)})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
@@ -2871,14 +2985,16 @@ BAL.IBKR=0;MOVS.IBKR=[];
 const CATS=['Mercado','Baby J.A.','Deporte','Salud','Casa','Trabajo','Carro/Moto','Remesas','Compartir Familiar','Vacaciones','Personales','Ahorro','Adicionales'];
 const ACCOUNTS_LIST=[{id:'BBVA',n:'BBVA'},{id:'CAIXA',n:'Caixa'},{id:'TRJ',n:'TR Jofre'},{id:'TRJA',n:'TR J.A.'},{id:'TRM',n:'TR Massiel'},{id:'IBKR',n:'IBKR'}];
 const CUOTAS_NUEVAS=[];let reg={},regPath=[];
-function openReg(presetAcc){reg={type:null,desc:'',amount:null,category:null,account:presetAcc||null,isCuota:null,cNum:null,cType:null,shared:null,caixaCard:null,mesInicio:null,cuotaMonto:null,cuotaMontos:[],cuotasIguales:null,cuotaCuentaDeduccion:null,step:'type'};regPath=[];renderReg();document.getElementById('fov').style.display='block';}
+function openReg(presetAcc){reg={type:null,desc:'',amount:null,category:null,account:presetAcc||null,isCuota:null,cNum:null,cType:null,shared:null,caixaCard:null,mesInicio:null,cuotaMonto:null,cuotaMontos:[],cuotasIguales:null,cuotaCuentaDeduccion:null,tareaMes:null,tareaRule:null,step:'type'};regPath=[];renderReg();document.getElementById('fov').style.display='block';}
 function closeReg(){document.getElementById('fov').style.display='none';}
 function regBack(){if(!regPath.length){closeReg();return;}reg.step=regPath.pop();renderReg();}
 function regGoto(nextId){regPath.push(reg.step);reg.step=nextId;renderReg();}
 function nextAfter(id){
   switch(id){
     case 'type':return 'amount';case 'amount':return 'category';case 'category':return 'account';
-    case 'account':return reg.type==='g'?'cuotas':'confirm';
+    case 'account':return reg.type==='t'?'tareaMes':(reg.type==='g'?'cuotas':'confirm');
+    case 'tareaMes':return POOL_FUNDED_CATS.includes(reg.category)?'confirm':'tareaReparto';
+    case 'tareaReparto':return 'confirm';
     case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)?'ownership':'confirm');
     case 'ownership':return 'confirm';
     case 'cType':return reg.cType==='aplazado'?'shared':'cNum';
@@ -2918,6 +3034,10 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
 function renderRegSummary(){
   const accName=ACC_META[reg.account]?ACC_META[reg.account].n:reg.account;
   const cuotaCuenta=reg.cuotaCuentaDeduccion?ACC_META[reg.cuotaCuentaDeduccion].n:accName;
+  if(reg.type==='t'){
+    const rows=[['Tipo','Tarea futura'],['Descripción',reg.desc||reg.category],['Monto',fmtE(reg.amount)],['Categoría',reg.category],['Cuenta pago',accName],['Mes',reg.tareaMes&&MONTHS[reg.tareaMes]?MONTHS[reg.tareaMes].name:'—'],['Responsabilidad',POOL_FUNDED_CATS.includes(reg.category)?'Cubierta por el Fondo Mutuo':(reg.tareaRule||'—')]];
+    return `<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CONFIRMAR</div>`+rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)"><div style="font-size:12px;color:var(--t2)">${r[0]}</div><div style="font-size:12px;color:var(--t1);font-weight:600;text-align:right">${r[1]}</div></div>`).join('');
+  }
   let rows=[['Tipo',reg.type==='g'?'Gasto':'Ingreso']];
   if(reg.desc)rows.push(['Descripción',reg.desc]);
   if(reg.isCuota&&reg.cType==='frac'){const cuotasTotal=reg.cuotasIguales?reg.cNum*reg.cuotaMonto:reg.cuotaMontos.reduce((s,x)=>s+x,0);const total=(reg.amount||0)+cuotasTotal;const hasHoy=reg.amount>0;if(hasHoy)rows.push(['Cuota 1 (hoy)',fmtE(reg.amount)]);if(reg.cuotasIguales){rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+' × '+fmtE(reg.cuotaMonto)]);}else{rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+(hasHoy?' cuotas adicionales variables':' cuotas variables')]);}rows.push(['Total estimado',fmtE(total)]);}
@@ -2931,10 +3051,12 @@ function renderReg(){
   const body=document.getElementById('reg-body'),nav=document.getElementById('reg-nav');
   const backBtn=`<button onclick="regBack()" style="flex:0 0 44px;height:44px;border-radius:12px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center"><i class="ti ti-arrow-left" style="font-size:16px;color:var(--t2)"></i></button>`;
   let h='';
-  if(reg.step==='type'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿GASTO O INGRESO?</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('type','g','type')" style="padding:18px 10px;border-radius:14px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">− Gasto</button><button onclick="pick('type','i','type')" style="padding:18px 10px;border-radius:14px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">+ Ingreso</button></div>`;nav.innerHTML=regPath.length?backBtn:'';}
+  if(reg.step==='type'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿QUÉ QUIERES REGISTRAR?</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('type','g','type')" style="padding:18px 10px;border-radius:14px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">− Gasto</button><button onclick="pick('type','i','type')" style="padding:18px 10px;border-radius:14px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">+ Ingreso</button></div><button onclick="pick('type','t','type')" style="width:100%;margin-top:8px;padding:14px 10px;border-radius:14px;border:1px dashed var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">📅 Tarea futura<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Programar un gasto para este mes u otro más adelante (ej. hotel, cita) sin registrarlo como movimiento de hoy</div></button>`;nav.innerHTML=regPath.length?backBtn:'';}
   else if(reg.step==='amount'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">MONTO</div><div style="background:var(--bg);border-radius:13px;padding:9px 14px;border:1px solid var(--bd);display:flex;align-items:center;gap:5px;margin-bottom:10px"><span style="font-size:22px;font-weight:300;color:var(--t3)">€</span><input type="text" inputmode="decimal" placeholder="0,00" id="reg-amt" value="${reg.amount??''}" style="flex:1;background:transparent;border:none;outline:none;font-size:28px;font-weight:700;color:var(--t1);width:100%"></div><div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">DESCRIPCIÓN <span style="font-weight:400">(opcional)</span></div><input type="text" id="reg-desc" placeholder="Ej. Mercadona sábado" value="${reg.desc||''}" style="width:100%;background:var(--bg);border-radius:12px;padding:10px 14px;border:1px solid var(--bd2);outline:none;font-size:13px;color:var(--t1)">`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmAmount()">Siguiente</button>`;}
   else if(reg.step==='category'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CATEGORÍA</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${CATS.map(c=>`<button onclick="pick('category','${c}','category')" class="cat-c${reg.category===c?' on':''}">${c}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='account'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CUENTA</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${ACCOUNTS_LIST.map(a=>`<button onclick="pick('account','${a.id}','account')" class="acc-c${reg.account===a.id?' on':''}">${a.n}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='tareaMes'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const meses=MONTH_ORDER.filter((k,i)=>i>=(ai<0?0:ai));h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿PARA QUÉ MES ES ESTA TAREA?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('tareaMes','${m}','tareaMes')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='tareaReparto'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿CÓMO SE REPARTE?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">"${reg.category}" no tiene un reparto fijo conocido -- indícalo para que se sume bien al mes de ${reg.tareaMes&&MONTHS[reg.tareaMes]?MONTHS[reg.tareaMes].name:'destino'}.</div><div style="display:flex;flex-direction:column;gap:8px">${['55/45','50/50','Solo Jofre','Solo Massiel'].map(r=>`<button onclick="reg.tareaRule='${r}';regGoto(nextAfter('tareaReparto'))" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${r}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='cuotas'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿COMPRA A CUOTAS?</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('isCuota',true,'cuotas')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí</button><button onclick="pick('isCuota',false,'cuotas')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No</button></div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='cType'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿FRACCIONADO O APLAZADO?</div><div style="display:flex;flex-direction:column;gap:8px"><button onclick="pick('cType','frac','cType')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Fraccionado<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Cuota 1 hoy + cuotas mensuales adicionales</div></button><button onclick="pick('cType','aplazado','cType')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Aplazado fin de mes<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Pago único a fin de mes · sin cuotas</div></button></div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='cNum'){const hasHoy=reg.amount>0;const cNumHelp=hasHoy?`Hoy pagas ${fmtE(reg.amount)} (Cuota 1). Indica cuántas cuotas MÁS quedan, sin contar la de hoy.`:'No hay pago hoy — indica cuántas cuotas en total (la primera cae el mes de inicio que elijas).';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿CUÁNTAS CUOTAS ${hasHoy?'ADICIONALES':''}?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${cNumHelp}</div><input type="number" inputmode="numeric" placeholder="Ej. 12" id="reg-cnum" value="${reg.cNum??''}" style="width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:13px;padding:12px 14px;font-size:18px;font-weight:700;color:var(--t1);outline:none">`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmCNum()">Siguiente</button>`;}
@@ -2966,6 +3088,27 @@ function saveReg(){
       return;
     }
     regMov(reg.account,label,reg.amount,true,reg.category);
+  }
+  else if(reg.type==='t'){
+    const isPool=POOL_FUNDED_CATS.includes(reg.category);
+    const targetMonth=reg.tareaMes||ACTIVE_ID;
+    if(isPool){
+      TAREAS_PROGRAMADAS[targetMonth]=TAREAS_PROGRAMADAS[targetMonth]||[];
+      TAREAS_PROGRAMADAS[targetMonth].push({id:'prog-'+Date.now(),l:label,a:reg.amount,acc:reg.account,pool:true});
+    }else{
+      pushCuotaToMonths(targetMonth,1,reg.amount,label,[cuentaN,reg.tareaRule||'Solo Jofre'],{offset:0});
+    }
+    // Refrescar el mes elegido si ya está cargado en memoria, para que la
+    // tarea aparezca de inmediato -- mismo criterio de reconciliación que
+    // execDelete/applyState (fondeo no-done se recalcula fresco, el resto
+    // respeta lo que ya había).
+    if(MONTH_PAGOS[targetMonth]){
+      const prevById={};MONTH_PAGOS[targetMonth].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
+      const freshP=buildMonthPagos(targetMonth);
+      freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!(np.cat==='enviar'&&!prev.done))np.amt=prev.amt;}});
+      MONTH_PAGOS[targetMonth]=freshP;
+    }
+    updBbvaBadge();
   }
   else if(!reg.isCuota){regMov(reg.account,label,reg.amount,false,reg.category,reg.group);}
   else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined});if(reg.account==='CAIXA')regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0});}
@@ -3205,7 +3348,7 @@ async function saveState(){
           :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
       );
     });
-    const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MOVS,CUOTAS_NUEVAS};
+    const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS,CUOTAS_NUEVAS};
     const stateJson=JSON.stringify(state);
     await _fbSetDoc(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
     try{localStorage.setItem(STORAGE_KEY,stateJson);}catch(e){}
@@ -3272,6 +3415,20 @@ function applyState(s){
       const ids=new Set([...(DET_MONTH_REMOVED[k][mid]||[]),...(s.DET_MONTH_REMOVED[k][mid]||[])]);
       DET_MONTH_REMOVED[k][mid]=[...ids];
     });
+  });
+  // MONTH_PAGOS_REMOVED: union por mes, igual criterio que DET_MONTH_REMOVED --
+  // solo crece, nunca se pisa una eliminación ya hecha.
+  if(s.MONTH_PAGOS_REMOVED)Object.keys(s.MONTH_PAGOS_REMOVED).forEach(mid=>{
+    const ids=new Set([...(MONTH_PAGOS_REMOVED[mid]||[]),...(s.MONTH_PAGOS_REMOVED[mid]||[])]);
+    MONTH_PAGOS_REMOVED[mid]=[...ids];
+  });
+  // TAREAS_PROGRAMADAS: unión por id dentro de cada mes -- lo fresco de
+  // Firestore pisa en caso de empate de id (mismo criterio que MONTHS[k]).
+  if(s.TAREAS_PROGRAMADAS)Object.keys(s.TAREAS_PROGRAMADAS).forEach(mid=>{
+    const byId={};
+    (TAREAS_PROGRAMADAS[mid]||[]).forEach(x=>{byId[x.id]=x;});
+    (s.TAREAS_PROGRAMADAS[mid]||[]).forEach(x=>{byId[x.id]=x;});
+    TAREAS_PROGRAMADAS[mid]=Object.values(byId);
   });
   if(s.MOVS)Object.keys(s.MOVS).forEach(k=>{MOVS[k]=s.MOVS[k];});
   snapshotMovsBaseline();
