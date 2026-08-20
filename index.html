@@ -2399,7 +2399,10 @@ function categoriaFijosDetalle(cat,id){
   const futuro=esMesFuturo(id);
   if(esJunioHistorico(id)){
     // Junio pre-sistema: total histórico por categoría (una línea de resumen).
-    const v=JUNIO_HISTORICO[cat]||0;
+    // v59 -- en categorías ITEM_FILTERED (Personales/Deporte), Massiel ve
+    // JUNIO_HISTORICO_MASSIEL (solo su parte), no el agregado completo -- ver
+    // nota junto a esa constante.
+    const v=(maovEsVistaMassiel&&MIXED_ITEM_FILTERED_CATS.includes(cat))?(JUNIO_HISTORICO_MASSIEL[cat]||0):(JUNIO_HISTORICO[cat]||0);
     return v>0?[{l:cat,a:v,drill:null}]:[];
   }
   if(!futuro){
@@ -2436,11 +2439,16 @@ function categoriaFijosDetalle(cat,id){
         tareasGastoEjecutadas(id,'Personales').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
       }
     }else if(cat==='Ahorro'){
-      // Ahorro (50/50) por ejecución de sus depósitos. Fondo Emergencia,
-      // Inversión/IBKR. (Renting->Carro/Moto, Fondo Mutuo->Compartir Familiar
-      // en la vista de Jofre.) v39 — en la vista de Massiel, Carro/Moto y
-      // Compartir Familiar se consolidan AQUÍ como líneas de nivel 2: ella ve
-      // "Ahorro" como una sola categoría de nivel 1.
+      // Ahorro (50/50) por ejecución de sus depósitos: Fondo Emergencia,
+      // Inversión/IBKR. (Renting->Carro/Moto, Fondo Mutuo->Compartir Familiar,
+      // ambas ya categorías independientes -- ver v59 abajo.)
+      // v59 — ANTES (v39) acá, en la vista de Massiel, se plegaban Carro/Moto
+      // y Compartir Familiar adentro de "Ahorro" para que ella viera una sola
+      // categoría consolidada. Pero Carro/Moto ya tiene visibilidad propia
+      // (MIXED_FULL_VISIBILITY_CATS) y Compartir Familiar ya era visible por
+      // su cuenta (CATS_MASSIEL_VISIBLE) -- ese plegado DUPLICABA el mismo
+      // dinero: aparecía adentro de "Ahorro" Y de nuevo como su propia
+      // tarjeta. Confirmado por Jofre 20-ago-2026 -- se elimina el plegado.
       itemsForKey('ahorro',id).forEach(x=>{
         if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
         let hecho=false;
@@ -2449,10 +2457,6 @@ function categoriaFijosDetalle(cat,id){
         else hecho=tareaEnviarDone(id,new RegExp(x.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'));
         if(hecho)out.push({l:x.l,a:x.a,drill:null});
       });
-      if(maovEsVistaMassiel){
-        categoriaFijosDetalle('Carro/Moto',id).forEach(r=>out.push(r));
-        categoriaFijosDetalle('Compartir Familiar',id).forEach(r=>out.push(r));
-      }
     }else if(cat==='Compartir Familiar'){
       // Fondo Mutuo: esto es la ASIGNACIÓN mensual (depósito TR Jofre done),
       // no el gasto real -- casi siempre se gasta más del fondo de lo que
@@ -2525,14 +2529,12 @@ function categoriaFijosDetalle(cat,id){
   }else if(cat==='Vacaciones'){
     itemsForKey('ahorro',id).filter(x=>x.key==='vacaciones').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }else if(cat==='Ahorro'){
+    // v59 -- igual que en meses reales: no se pliega Carro/Moto ni Compartir
+    // Familiar acá, quedan como categorías propias (ver D8).
     itemsForKey('ahorro',id).forEach(x=>{
       if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
       out.push({l:x.l,a:x.a,drill:null});
     });
-    if(maovEsVistaMassiel){
-      categoriaFijosDetalle('Carro/Moto',id).forEach(r=>out.push(r));
-      categoriaFijosDetalle('Compartir Familiar',id).forEach(r=>out.push(r));
-    }
   }else if(cat==='Personales'){
     itemsForKey('personales',id).filter(x=>x.id!=='per1'&&x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }
@@ -2751,8 +2753,26 @@ const JUNIO_HISTORICO={
 };
 const JUNIO_ID='jun';
 function esJunioHistorico(id){return id===JUNIO_ID;}
+// v59 -- Junio pre-sistema es un agregado FIJO por categoria (arriba), sin
+// items para filtrar por group. Para las categorias ITEM_FILTERED
+// (Personales/Deporte) hace falta un agregado APARTE con solo la parte de
+// Massiel, si no el total completo (con gasto 100% Jofre adentro) se le
+// mostraba igual. Reconstruido del desglose ya comentado en JUNIO_HISTORICO:
+//  Personales 84,80 = Transporte 10,80 (Jofre) + Barberia 20 (Jofre) +
+//    Uñas Massiel 33 + Transporte Massiel 21 -> su parte = 54,00.
+//  Deporte 76,67 = GENUA 50 (Jofre) + 24 Segons 26,67 (tag 'Solo Jofre' en
+//    cuotasFor) -> su parte = 0.
+// Salud y Carro/Moto NO llevan entrada acá: son FULL_VISIBILITY, Massiel ve
+// el agregado JUNIO_HISTORICO completo igual que Jofre, sin split.
+const JUNIO_HISTORICO_MASSIEL={'Personales':54.00,'Deporte':0};
 function categoriaGroupTotal(cat,id){
-  if(esJunioHistorico(id))return JUNIO_HISTORICO[cat]||0;
+  if(esJunioHistorico(id)){
+    // v59 -- ver nota en JUNIO_HISTORICO_MASSIEL: Personales/Deporte usan su
+    // agregado filtrado en la vista de Massiel, el resto (incl. Salud/Carro-
+    // Moto, FULL_VISIBILITY) sigue con el agregado completo.
+    if(maovEsVistaMassiel&&MIXED_ITEM_FILTERED_CATS.includes(cat))return JUNIO_HISTORICO_MASSIEL[cat]||0;
+    return JUNIO_HISTORICO[cat]||0;
+  }
   if(esMesFuturo(id))return Math.round(categoriaFijosDetalle(cat,id).reduce((s,x)=>s+x.a,0)*100)/100;
   const reg=categoriaSpendForMonth(id)[cat]||0;
   if(CATEGORIAS_POOL.includes(cat))return reg;
