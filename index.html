@@ -1605,16 +1605,20 @@ const ONAIR_SCHEDULE={
   // Matrícula + Fianza/Garantía de agosto ya están pagadas y registradas
   // como movimiento en BBVA ("Garantia - On Air", 5/8) -- no se agregan acá
   // como cobro nuevo para no duplicar.
-  // v61 -- Jofre confirmo el calendario real del contrato (21-ago-2026):
-  // cuotas cada 28 dias, cobro miercoles. Cuota 05/08 (19,96) y cuota
-  // 02/09 (43,96) caen ANTES de la nomina de septiembre (el llega el
-  // penultimo dia habil del mes -- 29/09/2026 -- y la de agosto ya cayo
-  // el 28/08/2026), asi que ambas se pagan con nomina de AGOSTO. La
-  // siguiente cuota, 30/09, es la unica que cae DESPUES de la nomina de
-  // sep y por eso es la unica que realmente pertenece a septiembre.
-  ago:[{tipo:'matricula',monto:30},{tipo:'mensualidad',monto:19.96},{tipo:'mensualidad',monto:43.96}],
+  // v62 -- CORRECCION de v61 (Jofre senalo el error 21-ago): la nomina de un
+  // mes X financia los GASTOS del mes SIGUIENTE en el sistema (nomina julio ->
+  // gastos agosto; nomina agosto -> gastos septiembre; nomina septiembre ->
+  // gastos octubre) -- v61 lo tenia invertido. Cuota 05/08 (19,96) se paga con
+  // nomina de julio -> pertenece a agosto (sin cambio). Cuota 02/09 (43,96) se
+  // paga con nomina de agosto (cae entre pago ago 28/08 y pago sep ~29/09) ->
+  // pertenece a SEPTIEMBRE (se revierte el movimiento erroneo de v61 a agosto).
+  // Cuota 30/09 (43,96) cae DESPUES del pago de septiembre -> se paga con
+  // nomina de septiembre -> pertenece a OCTUBRE junto con la cuota 28/10
+  // (tambien cubierta por nomina de septiembre) -- por eso octubre queda con
+  // dos mensualidades.
+  ago:[{tipo:'matricula',monto:30},{tipo:'mensualidad',monto:19.96}],
   sep:[{tipo:'mensualidad',monto:43.96}],
-  oct:[{tipo:'mensualidad',monto:43.96},{tipo:'mantenimiento',monto:10}]
+  oct:[{tipo:'mensualidad',monto:43.96},{tipo:'mensualidad',monto:43.96},{tipo:'mantenimiento',monto:10}]
   // nov+ → 1 mensualidad default (43,96). El mantenimiento anual es un cargo
   // de calendario del gimnasio, no de ciclo -- revisar si se repite en oct/27
   // cuando llegue esa fecha (no asumir).
