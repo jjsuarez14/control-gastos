@@ -2182,6 +2182,7 @@ const MASSIEL_TASKS=[
 ];
 let massielDone={'m-yt':true,'m-rem':true,'m-per':true,'m-mrc':true,'m-biz':true};
 let massielApplied={}; // T4: monto aplicado por tarea, para revertir exacto al desmarcar
+let massielBizumOverride={}; // v64: monto de Bizum editado a mano por mes (ACTIVE_ID), null/undefined = usa el calculado
 let ytTCMes={jun:1034};
 let maovMode=null;
 // TC EUR→CLP: fuente open.er-api.com (ExchangeRate-API open access), gratis,
@@ -2238,6 +2239,8 @@ function syncMassielTaskAmounts(id){
   }
 }
 function calcBizum(){const usados=MASSIEL_TASKS.reduce((s,t)=>s+t.amt,0);return Math.max(0,parseFloat((massielTotal()-usados).toFixed(2)));}
+function effectiveBizum(){const ov=massielBizumOverride[ACTIVE_ID];return ov!=null?ov:calcBizum();}
+async function editBizumAmount(){const calc=calcBizum();const current=effectiveBizum();const raw=await askAmount('Editar Bizum a Jofre','Calculado: '+fmtE(calc)+' · edítalo si el monto real difiere',current);if(raw==null)return;const clean=String(raw).trim().replace(/\s/g,'').replace(/\./g,'').replace(',','.');const num=parseFloat(clean);if(clean===''||isNaN(num)||num<0){toast('Monto inválido, ingresa solo números','var(--rd)');return;}massielBizumOverride[ACTIVE_ID]=Math.round(num*100)/100;saveState();renderMaTasksInto();}
 function renderMaTile(){
   const card=document.getElementById('ma-status-card');if(!card)return;
   syncMassielTaskAmounts(ACTIVE_ID);
@@ -2249,7 +2252,7 @@ function renderMaTile(){
 function showMaTasks(){maovMode='tasks';renderMaTasksInto();document.getElementById('maov').style.display='block';}
 function renderMaTasksInto(){
   syncMassielTaskAmounts(ACTIVE_ID);
-  const bizum=calcBizum();
+  const bizum=effectiveBizum();
   const doneCount=MASSIEL_TASKS.filter(t=>massielDone[t.id]).length+(massielDone['m-biz']?1:0);
   const allDone=doneCount===5;
   let html=`<div style="padding:16px 16px 4px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">Tareas de ${MONTHS[ACTIVE_ID].name.split(' ')[0].toLowerCase()}</div><div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">${allDone?'Completadas':doneCount+'/5 marcadas'}</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:10px 16px 16px">`;
@@ -2262,7 +2265,7 @@ function renderMaTasksInto(){
   });
   const bizDone=!!massielDone['m-biz'];
   const bizEnabled=MASSIEL_TASKS.every(t=>massielDone[t.id]);
-  html+=`<div onclick="toggleMassiel('m-biz')" style="margin-top:10px;background:rgba(232,170,34,.15);border:1px solid rgba(232,170,34,.3);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;opacity:${bizEnabled||bizDone?'1':'.45'}"><div style="display:flex;align-items:center;gap:8px"><div style="width:18px;height:18px;border-radius:5px;border:2px solid ${bizDone?'#E8AA22':'rgba(232,170,34,.5)'};background:${bizDone?'#E8AA22':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${bizDone?'<i class="ti ti-check" style="font-size:11px;color:#3D2E04"></i>':''}</div><div><div style="font-size:12px;color:#E8AA22;font-weight:600">Bizum a Jofre</div><div style="font-size:9px;color:rgba(232,170,34,.7);margin-top:1px">Resto de su aporte</div></div></div><div style="font-size:17px;font-weight:800;color:#E8AA22">${fmtE(bizum)}</div></div>`;
+  html+=`<div onclick="toggleMassiel('m-biz')" style="margin-top:10px;background:rgba(232,170,34,.15);border:1px solid rgba(232,170,34,.3);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;opacity:${bizEnabled||bizDone?'1':'.45'}"><div style="display:flex;align-items:center;gap:8px"><div style="width:18px;height:18px;border-radius:5px;border:2px solid ${bizDone?'#E8AA22':'rgba(232,170,34,.5)'};background:${bizDone?'#E8AA22':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${bizDone?'<i class="ti ti-check" style="font-size:11px;color:#3D2E04"></i>':''}</div><div><div style="font-size:12px;color:#E8AA22;font-weight:600">Bizum a Jofre</div><div style="font-size:9px;color:rgba(232,170,34,.7);margin-top:1px">Resto de su aporte${massielBizumOverride[ACTIVE_ID]!=null?' · editado':''}</div></div></div><div style="display:flex;align-items:center;gap:6px"><div style="font-size:17px;font-weight:800;color:#E8AA22">${fmtE(bizum)}</div>${bizDone?'':'<i class="ti ti-pencil" onclick="event.stopPropagation();editBizumAmount()" style="font-size:13px;color:rgba(232,170,34,.7);cursor:pointer;padding:4px"></i>'}</div></div>`;
   html+=allDone?`<button onclick="showMaForecast()" class="btng" style="margin-top:16px">Ver mi mes y próximos meses</button>`:`<div style="margin-top:16px;font-size:11px;color:rgba(255,255,255,.4);text-align:center">Completa las 5 tareas para desbloquear la previsión</div>`;
   html+='</div>';
   document.getElementById('maov-c').innerHTML=html;
@@ -2982,7 +2985,7 @@ async function toggleMassiel(id){
   // total, etc.) y descuadrar el saldo. Guardamos el monto aplicado por tarea.
   massielApplied=massielApplied||{};
   if(id==='m-mrc'){const t=MASSIEL_TASKS.find(x=>x.id==='m-mrc');const amt=turningOn?t.amt:(massielApplied['m-mrc']!=null?massielApplied['m-mrc']:t.amt);regMov('TRM','Mercado · aporte Massiel',amt,turningOn);massielApplied['m-mrc']=turningOn?amt:null;}
-  if(id==='m-biz'){const amt=turningOn?calcBizum():(massielApplied['m-biz']!=null?massielApplied['m-biz']:calcBizum());regMov('BBVA','Bizum de Massiel',amt,turningOn);massielApplied['m-biz']=turningOn?amt:null;}
+  if(id==='m-biz'){const amt=turningOn?effectiveBizum():(massielApplied['m-biz']!=null?massielApplied['m-biz']:calcBizum());regMov('BBVA','Bizum de Massiel',amt,turningOn);massielApplied['m-biz']=turningOn?amt:null;}
   // v56 — m-yt/m-rem/m-per ya NO registran movimiento en ninguna cuenta (no es
   // dinero que sale de una cuenta de Jofre): quedan como "ejecutado" en su
   // categoría real de Previsión, visible en Historial/Categorías para ambos.
@@ -3403,7 +3406,7 @@ async function saveState(){
           :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
       );
     });
-    const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS,CUOTAS_NUEVAS};
+    const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS,CUOTAS_NUEVAS};
     const stateJson=JSON.stringify(state);
     await _fbSetDoc(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
     try{localStorage.setItem(STORAGE_KEY,stateJson);}catch(e){}
@@ -3440,6 +3443,7 @@ function applyState(s){
   // v14 (jul-30): el bloque pagosByMonth se movió al FINAL de applyState (ver nota abajo).
   if(s.massielDone)massielDone=s.massielDone;
   if(s.massielApplied)massielApplied=s.massielApplied;
+  if(s.massielBizumOverride)massielBizumOverride=s.massielBizumOverride;
   if(typeof s.massielYtAmt==='number')MASSIEL_TASKS[0].amt=s.massielYtAmt;
   if(s.HISTORIAL)HISTORIAL=s.HISTORIAL;
   Object.keys(s.mCats||{}).forEach(k=>{if(MONTHS[k]&&s.mCats[k])MONTHS[k].cats=s.mCats[k];});
