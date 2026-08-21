@@ -2371,8 +2371,8 @@ function fijoCasaEjecutado(id,pattern){
 const TAREA_CAT_RULES=[
   {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Limpieza|^YouTube/i,cat:'Casa'},
   {re:/^Colegio/i,cat:'Baby J.A.'},
-  {re:/On Air|^Sweat|^Fisiosalud|^Odontolog/i,cat:'Salud'},
-  {re:/^GENUA|CB Xirivella|^Deporte/i,cat:'Deporte'},
+  {re:/On Air|^Sweat|^Odontolog/i,cat:'Salud'},
+  {re:/^GENUA|CB Xirivella|^Deporte|^Fisiosalud/i,cat:'Deporte'},
   {re:/^Claude/i,cat:'Trabajo'},
   {re:/^Renting/i,cat:'Carro/Moto'},
   {re:/^Vacaciones/i,cat:'Compartir Familiar'},
@@ -2572,7 +2572,7 @@ function categoriaFijosDetalle(cat,id){
 const CATEGORIA_LABEL_OVERRIDES=[
   {match:/Caf[eé] Aeropuerto|Uber Aeropuerto|Starbucks|^Uber\b/i,cat:'Trabajo'},
   {match:/Odont[oó]logo|Empalme/i,cat:'Salud'},
-  {match:/Fisiosalud/i,cat:'Salud'}
+  {match:/Fisiosalud/i,cat:'Deporte'}
 ];
 // Reclasificacion exacta de julio dada por Jofre (17-jul), item por item —
 // tiene prioridad sobre los overrides genericos y el default por cuenta.
