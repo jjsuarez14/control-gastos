@@ -2571,7 +2571,8 @@ function categoriaFijosDetalle(cat,id){
 // formulario y nunca pasan por acá.
 const CATEGORIA_LABEL_OVERRIDES=[
   {match:/Caf[eé] Aeropuerto|Uber Aeropuerto|Starbucks|^Uber\b/i,cat:'Trabajo'},
-  {match:/Odont[oó]logo|Empalme/i,cat:'Salud'}
+  {match:/Odont[oó]logo|Empalme/i,cat:'Salud'},
+  {match:/Fisiosalud/i,cat:'Salud'}
 ];
 // Reclasificacion exacta de julio dada por Jofre (17-jul), item por item —
 // tiene prioridad sobre los overrides genericos y el default por cuenta.
@@ -3240,8 +3241,17 @@ function mergePagosConDelta(freshArr,baseArr,actualArr){
   const baseById={};baseArr.forEach(p=>{baseById[p.id]=p;});
   const actualById={};actualArr.forEach(p=>{actualById[p.id]=p;});
   const freshById={};freshArr.forEach(p=>{freshById[p.id]=p;});
-  // Empezar de lo fresco; aplicar cambios de esta sesión por tarea.
-  const resultado=freshArr.map(fp=>{
+  // v65 — antes, si esta sesión no tenía una tarea (actualById sin esa id), se
+  // asumía siempre "no la conozco, dejo la fresca" -- pero esa misma rama
+  // capturaba también el caso real de "la borré" (tarea presente en mi
+  // baseline y ausente de mi actual), así que una tarea eliminada localmente
+  // (ej. placeholder corrupto purgado por el auto-saneamiento, o un
+  // pagosByMonth eliminado a mano) volvía a aparecer en el siguiente
+  // saveState() porque Firestore todavía la tenía. Mismo patrón que ya usa
+  // mergeArrByIdDelta (DET_MONTH_OVERRIDES/DET_EXTRA) -- se adopta acá.
+  const removidosPorMi=new Set(baseArr.filter(p=>!actualById[p.id]).map(p=>p.id));
+  // Empezar de lo fresco (menos lo eliminado); aplicar cambios de esta sesión por tarea.
+  const resultado=freshArr.filter(fp=>!removidosPorMi.has(fp.id)).map(fp=>{
     const ap=actualById[fp.id],bp=baseById[fp.id];
     if(!ap)return fp;                         // esta sesión no tiene esa tarea: dejar lo fresco
     const out=Object.assign({},fp);
