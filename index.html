@@ -1605,8 +1605,15 @@ const ONAIR_SCHEDULE={
   // Matrícula + Fianza/Garantía de agosto ya están pagadas y registradas
   // como movimiento en BBVA ("Garantia - On Air", 5/8) -- no se agregan acá
   // como cobro nuevo para no duplicar.
-  ago:[{tipo:'matricula',monto:30},{tipo:'mensualidad',monto:19.96}],
-  sep:[{tipo:'mensualidad',monto:43.96},{tipo:'mensualidad',monto:43.96}],
+  // v61 -- Jofre confirmo el calendario real del contrato (21-ago-2026):
+  // cuotas cada 28 dias, cobro miercoles. Cuota 05/08 (19,96) y cuota
+  // 02/09 (43,96) caen ANTES de la nomina de septiembre (el llega el
+  // penultimo dia habil del mes -- 29/09/2026 -- y la de agosto ya cayo
+  // el 28/08/2026), asi que ambas se pagan con nomina de AGOSTO. La
+  // siguiente cuota, 30/09, es la unica que cae DESPUES de la nomina de
+  // sep y por eso es la unica que realmente pertenece a septiembre.
+  ago:[{tipo:'matricula',monto:30},{tipo:'mensualidad',monto:19.96},{tipo:'mensualidad',monto:43.96}],
+  sep:[{tipo:'mensualidad',monto:43.96}],
   oct:[{tipo:'mensualidad',monto:43.96},{tipo:'mantenimiento',monto:10}]
   // nov+ → 1 mensualidad default (43,96). El mantenimiento anual es un cargo
   // de calendario del gimnasio, no de ciclo -- revisar si se repite en oct/27
