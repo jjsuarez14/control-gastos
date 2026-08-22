@@ -110,6 +110,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 <div class="ov" id="fxov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="fxov-c"></div></div></div>
 <div class="ov" id="maov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="maov-c"></div></div></div>
 <div class="ov" id="fmov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="fmov-c"></div></div></div>
+<div class="ov" id="pndov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="pndov-c"></div></div></div>
 <div id="amtprompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeAmtPrompt(null)"><div style="background:#151E2E;border-radius:16px;padding:20px;width:280px;max-width:85vw"><div id="amtprompt-title" style="font-size:14px;font-weight:700;color:#fff;margin-bottom:4px">Monto</div><div id="amtprompt-sub" style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:12px"></div><input id="amtprompt-input" type="text" inputmode="decimal" autocomplete="off" style="width:100%;padding:11px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;font-size:16px;box-sizing:border-box" onkeydown="if(event.key==='Enter')confirmAmtPrompt()"/><div style="display:flex;gap:8px;margin-top:14px"><button onclick="closeAmtPrompt(null)" style="flex:1;padding:11px;border-radius:10px;border:none;background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:13px">Cancelar</button><button onclick="confirmAmtPrompt()" style="flex:1;padding:11px;border-radius:10px;border:none;background:#0EC9BC;color:#04211E;font-weight:700;cursor:pointer;font-size:13px">Confirmar</button></div></div></div>
 <div class="mov-full" id="mov-full">
   <div style="padding:16px 18px 0;display:flex;align-items:center;gap:12px;flex-shrink:0">
@@ -237,9 +238,9 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
       <div style="position:relative;z-index:1">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div style="width:34px;height:34px;border-radius:11px;background:#4C8DFA22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-building-bank" style="font-size:17px;color:#4C8DFA"></i></div><div><div style="font-size:10px;font-weight:700;color:#4C8DFA;letter-spacing:.06em;margin-bottom:4px">BBVA · CUENTA PRINCIPAL</div><div style="font-family:var(--fd);font-size:34px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1" id="bbva-tile-bal">€135<span style="font-size:18px;font-weight:600">,12</span></div></div></div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3);margin-top:6px"></i></div>
       <div style="border-top:1px solid var(--bd);padding-top:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Disponible</div><div style="font-size:13px;font-weight:700;color:var(--tl)" id="bbva-disponible">€0,00</div></div>
+        <div style="cursor:pointer" onclick="event.stopPropagation();showA('BBVA')"><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Disponible</div><div style="font-size:13px;font-weight:700;color:var(--tl)" id="bbva-disponible">€0,00</div></div>
         <div style="cursor:pointer" onclick="event.stopPropagation();showFondoMutuoMassiel()"><div style="font-size:9px;color:#8B6FDF;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Fondo Mutuo</div><div style="font-size:13px;font-weight:700;color:#8B6FDF" id="bbva-tile-fmutuo">€0,00</div></div>
-        <div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Pdte. cobro</div><div style="font-size:13px;font-weight:700;color:var(--rd)" id="bbva-pendiente">€0,00</div></div>
+        <div style="cursor:pointer" onclick="event.stopPropagation();showPendienteAccount('BBVA')"><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Pdte. cobro</div><div style="font-size:13px;font-weight:700;color:var(--rd)" id="bbva-pendiente">€0,00</div></div>
       </div>
       </div>
     </div>
@@ -782,8 +783,7 @@ function renderAccountOverlay(accId){
   else{waitMsg=accId==='EFECTIVO'?'Pendiente de retirar el efectivo desde BBVA':'Pendiente de recibir la transferencia desde BBVA';}
   if(mass){/* saltar por completo el bloque de tareas/mensajes de estado */}
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
-  else if(pend.length){html+=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;pend.forEach(p=>{const canDel=p.cat==='gasto'&&!p.sistema;const delIcon=canDel?`<i class="ti ti-trash" onclick="event.stopPropagation();deleteTareaPendiente('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--rd);padding:4px 2px 4px 6px;cursor:pointer"></i>`:'';html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i>${delIcon}</div>`;});html+='</div>';}
-  else{html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--tl2);border:1px solid rgba(14,201,188,.25);display:flex;gap:8px;align-items:center"><i class="ti ti-check" style="font-size:15px;color:var(--tl)"></i><div style="font-size:12px;color:var(--tl);font-weight:600">Sin tareas pendientes</div></div></div>`;}
+  else{html+=pendTareasRowsHTML(pend);}
   // La auditoría balance-vs-movimientos existe como cálculo interno
   // (auditarCuenta / auditarTodo), consultable por consola para diagnóstico.
   // NO se renderiza en la UI: el saldo ya está cuadrado contra banca real y un
@@ -801,6 +801,38 @@ function renderAccountOverlay(accId){
   html+='</div>';
   if(!mass||accId==='TRM'){html+=`<div style="padding:14px 16px"><button class="btng" onclick="document.getElementById('aov').style.display='none';openReg('${accId}')">+ Registrar movimiento</button></div>`;}
   document.getElementById('aov-c').innerHTML=html;
+}
+// pendTareasRowsHTML: markup compartido de "TAREAS DEL MES" (lista + estado
+// vacio "Sin tareas pendientes") -- usado por renderAccountOverlay (vista
+// completa de la cuenta) y por renderPendienteAccountOverlay (v67d, modal
+// enfocado solo en pendientes, mismo patron que showFondoMutuoMassiel).
+function pendTareasRowsHTML(pend){
+  if(!pend.length)return `<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--tl2);border:1px solid rgba(14,201,188,.25);display:flex;gap:8px;align-items:center"><i class="ti ti-check" style="font-size:15px;color:var(--tl)"></i><div style="font-size:12px;color:var(--tl);font-weight:600">Sin tareas pendientes</div></div></div>`;
+  let html=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;
+  pend.forEach(p=>{
+    const canDel=p.cat==='gasto'&&!p.sistema;
+    const delIcon=canDel?`<i class="ti ti-trash" onclick="event.stopPropagation();deleteTareaPendiente('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--rd);padding:4px 2px 4px 6px;cursor:pointer"></i>`:'';
+    html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i>${delIcon}</div>`;
+  });
+  html+='</div>';
+  return html;
+}
+// renderPendienteAccountOverlay / showPendienteAccount (v67d): modal enfocado
+// SOLO en las tareas pendientes de una cuenta -- pedido explicito de Jofre
+// para que "Pdte. cobro" abra algo tan directo como ya lo hace Fondo Mutuo,
+// en vej de mandar siempre a la vista completa de la cuenta (saldo +
+// movimientos + tareas todo junto). Reusa tasksFor(accId), igual que
+// renderAccountOverlay -- misma fuente de verdad, sin duplicar logica.
+function renderPendienteAccountOverlay(accId,pend){
+  const d=ACC_META[accId];
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Pendiente de cobro</div><div style="font-size:11px;color:var(--t2)">${d.n}</div></div><button onclick="document.getElementById('pndov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  html+=pendTareasRowsHTML(pend);
+  document.getElementById('pndov-c').innerHTML=html;
+}
+function showPendienteAccount(accId){
+  const pend=(accId==='BBVA')?(nominaReg?tasksFor('BBVA'):[]):tasksFor(accId);
+  renderPendienteAccountOverlay(accId,pend);
+  document.getElementById('pndov').style.display='block';
 }
 const AHORRO_DESTINOS=[
   {key:'caixa',match:/Renting/i,label:'Caixa · Renting',color:'#F97316'},
