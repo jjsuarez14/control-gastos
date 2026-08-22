@@ -275,7 +275,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <div style="padding:10px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:9px">
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('TRM')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#D4537E;letter-spacing:.04em;margin-bottom:6px">TR MASSIEL</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-trm">€0,10</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">Mercado</div></div>
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('TRJA')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#22C55E;letter-spacing:.04em;margin-bottom:6px">TR J.A.</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-trja">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">Fondo familiar</div></div>
-    <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#8B6FDF;letter-spacing:.04em;margin-bottom:6px">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-fmutuo">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">BBVA · lectura</div></div>
+    <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#8B6FDF;letter-spacing:.04em;margin-bottom:6px">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-fmutuo">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">TR Jofre · lectura</div></div>
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('IBKR')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#4C8DFA;letter-spacing:.04em;margin-bottom:6px">IBKR · BOLSA</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1">$0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">≈ €0 · cerrada</div></div>
   </div>
   <div style="padding:8px 18px 0"><div class="lc" style="margin-bottom:0"><div style="font-size:9px;font-weight:700;color:#94A3B8;letter-spacing:.05em;margin-bottom:10px">HISTORIAL DE AHORRO</div><div id="pm-ahorro-bars" style="display:flex;align-items:flex-end;gap:8px;height:76px"></div><div id="pm-ahorro-detail"></div></div></div>
@@ -984,7 +984,7 @@ function fondoMutuoTareaLabels(monthId){
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
   const saldo=fondoMutuoDisponible(id);
-  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Dentro de BBVA · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Dentro de TR Jofre · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
@@ -1182,13 +1182,15 @@ function buildMonthPagos(id){
   // (no van a la pestana Cuotas ni a repartoMes -- ya estan cubiertos por el
   // aporte mensual a Ahorro > Fondo Mutuo; contarlos ahi tambien los pagaria
   // dos veces). Sí suman al pago real de Caixa (el TDC hay que liquidarlo) y
-  // dejan su tarea de auditoría en BBVA (v67 -- redirigido de TR Jofre).
+  // dejan su tarea de auditoría en CAIXA (corrección 22-ago: es deuda de la
+  // TDC de Caixa, no se mueve a BBVA -- solo Hotel/Regalo, que sí se pagan
+  // desde BBVA, quedaron en acc:'BBVA').
   (FONDO_MUTUO_CAIXA[id]||[]).forEach(x=>{
     if(!(x.a>0))return;
     const tid=p+x.idTrj;
     if(removedSet.has(tid))return;
     caixaSum+=x.a;
-    list.push({id:tid,l:x.lTrj,acc:'BBVA',amt:Math.round(x.a*100)/100,cat:'gasto',done:false,vacacion:true});
+    list.push({id:tid,l:x.lTrj,acc:'CAIXA',amt:Math.round(x.a*100)/100,cat:'gasto',done:false,vacacion:true});
   });
   (TAREAS_PROGRAMADAS[id]||[]).forEach(x=>{
     if(!(x.a>0))return;
@@ -1522,7 +1524,7 @@ function ahorroItemsFromSplit(total,tag){
   const s=ahorroSplit(total);
   const items=[{id:'aho-caixa-'+tag,l:'Renting',a:s.caixa,d:'Caixa',group:'compartida'}];
   if(s.emergencia>0)items.push({id:'aho-emerg-'+tag,l:'Fondo Emergencia',a:s.emergencia,d:'TR J.A. · 50% del resto'});
-  if(s.fondoMutuo>0)items.push({id:'aho-fmutuo-'+tag,l:'Fondo Mutuo',a:s.fondoMutuo,d:'BBVA · 25% del resto'});
+  if(s.fondoMutuo>0)items.push({id:'aho-fmutuo-'+tag,l:'Fondo Mutuo',a:s.fondoMutuo,d:'TR Jofre · 25% del resto'});
   if(s.inversion>0)items.push({id:'aho-inv-'+tag,l:'Inversión',a:s.inversion,d:'IBKR · 25% del resto'});
   return items;
 }
@@ -1676,7 +1678,7 @@ const HOTEL_TAREAS={
 // FONDO_MUTUO_CAIXA: aplazados TDC (Caixa) pagados con cargo al Fondo Mutuo.
 // No aparecen en la pestana Cuotas ni en repartoMes (ver comentario en
 // buildMonthPagos) -- solo suman al pago real de Caixa y a su tarea de
-// auditoria en TR Jofre. Confirmados por Jofre.
+// auditoria, también en Caixa (corrección 22-ago). Confirmados por Jofre.
 const FONDO_MUTUO_CAIXA={
   // v60 -- 'Pago - Centauro - Rent a Car' (75,71) se ANULO (renta cancelada,
   // confirmado por Jofre 21-ago-2026): se elimina de la lista. Decathlon
