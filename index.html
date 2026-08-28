@@ -110,7 +110,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 <div class="ov" id="fxov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="fxov-c"></div></div></div>
 <div class="ov" id="maov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="maov-c"></div></div></div>
 <div class="ov" id="fmov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="fmov-c"></div></div></div>
-<div class="ov" id="pndov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="pndov-c"></div></div></div>
+<div class="ov" id="pndov" onclick="if(event.target===this)closePndov()"><div class="ovc"><div id="pndov-c"></div></div></div>
 <div id="amtprompt" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeAmtPrompt(null)"><div style="background:#151E2E;border-radius:16px;padding:20px;width:280px;max-width:85vw"><div id="amtprompt-title" style="font-size:14px;font-weight:700;color:#fff;margin-bottom:4px">Monto</div><div id="amtprompt-sub" style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:12px"></div><input id="amtprompt-input" type="text" inputmode="decimal" autocomplete="off" style="width:100%;padding:11px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;font-size:16px;box-sizing:border-box" onkeydown="if(event.key==='Enter')confirmAmtPrompt()"/><div style="display:flex;gap:8px;margin-top:14px"><button onclick="closeAmtPrompt(null)" style="flex:1;padding:11px;border-radius:10px;border:none;background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:13px">Cancelar</button><button onclick="confirmAmtPrompt()" style="flex:1;padding:11px;border-radius:10px;border:none;background:#0EC9BC;color:#04211E;font-weight:700;cursor:pointer;font-size:13px">Confirmar</button></div></div></div>
 <div class="mov-full" id="mov-full">
   <div style="padding:16px 18px 0;display:flex;align-items:center;gap:12px;flex-shrink:0">
@@ -542,6 +542,17 @@ function disponibleCuenta(acc){
 }
 const MONTH_NUM={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
 function movBelongsToMonth(mv,monthId){
+  // v69 (28-ago-2026) -- Antes se infería el mes de un movimiento comparando
+  // su FECHA REAL de registro contra el mes de trabajo activo. Rompe cuando
+  // se trabaja "adelantado" (ej. septiembre activo durante agosto real): el
+  // movimiento se registra con fecha real de agosto pero pertenece al mes de
+  // trabajo septiembre -> nunca matcheaba, y el movimiento parecía invisible
+  // o "desaparecía" de la cuenta apenas se marcaba la tarea. Ahora cada
+  // movimiento nuevo se etiqueta con mesId=ACTIVE_ID al crearse (regMov /
+  // regCaixaCard / registro 'aplazado') y eso es la fuente de verdad; el
+  // chequeo por fecha real queda de fallback solo para movimientos viejos
+  // guardados antes de este fix (sin mesId).
+  if(mv.mesId)return mv.mesId===monthId;
   if(!mv.dt||mv.dt==='—')return false;
   const parts=mv.dt.split('/');if(parts.length<2)return false;
   return parseInt(parts[1],10)===MONTH_NUM[monthId];
@@ -664,14 +675,18 @@ function regMov(acc,label,amt,plus,cat,group){
   BAL[acc]=Math.round((BAL[acc]+(plus?amt:-amt))*100)/100;
   const dt=new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS[acc]=MOVS[acc]||[];
-  MOVS[acc].unshift({dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined});
+  // v69 (28-ago) -- mesId: a qué mes de TRABAJO pertenece este movimiento
+  // (ACTIVE_ID), no a qué mes calendario real fue registrado. Necesario
+  // porque se suele trabajar "adelantado" (ej. mes activo=septiembre
+  // mientras la fecha real todavía es agosto) -- ver fix en movBelongsToMonth.
+  MOVS[acc].unshift({dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:ACTIVE_ID});
   updTile();
 }
 function regCaixaCard(label,amt){
   CAIXA_TDC.disponible=Math.max(0,Math.round((CAIXA_TDC.disponible-amt)*100)/100);
   const dt=new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS.CAIXA=MOVS.CAIXA||[];
-  MOVS.CAIXA.unshift({dt:ds,l:label+' (TDC)',a:'-'+fmtE(amt),t:false});
+  MOVS.CAIXA.unshift({dt:ds,l:label+' (TDC)',a:'-'+fmtE(amt),t:false,mesId:ACTIVE_ID});
   updTile();
 }
 const MONTH_PAGOS={
@@ -719,6 +734,7 @@ const MONTH_PAGOS={
 };
 let PAGOS=MONTH_PAGOS.jun;
 let currentOverlayAcc=null;
+let currentPndovAcc=null;
 async function markPago(id){
   const p=PAGOS.find(x=>x.id===id);if(!p||p.done)return;
   if(p.amt==null){
@@ -741,7 +757,14 @@ async function markPago(id){
   }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);}
   else if(p.cat==='retiro'){regMov('BBVA',p.l,p.amt,false);regMov('EFECTIVO',p.l,p.amt,true);}
   else{regMov(p.acc,p.l,p.amt,false);if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}}
-  updBbvaBadge();updPrevCard();updTile();if(typeof renderMaTile==='function')renderMaTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);saveState();
+  updBbvaBadge();updPrevCard();updTile();if(typeof renderMaTile==='function')renderMaTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
+  // v69 (28-ago) -- el modal "Pendiente de cobro" (pndov, ej. abierto desde
+  // "Pdte. cobro" en la tarjeta BBVA) renderizaba su lista UNA vez al abrir y
+  // nunca se refrescaba tras marcar una tarea -- el check no cambiaba visualmente
+  // y había que tocarlo varias veces (cada click de más era un no-op porque la
+  // tarea ya había quedado done). Ahora se refresca igual que aov.
+  if(currentPndovAcc){const pv=(currentPndovAcc==='BBVA')?(nominaReg?tasksFor('BBVA'):[]):tasksFor(currentPndovAcc);renderPendienteAccountOverlay(currentPndovAcc,pv);}
+  saveState();
 }
 let amtPromptResolve=null;
 function askAmount(title,sub,defaultVal){
@@ -784,22 +807,25 @@ function renderAccountOverlay(accId){
   if(mass){/* saltar por completo el bloque de tareas/mensajes de estado */}
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
   else{html+=pendTareasRowsHTML(pend,ACTIVE_ID);}
-  // La auditoría balance-vs-movimientos existe como cálculo interno
-  // (auditarCuenta / auditarTodo), consultable por consola para diagnóstico.
-  // NO se renderiza en la UI: el saldo ya está cuadrado contra banca real y un
-  // panel visible solo generaría ruido en la pantalla de Jofre.
-  // v51 — Antes esto mostraba solo los últimos 8 movimientos de la cuenta,
-  // sin importar el mes (podían ser de meses distintos y aun así ocultar
-  // movimientos reales del mes actual). Ahora muestra TODOS los movimientos
-  // del mes en curso, sin límite -- para meses anteriores está Historial.
-  // Disponible para Jofre y Massiel por igual (esta sección no está gateada
-  // por `mass`). Ver auditoría CDG(9), pto. "Mercado/TRM no cuadra".
-  const movs=ordenarMovsPorFecha((MOVS[accId]||[]).filter(mv=>movBelongsToMonth(mv,ACTIVE_ID)));
-  html+=`<div id="aov-movs" style="padding:0 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">MOVIMIENTOS</div>`;
-  if(movs.length){movs.forEach(t=>{const cat=resolverCategoriaMovimiento(t,accId);html+=`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:34px;flex-shrink:0;text-align:center">${t.dt}</div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${t.l}</div><div style="font-size:9px;color:var(--t3);margin-top:1px">${cat}</div></div><div style="font-size:13px;font-weight:700;color:${t.t?'var(--tl)':'var(--rd)'};">${t.a}</div></div>`;});}
-  else html+='<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos aún</div>';
-  html+='</div>';
-  if(!mass||accId==='TRM'){html+=`<div style="padding:14px 16px"><button class="btng" onclick="document.getElementById('aov').style.display='none';openReg('${accId}')">+ Registrar movimiento</button></div>`;}
+  // v69 (28-ago) -- Antes todo el overlay (saldo+tareas+movimientos+botón)
+  // scrolleaba junto dentro de un único bloque -- en cuentas con historial
+  // largo el botón "+ Registrar movimiento" podía quedar fuera de pantalla.
+  // Ahora la lista de MOVIMIENTOS vive en su propia región con scroll propio
+  // (flex:1/overflow-y:auto, aprovechando #aov-c ya flex-column) y el botón
+  // queda fijo debajo, siempre visible. Además la lista se acota a mes activo
+  // + mes anterior (antes: solo mes activo -- y con el bug de fecha real vs
+  // mes de trabajo ni eso se veía bien, ver fix en movBelongsToMonth); los
+  // meses más viejos viven en Historial. Disponible para Jofre y Massiel por
+  // igual (esta sección no está gateada por `mass`).
+  const prevId=prevMonthIdEnOrden(ACTIVE_ID);
+  const movs=ordenarMovsPorFecha((MOVS[accId]||[]).filter(mv=>movBelongsToMonth(mv,ACTIVE_ID)||(prevId&&movBelongsToMonth(mv,prevId))));
+  const tituloMovs='MOVIMIENTOS'+(MONTHS[ACTIVE_ID]?' · '+MONTHS[ACTIVE_ID].name.split(' ')[0].toUpperCase()+(prevId&&MONTHS[prevId]?' Y '+MONTHS[prevId].name.split(' ')[0].toUpperCase():''):'');
+  let movsHtml=`<div id="aov-movs" style="padding:0 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:4px">${tituloMovs}</div>`;
+  if(movs.length){movs.forEach(t=>{const cat=resolverCategoriaMovimiento(t,accId);movsHtml+=`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:34px;flex-shrink:0;text-align:center">${t.dt}</div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${t.l}</div><div style="font-size:9px;color:var(--t3);margin-top:1px">${cat}</div></div><div style="font-size:13px;font-weight:700;color:${t.t?'var(--tl)':'var(--rd)'};">${t.a}</div></div>`;});}
+  else movsHtml+='<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos aún</div>';
+  movsHtml+='<div style="padding:12px 0 16px;text-align:center;font-size:10px;color:var(--t3)">Meses anteriores en <span style="color:var(--t2);font-weight:600">Historial</span></div></div>';
+  html+=`<div style="flex:1;overflow-y:auto;min-height:0">${movsHtml}</div>`;
+  if(!mass||accId==='TRM'){html+=`<div style="padding:14px 16px;flex-shrink:0"><button class="btng" onclick="document.getElementById('aov').style.display='none';openReg('${accId}')">+ Registrar movimiento</button></div>`;}
   document.getElementById('aov-c').innerHTML=html;
 }
 // pendTareasRowsHTML: markup compartido de "TAREAS DEL MES" (lista + estado
@@ -831,15 +857,20 @@ function pendTareasRowsHTML(pend,monthId){
 // renderAccountOverlay -- misma fuente de verdad, sin duplicar logica.
 function renderPendienteAccountOverlay(accId,pend){
   const d=ACC_META[accId];
-  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Pendiente de cobro</div><div style="font-size:11px;color:var(--t2)">${d.n}</div></div><button onclick="document.getElementById('pndov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Pendiente de cobro</div><div style="font-size:11px;color:var(--t2)">${d.n}</div></div><button onclick="closePndov()" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   html+=pendTareasRowsHTML(pend,ACTIVE_ID);
   document.getElementById('pndov-c').innerHTML=html;
 }
 function showPendienteAccount(accId){
+  currentPndovAcc=accId;
   const pend=(accId==='BBVA')?(nominaReg?tasksFor('BBVA'):[]):tasksFor(accId);
   renderPendienteAccountOverlay(accId,pend);
   document.getElementById('pndov').style.display='block';
 }
+// v69 (28-ago) -- cierre centralizado del modal Pdte. cobro: limpia
+// currentPndovAcc para que markPago() deje de intentar refrescarlo una vez
+// cerrado (evita trabajo/errores silenciosos sobre un modal ya invisible).
+function closePndov(){currentPndovAcc=null;document.getElementById('pndov').style.display='none';}
 const AHORRO_DESTINOS=[
   {key:'caixa',match:/Renting/i,label:'Caixa · Renting',color:'#F97316'},
   {key:'trja',match:/Emergencia/i,label:'TR J.A. · Emergencia',color:'#22C55E'},
@@ -1073,6 +1104,10 @@ const BASE_ID='jun';
 const MONTH_CAL=[{id:'ene',name:'Enero'},{id:'feb',name:'Febrero'},{id:'mar',name:'Marzo'},{id:'abr',name:'Abril'},{id:'may',name:'Mayo'},{id:'jun',name:'Junio'},{id:'jul',name:'Julio'},{id:'ago',name:'Agosto'},{id:'sep',name:'Septiembre'},{id:'oct',name:'Octubre'},{id:'nov',name:'Noviembre'},{id:'dic',name:'Diciembre'}];
 function monthMeta(id){return MONTH_CAL.find(m=>m.id===id);}
 function nextMonthId(id){const i=MONTH_CAL.findIndex(m=>m.id===id);return MONTH_CAL[(i+1)%12].id;}
+// v69 (28-ago) -- mes ANTERIOR dentro de la secuencia real de trabajo de la
+// app (MONTH_ORDER: jun,jul,ago,sep,...), no el mes calendario anterior --
+// para mostrar "mes activo + mes anterior" en Movimientos de cuenta.
+function prevMonthIdEnOrden(id){const i=MONTH_ORDER.indexOf(id);return i>0?MONTH_ORDER[i-1]:null;}
 function parseEuro(s){if(typeof s==='number')return s;return parseFloat(String(s).replace('€','').replace(/\./g,'').replace(',','.'))||0;}
 function fmtMoneyEs(v){return '€'+v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:true});}
 function offsetFromActive(id){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const ti=MONTH_ORDER.indexOf(id);return ti>=ai?ti-ai:null;}
@@ -3250,7 +3285,7 @@ function saveReg(){
     updBbvaBadge();
   }
   else if(!reg.isCuota){regMov(reg.account,label,reg.amount,false,reg.category,reg.group);}
-  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined});if(reg.account==='CAIXA')regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0});}
+  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});if(reg.account==='CAIXA')regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0});}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
   // v28 — Al terminar de registrar, devolver al usuario a DONDE ESTABA:
@@ -3605,11 +3640,20 @@ async function saveState(){
               // Reconstruir tareas frescas: base generada + estado (done/amt) del liviano.
               const gen=buildMonthPagos(k);
               const genById={};gen.forEach(p=>{genById[p.id]=p;});
+              // v69 (28-ago) -- mismo criterio que el fix en applyState(): un id del
+              // servidor que ya no genera buildMonthPagos y no es ni historial pagado
+              // ni un ad-hoc real ("<mes>-custom-<timestamp>") se descarta acá también.
+              // Si no, este mismo paso de "traer lo fresco del servidor antes de
+              // guardar" reinyectaba basura vieja en el mismísimo guardado que se
+              // suponía la iba a limpiar -- raíz real de que una limpieza de datos
+              // nunca se sostuviera en Firestore de un guardado a otro.
               const freshTasks=freshLiviano.map(lp=>{
                 const base=genById[lp.id];
-                return base?Object.assign({},base,{done:lp.done,amt:lp.amt!=null?lp.amt:base.amt})
-                           :{id:lp.id,l:lp.l,acc:lp.acc,cat:lp.cat,amt:lp.amt,done:lp.done,vacacion:lp.vacacion};
-              });
+                if(base)return Object.assign({},base,{done:lp.done,amt:lp.amt!=null?lp.amt:base.amt});
+                const esCustomAdHoc=/-custom-\d+$/.test(lp.id||'');
+                if(!lp.done&&!esCustomAdHoc)return null;
+                return {id:lp.id,l:lp.l,acc:lp.acc,cat:lp.cat,amt:lp.amt,done:lp.done,vacacion:lp.vacacion};
+              }).filter(Boolean);
               MONTH_PAGOS[k]=mergePagosConDelta(freshTasks,MONTH_PAGOS_BASELINE[k],MONTH_PAGOS[k]);
             });
           }
@@ -3742,6 +3786,19 @@ function applyState(s){
     s.pagosByMonth[k].forEach(sp=>{
       let p=MONTH_PAGOS[k].find(x=>x.id===sp.id);
       if(!p){
+        // v69 (28-ago) -- causa raíz de los duplicados/fantasmas que se repetían
+        // mes a mes (Nike, Tasas, Colegio viejo, etc.): antes, CUALQUIER id
+        // guardado que ya no generaba buildMonthPagos se reinyectaba como si
+        // fuera un ítem custom legítimo -- incluso ids "huérfanos" (de una regla
+        // vieja que cambió o se eliminó) sin ningún dato propio real. Ahora solo
+        // se reinyecta si: (a) ya está pagado (sp.done -- nunca se descarta
+        // historial real), o (b) es un ítem ad-hoc creado a mano desde la UI (id
+        // con el patrón "<mes>-custom-<timestamp>"). Cualquier otro id sin match
+        // en el build fresco es basura vieja de una regla que ya no existe y se
+        // descarta (buildMonthPagos ya generó la tarea correcta si la regla sigue
+        // vigente).
+        const esCustomAdHoc=/-custom-\d+$/.test(sp.id||'');
+        if(!sp.done&&!esCustomAdHoc)return;
         // Si el guardado trae l/acc/cat propios (item custom), se reconstruye tal cual --
         // nunca con placeholders inventados.
         p=sp.l?{id:sp.id,l:sp.l,acc:sp.acc||'BBVA',amt:sp.amt,cat:sp.cat||'gasto',done:sp.done,vacacion:sp.vacacion}:{id:sp.id,l:sp.id,acc:'BBVA',amt:sp.amt,cat:'ingreso',done:sp.done};
