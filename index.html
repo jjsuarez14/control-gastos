@@ -537,7 +537,18 @@ function gastosPropiosPend(acc){
 // (alerta útil de sobregasto), nunca por fondeo en tránsito.
 function disponibleCuenta(acc){
   const saldo=BAL[acc]||0;
-  const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc);
+  // v71 (28-ago) -- Jofre detecto un hueco real: el Fondo Mutuo vivia en TRJ
+  // (v66 y antes), asi que su reserva mensual salia de BBVA via un 'enviar'
+  // y quedaba capturada en fondeoSalientePend. Desde v67 el Fondo Mutuo vive
+  // directo en BBVA (ya no hay 'enviar' que lo reserve) y la formula nunca
+  // se actualizo para compensarlo -- Disponible mostraba como "libre" dinero
+  // que en realidad esta reservado para gastos de Vacaciones/Compartir
+  // Familiar. Confirmado por Jofre: ese dinero solo debe empezar a tocar el
+  // Disponible cuando el fondo llegue a 0 (se consuma via los movimientos
+  // que ya filtra fondoMutuoConsumido). Restamos el remanente reservado
+  // (fondoMutuoDisponible) solo en BBVA, que es donde vive hoy.
+  const fmReservado=(acc==='BBVA')?fondoMutuoDisponible(ACTIVE_ID):0;
+  const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc)-fmReservado;
   return Math.round(d*100)/100;
 }
 const MONTH_NUM={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
