@@ -1036,9 +1036,13 @@ function renderFondoMutuoMassiel(){
   if(envioDone&&asignacion>0)rows+=rowHTML('Inicio','Aporte mensual Fondo Mutuo','+'+fmtE(asignacion),true);
   // Consumos: tareas de hotel (vacacion) ya pagadas + movimientos manuales de
   // MOVS.BBVA en categoría Vacaciones / Compartir Familiar de este mes (v67 --
-  // redirigido de TRJ).
+  // redirigido de TRJ). v68 (28-ago) -- se quita el filtro acc==='BBVA': desde
+  // v67b el aplazado de Decathlon (Fondo Mutuo Caixa) vive a propósito en
+  // acc:'CAIXA', y fondoMutuoConsumido() YA lo contaba en el saldo (no filtra
+  // por cuenta) -- pero esta lista de movimientos sí filtraba, así que el
+  // saldo bajaba bien pero la línea "-€31,71 Decatlón" nunca se dibujaba.
   (MONTH_PAGOS[id]||[]).forEach(p=>{
-    if(p.acc==='BBVA'&&p.cat==='gasto'&&p.done&&p.vacacion&&p.amt>0)rows+=rowHTML('—',p.l,'-'+fmtE(p.amt),false);
+    if(p.cat==='gasto'&&p.done&&p.vacacion&&p.amt>0)rows+=rowHTML('—',p.l,'-'+fmtE(p.amt),false);
   });
   (MOVS.BBVA||[]).slice().reverse().forEach(mv=>{
     if(mv.t)return;
@@ -1141,7 +1145,18 @@ function buildMonthPagos(id){
   // 2 tareas sueltas de BBVA se agrupan en 1 sola tarea "Enviar a Ma. Lara"
   // — mismo patrón que "Enviar a Caixa"/"Enviar a TR Jofre".
   if(arrCat&&arrCat.a>0)malaraSum+=arrCat.a;
-  itemsForKey('colegio',id).forEach(it=>handleTaggedItem('Colegio · '+it.l,it.tag,it.a));
+  // v68 (28-ago) -- Colegio: Mensualidad + Proyecto Escolar + Comedor +
+  // Extraescolar son UN SOLO cobro real ("Colegio J.A.", confirmado por
+  // Jofre) y deben vivir en UNA sola tarea, aunque algún mes alguno de esos
+  // 4 ítems esté en €0 (ej. Comedor/Extraescolar en septiembre). Piscina se
+  // cobra aparte, así que sigue siendo su propia tarea.
+  {
+    const colItems=itemsForKey('colegio',id);
+    const piscina=colItems.find(it=>/piscina/i.test(it.l||''));
+    const restoTotal=colItems.filter(it=>it!==piscina).reduce((s,it)=>s+(it.a||0),0);
+    if(restoTotal>0)handleTaggedItem('Colegio J.A.','BBVA',restoTotal);
+    if(piscina&&piscina.a>0)handleTaggedItem('Colegio · Piscina','BBVA',piscina.a);
+  }
   const efectivoItems=[]; // {label, total, inc}
   itemsForKey('servicios',id).forEach(it=>{
     if(it.l==='Luz'){if(it.a>0)malaraSum+=it.a;return;}
