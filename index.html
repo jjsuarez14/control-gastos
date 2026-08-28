@@ -2835,6 +2835,19 @@ const CATEGORIAS_POOL=['Mercado','Compartir Familiar'];
 // (categoriaSpendForMonth). Regla de default sugerida por Jofre: movimientos
 // en TR Massiel son compartidos por default (esa cuenta es el fondo familiar).
 const MIXED_OWNERSHIP_CATS=['Personales','Salud','Deporte','Carro/Moto'];
+// v72 (28-ago) -- la regla de arriba ("movimientos en TR Massiel son
+// compartidos por default, esa cuenta es el fondo familiar") estaba
+// documentada pero nunca conectada a nextAfter/renderReg: el paso de
+// categoria mostraba TODAS las categorias sin filtrar por la cuenta
+// preseteada, y si Massiel elegia (o caia en) una categoria mixta
+// (Personales/Salud/Deporte/Carro-Moto) igual le preguntaba "de quien
+// es este gasto" aunque estuviera registrando desde una cuenta de fondo
+// 100% compartido. Jofre confirmo: TR Massiel (Mercado), TR J.A.
+// (Emergencia) e IBKR (Inversion) son fondos compartidos por definicion
+// -- nunca existe un movimiento "solo Massiel" ahi (sus gastos 100%
+// personales ya viven fijos en Prevision/Personales). Ver SHARED_FUND_ACCOUNTS
+// y su uso en nextAfter.
+const SHARED_FUND_ACCOUNTS=['TRM','TRJA','IBKR'];
 // Dentro de las mixtas, dos comportamientos distintos para la vista de
 // Massiel (confirmado por Jofre 19-ago-2026):
 // - ITEM_FILTERED: ve SOLO lo que tiene su responsabilidad explícita (group
@@ -3178,7 +3191,7 @@ function nextAfter(id){
     case 'account':return reg.type==='t'?'tareaMes':(reg.type==='g'?'cuotas':'confirm');
     case 'tareaMes':return POOL_FUNDED_CATS.includes(reg.category)?'confirm':'tareaReparto';
     case 'tareaReparto':return 'confirm';
-    case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)?'ownership':'confirm');
+    case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)?'ownership':'confirm');
     case 'ownership':return 'confirm';
     case 'cType':return reg.cType==='aplazado'?'shared':'cNum';
     case 'cNum':return 'cuotasIguales';
