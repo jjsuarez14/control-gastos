@@ -797,7 +797,15 @@ function renderAccountOverlay(accId){
   else if(accId==='BBVA'){const bbvaFm=fondoMutuoDisponible(ACTIVE_ID);balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL.BBVA)}</div><div style="margin-top:10px;background:rgba(139,111,223,.1);border-radius:10px;padding:9px;cursor:pointer" onclick="event.stopPropagation();showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:#8B6FDF;font-weight:700;letter-spacing:.06em">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:#8B6FDF"></i></div><div style="font-size:18px;font-weight:800;color:#8B6FDF;margin-top:3px">${fmtE(bbvaFm)}</div><div style="font-size:9px;color:var(--t3);margin-top:2px">Disponible</div></div></div>`;}
   else if(accId==='IBKR'){balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">$0,00</div><div style="font-size:11px;color:var(--t2);margin-top:4px">Cuenta cerrada -- retiro de €304,85 realizado a Caixa (pérdida en inversiones)</div></div>`;}
   else{balHTML=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO</div><div style="font-size:36px;font-weight:800;color:var(--t1)">${fmtE(BAL[accId]||0)}</div></div>`;}
-  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">${d.n}</div><div style="font-size:11px;color:var(--t2)">${d.desc}</div></div><button onclick="document.getElementById('aov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>${balHTML}`;
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px;flex-shrink:0"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">${d.n}</div><div style="font-size:11px;color:var(--t2)">${d.desc}</div></div><button onclick="document.getElementById('aov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  // v70 (28-ago) -- fix del layout v69: "TAREAS DEL MES" no tenia min-height:0
+  // ni scroll propio, asi que en cuentas con muchas tareas (ej. BBVA) ocupaba
+  // toda la altura disponible del contenedor flex y dejaba a "MOVIMIENTOS"
+  // con clientHeight:0 (invisible e imposible de scrollear). Ahora saldo +
+  // tareas + movimientos viven juntos en UNA sola region con scroll propio
+  // (flex:1/overflow-y:auto), y el boton de registrar queda fijo debajo,
+  // siempre visible y siempre alcanzable.
+  let bodyHtml=balHTML;
   let pend=[],waitMsg=null;
   if(mass){/* Massiel no ve tareas de gestion en ninguna cuenta */}
   else if(accId==='BBVA'){if(nominaReg)pend=tasksFor('BBVA');}
@@ -805,8 +813,8 @@ function renderAccountOverlay(accId){
   else if(srcReady(accId)){pend=tasksFor(accId);}
   else{waitMsg=accId==='EFECTIVO'?'Pendiente de retirar el efectivo desde BBVA':'Pendiente de recibir la transferencia desde BBVA';}
   if(mass){/* saltar por completo el bloque de tareas/mensajes de estado */}
-  else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
-  else{html+=pendTareasRowsHTML(pend,ACTIVE_ID);}
+  else if(waitMsg){bodyHtml+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
+  else{bodyHtml+=pendTareasRowsHTML(pend,ACTIVE_ID);}
   // v69 (28-ago) -- Antes todo el overlay (saldo+tareas+movimientos+botón)
   // scrolleaba junto dentro de un único bloque -- en cuentas con historial
   // largo el botón "+ Registrar movimiento" podía quedar fuera de pantalla.
@@ -824,8 +832,9 @@ function renderAccountOverlay(accId){
   if(movs.length){movs.forEach(t=>{const cat=resolverCategoriaMovimiento(t,accId);movsHtml+=`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:34px;flex-shrink:0;text-align:center">${t.dt}</div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${t.l}</div><div style="font-size:9px;color:var(--t3);margin-top:1px">${cat}</div></div><div style="font-size:13px;font-weight:700;color:${t.t?'var(--tl)':'var(--rd)'};">${t.a}</div></div>`;});}
   else movsHtml+='<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos aún</div>';
   movsHtml+='<div style="padding:12px 0 16px;text-align:center;font-size:10px;color:var(--t3)">Meses anteriores en <span style="color:var(--t2);font-weight:600">Historial</span></div></div>';
-  html+=`<div style="flex:1;overflow-y:auto;min-height:0">${movsHtml}</div>`;
-  if(!mass||accId==='TRM'){html+=`<div style="padding:14px 16px;flex-shrink:0"><button class="btng" onclick="document.getElementById('aov').style.display='none';openReg('${accId}')">+ Registrar movimiento</button></div>`;}
+  bodyHtml+=movsHtml;
+  html+=`<div style="flex:1;overflow-y:auto;min-height:0">${bodyHtml}</div>`;
+  if(!mass||accId==='TRM'){html+=`<div style="padding:14px 16px;flex-shrink:0;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('aov').style.display='none';openReg('${accId}')">+ Registrar movimiento</button></div>`;}
   document.getElementById('aov-c').innerHTML=html;
 }
 // pendTareasRowsHTML: markup compartido de "TAREAS DEL MES" (lista + estado
