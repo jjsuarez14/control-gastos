@@ -783,7 +783,7 @@ function renderAccountOverlay(accId){
   else{waitMsg=accId==='EFECTIVO'?'Pendiente de retirar el efectivo desde BBVA':'Pendiente de recibir la transferencia desde BBVA';}
   if(mass){/* saltar por completo el bloque de tareas/mensajes de estado */}
   else if(waitMsg){html+=`<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);display:flex;gap:8px;align-items:center"><i class="ti ti-hourglass" style="font-size:15px;color:var(--t3)"></i><div style="font-size:12px;color:var(--t2)">${waitMsg}</div></div></div>`;}
-  else{html+=pendTareasRowsHTML(pend);}
+  else{html+=pendTareasRowsHTML(pend,ACTIVE_ID);}
   // La auditoría balance-vs-movimientos existe como cálculo interno
   // (auditarCuenta / auditarTodo), consultable por consola para diagnóstico.
   // NO se renderiza en la UI: el saldo ya está cuadrado contra banca real y un
@@ -806,12 +806,18 @@ function renderAccountOverlay(accId){
 // vacio "Sin tareas pendientes") -- usado por renderAccountOverlay (vista
 // completa de la cuenta) y por renderPendienteAccountOverlay (v67d, modal
 // enfocado solo en pendientes, mismo patron que showFondoMutuoMassiel).
-function pendTareasRowsHTML(pend){
+function pendTareasRowsHTML(pend,monthId){
+  // v-delete-fix (28-ago): monthId es el mes AL QUE PERTENECEN estas tareas
+  // (no necesariamente ACTIVE_ID -- una futura vista de Tareas podría listar
+  // tareas de un mes que todavía no está activo). Se pasa explícito hasta
+  // deleteTareaPendiente/execDelete para que el borrado mute el mes correcto
+  // en vez de asumir siempre el mes activo (ver bug corregido en execDelete).
+  monthId=monthId||ACTIVE_ID;
   if(!pend.length)return `<div style="padding:0 16px 12px"><div style="padding:11px;border-radius:12px;background:var(--tl2);border:1px solid rgba(14,201,188,.25);display:flex;gap:8px;align-items:center"><i class="ti ti-check" style="font-size:15px;color:var(--tl)"></i><div style="font-size:12px;color:var(--tl);font-weight:600">Sin tareas pendientes</div></div></div>`;
   let html=`<div style="padding:0 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:8px">TAREAS DEL MES</div>`;
   pend.forEach(p=>{
     const canDel=p.cat==='gasto'&&!p.sistema;
-    const delIcon=canDel?`<i class="ti ti-trash" onclick="event.stopPropagation();deleteTareaPendiente('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--rd);padding:4px 2px 4px 6px;cursor:pointer"></i>`:'';
+    const delIcon=canDel?`<i class="ti ti-trash" onclick="event.stopPropagation();deleteTareaPendiente('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt},'${monthId}')" style="font-size:13px;color:var(--rd);padding:4px 2px 4px 6px;cursor:pointer"></i>`:'';
     html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i>${delIcon}</div>`;
   });
   html+='</div>';
@@ -826,7 +832,7 @@ function pendTareasRowsHTML(pend){
 function renderPendienteAccountOverlay(accId,pend){
   const d=ACC_META[accId];
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:${d.c}22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:8px;height:8px;border-radius:50%;background:${d.c}"></div></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Pendiente de cobro</div><div style="font-size:11px;color:var(--t2)">${d.n}</div></div><button onclick="document.getElementById('pndov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
-  html+=pendTareasRowsHTML(pend);
+  html+=pendTareasRowsHTML(pend,ACTIVE_ID);
   document.getElementById('pndov-c').innerHTML=html;
 }
 function showPendienteAccount(accId){
@@ -1874,17 +1880,23 @@ function deleteItem(key,itemId,label){
 // carga -- por eso NO se puede solo quitarlas del array (reaparecerían). Se
 // registran en MONTH_PAGOS_REMOVED, que buildMonthPagos respeta al generar.
 let pendingDeleteTarea=null;
-function deleteTareaPendiente(taskId,label,monto){
-  pendingDeleteTarea={taskId,label,monto};pendingDelete=null;
-  document.getElementById('del-desc').textContent='¿Eliminar "'+label+'" ('+fmtE(monto)+')? Elige si es solo de '+(MONTHS[ACTIVE_ID]?MONTHS[ACTIVE_ID].name:'este mes')+' o desde ahora en adelante.';
+function deleteTareaPendiente(taskId,label,monto,monthId){
+  // v-delete-fix (28-ago): monthId es el mes REAL de la tarea (lo pasa
+  // pendTareasRowsHTML) -- antes execDelete asumía siempre ACTIVE_ID, lo
+  // cual hoy nunca se nota porque todas las tareas visibles son del mes
+  // activo, pero mutaba silenciosamente el mes equivocado en cuanto una
+  // vista mostrara tareas de otro mes (ver la futura sección de Tareas).
+  monthId=monthId||ACTIVE_ID;
+  pendingDeleteTarea={taskId,label,monto,monthId};pendingDelete=null;
+  document.getElementById('del-desc').textContent='¿Eliminar "'+label+'" ('+fmtE(monto)+')? Elige si es solo de '+(MONTHS[monthId]?MONTHS[monthId].name:'este mes')+' o desde ahora en adelante.';
   document.getElementById('delModal').style.display='flex';
 }
 function execDelete(mode){
   if(pendingDeleteTarea){
-    const{taskId,label,monto}=pendingDeleteTarea;
+    const{taskId,label,monto,monthId:pendMonthId}=pendingDeleteTarea;
     document.getElementById('delModal').style.display='none';
     pendingDeleteTarea=null;
-    const monthId=ACTIVE_ID;
+    const monthId=pendMonthId||ACTIVE_ID;
     const prefix=monthId+'-';
     const suffix=taskId.indexOf(prefix)===0?taskId.slice(prefix.length):taskId;
     markPagoRemoved(monthId,taskId);
