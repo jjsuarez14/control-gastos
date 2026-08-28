@@ -3246,6 +3246,100 @@ function saveReg(){
   toast('✓ Movimiento registrado','var(--tl)');saveState();
 }
 const STORAGE_KEY='cgv6-state';
+// v-sync-fix (28-ago): indicador + reintento de guardado pendiente. Antes,
+// si saveState() fallaba (sin red, hiccup de auth, lo que sea), el error se
+// tragaba en silencio -- sin aviso, sin reintento, y sin respaldo local (ver
+// más abajo: localStorage solo se escribía DESPUÉS de un guardado exitoso).
+// Eso fue lo que perdió el movimiento de Caixa "MC DONALDS" del 27-ago.
+// Guarda no solo el estado que falló al guardar, sino también los CUATRO
+// baselines (MOVS_BASELINE, MONTH_PAGOS_BASELINE, DET_OV_BASELINE,
+// DET_EXTRA_BASELINE) vigentes en el momento del fallo. Son necesarios para
+// poder "reproducir" el cambio pendiente más tarde -- incluso en otra
+// sesión/pestaña -- usando el mismo mecanismo de merge-por-delta que ya usa
+// saveState(), sin arriesgar pisar cambios de la otra persona ni corromper
+// el propio baseline (ver replayPendingDelta más abajo).
+const PENDING_SYNC_KEY='cgv6-pendingSync';
+let _saveInFlight=false;
+let _pendingSyncTimer=null;
+let _syncRetryDelay=8000;
+function hasPendingSync(){try{return !!localStorage.getItem(PENDING_SYNC_KEY);}catch(e){return false;}}
+function readPendingSync(){try{const raw=localStorage.getItem(PENDING_SYNC_KEY);return raw?JSON.parse(raw):null;}catch(e){return null;}}
+function showSyncBadge(){
+  let b=document.getElementById('syncBadge');
+  if(!b){
+    b=document.createElement('div');
+    b.id='syncBadge';
+    b.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);background:var(--rd,#c0392b);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:500;box-shadow:0 2px 10px rgba(0,0,0,.3);cursor:pointer;white-space:nowrap;';
+    b.textContent='⚠ Sin sincronizar — toca para reintentar';
+    b.onclick=()=>{if(!_saveInFlight)saveState();};
+    document.body.appendChild(b);
+  }
+}
+function hideSyncBadge(){const b=document.getElementById('syncBadge');if(b)b.remove();}
+function markPendingSync(snapshot){
+  try{
+    if(snapshot)localStorage.setItem(PENDING_SYNC_KEY,JSON.stringify(snapshot));
+    else if(!localStorage.getItem(PENDING_SYNC_KEY))localStorage.setItem(PENDING_SYNC_KEY,JSON.stringify({ts:Date.now()}));
+  }catch(e){}
+  showSyncBadge();
+  scheduleSyncRetry();
+}
+function clearPendingSync(){
+  try{localStorage.removeItem(PENDING_SYNC_KEY);}catch(e){}
+  hideSyncBadge();
+  if(_pendingSyncTimer){clearTimeout(_pendingSyncTimer);_pendingSyncTimer=null;}
+  _syncRetryDelay=8000;
+}
+function scheduleSyncRetry(){
+  if(_pendingSyncTimer)return; // ya hay un reintento agendado, no duplicar
+  _pendingSyncTimer=setTimeout(()=>{
+    _pendingSyncTimer=null;
+    if(hasPendingSync()&&!_saveInFlight)saveState();
+  },_syncRetryDelay);
+  _syncRetryDelay=Math.min(_syncRetryDelay*2,120000); // backoff hasta 2min
+}
+// Se llama una sola vez al arrancar, DESPUÉS de aplicar el estado confirmado
+// (caché local o Firestore) y ANTES de renderizar -- reinyecta en memoria el
+// cambio que quedó pendiente de una sesión anterior (ej. la pestaña se
+// cerró antes de que el reintento terminara), usando exactamente el mismo
+// merge-por-delta que usa saveState(), así que el reintento posterior lo
+// detecta como "agregado por esta sesión" y lo empuja a Firestore. Nunca se
+// tocan MOVS_BASELINE/etc acá -- deben seguir reflejando el estado
+// confirmado para que ese reintento calcule bien el delta.
+function replayPendingDelta(){
+  const pd=readPendingSync();
+  if(!pd)return false;
+  try{
+    if(pd.movs)Object.keys(pd.movs).forEach(k=>{
+      MOVS[k]=mergeMovsConDelta(MOVS[k],(pd.baselineMovs||{})[k],pd.movs[k]);
+    });
+    if(pd.pagos)Object.keys(pd.pagos).forEach(k=>{
+      MONTH_PAGOS[k]=mergePagosConDelta(MONTH_PAGOS[k],(pd.baselinePagos||{})[k],pd.pagos[k]);
+    });
+    if(pd.detOv){
+      const merged=mergeDetObjConDelta(DET_MONTH_OVERRIDES,pd.baselineDetOv,pd.detOv);
+      Object.keys(merged).forEach(k=>{DET_MONTH_OVERRIDES[k]=merged[k];});
+    }
+    if(pd.detExtra){
+      const mergedEx=mergeDetObjConDelta(DET_EXTRA,pd.baselineDetExtra,pd.detExtra);
+      Object.keys(mergedEx).forEach(k=>{DET_EXTRA[k]=mergedEx[k];});
+    }
+  }catch(e){}
+  return true;
+}
+function checkPendingSyncOnBoot(){
+  // Por si la pestaña se cerró/recargó antes de que un reintento anterior
+  // lograra guardar -- el flag sobrevive en localStorage entre sesiones.
+  // El replay (replayPendingDelta) ya se hizo antes, en init(); acá solo
+  // mostramos el aviso y agendamos el reintento.
+  if(hasPendingSync()){showSyncBadge();scheduleSyncRetry();}
+}
+window.addEventListener('online',()=>{
+  if(hasPendingSync()&&!_saveInFlight){
+    if(_pendingSyncTimer){clearTimeout(_pendingSyncTimer);_pendingSyncTimer=null;}
+    saveState();
+  }
+});
 /* ---- Firebase (persistencia compartida Jofre/Massiel) ---- */
 let db=null,_fbDoc,_fbSetDoc,_fbGetDoc,_fbDeleteDoc,_fbOnSnapshot;
 const fbReady=(async()=>{
@@ -3407,9 +3501,52 @@ function mergeDetObjConDelta(freshObj,baseObj,actualObj){
   });
   return resultado;
 }
+function buildPersistableState(){
+  const mCats={},mCuotas={};Object.keys(MONTHS).forEach(k=>{mCats[k]=MONTHS[k].cats;mCuotas[k]=MONTHS[k].cuotas;});
+  // Bug corregido (18-jul): tareas agregadas a mano en MONTH_PAGOS (ej. vía
+  // consola en el chat diario) con un id que el código no genera solo
+  // (buildMonthPagos) se guardaban recortadas a {id,done,amt} -- al volver
+  // a cargar, como no calzaban con nada "fresco", se reconstruían con
+  // placeholders (l=id, cat='ingreso', acc='BBVA'), corrompiendo el dato.
+  // Ahora: si el id es regenerable por código, se sigue guardando liviano
+  // (solo estado); si no (custom/ad-hoc), se guarda completo.
+  const pagosByMonth={};
+  Object.keys(MONTH_PAGOS).forEach(k=>{
+    const freshIds=new Set(buildMonthPagos(k).map(x=>x.id));
+    pagosByMonth[k]=MONTH_PAGOS[k].map(p=>
+      freshIds.has(p.id)
+        ?{id:p.id,done:p.done,amt:p.amt}
+        :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
+    );
+  });
+  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS,CUOTAS_NUEVAS};
+}
 async function saveState(){
+  if(_saveInFlight)return; // ya hay un guardado en curso -- el reintento programado lo cubre
+  _saveInFlight=true;
+  // v-sync-fix: capturar ANTES de tocar la red (y antes del merge interno de
+  // más abajo, que muta MOVS/MONTH_PAGOS/DET_* en el sitio) una foto de "lo
+  // que esta sesión intenta guardar" + los baselines vigentes en ese
+  // instante. Si el guardado a Firestore falla, esta foto es lo único que
+  // permite reproducir el cambio más tarde -- incluso en otra sesión, si la
+  // pestaña se cierra antes de que el reintento termine -- sin perderlo ni
+  // corromper el baseline de delta (ver replayPendingDelta).
+  let pendingSnap=null;
   try{
-    if(!await fbReady)return;
+    pendingSnap={
+      ts:Date.now(),
+      movs:JSON.parse(JSON.stringify(MOVS)),
+      pagos:JSON.parse(JSON.stringify(MONTH_PAGOS)),
+      detOv:JSON.parse(JSON.stringify(DET_MONTH_OVERRIDES)),
+      detExtra:JSON.parse(JSON.stringify(DET_EXTRA)),
+      baselineMovs:JSON.parse(JSON.stringify(MOVS_BASELINE)),
+      baselinePagos:JSON.parse(JSON.stringify(MONTH_PAGOS_BASELINE)),
+      baselineDetOv:JSON.parse(JSON.stringify(DET_OV_BASELINE)),
+      baselineDetExtra:JSON.parse(JSON.stringify(DET_EXTRA_BASELINE))
+    };
+  }catch(e){}
+  try{
+    if(!await fbReady){markPendingSync(pendingSnap);return;}
     try{
       const freshSnap=await _fbGetDoc(stateDocRef());
       if(freshSnap.exists()){
@@ -3452,31 +3589,23 @@ async function saveState(){
         }
       }
     }catch(e){} // si la relectura falla, seguimos con la copia local tal cual
-    const mCats={},mCuotas={};Object.keys(MONTHS).forEach(k=>{mCats[k]=MONTHS[k].cats;mCuotas[k]=MONTHS[k].cuotas;});
-    // Bug corregido (18-jul): tareas agregadas a mano en MONTH_PAGOS (ej. vía
-    // consola en el chat diario) con un id que el código no genera solo
-    // (buildMonthPagos) se guardaban recortadas a {id,done,amt} -- al volver
-    // a cargar, como no calzaban con nada "fresco", se reconstruían con
-    // placeholders (l=id, cat='ingreso', acc='BBVA'), corrompiendo el dato.
-    // Ahora: si el id es regenerable por código, se sigue guardando liviano
-    // (solo estado); si no (custom/ad-hoc), se guarda completo.
-    const pagosByMonth={};
-    Object.keys(MONTH_PAGOS).forEach(k=>{
-      const freshIds=new Set(buildMonthPagos(k).map(x=>x.id));
-      pagosByMonth[k]=MONTH_PAGOS[k].map(p=>
-        freshIds.has(p.id)
-          ?{id:p.id,done:p.done,amt:p.amt}
-          :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
-      );
-    });
-    const state={ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS,CUOTAS_NUEVAS};
-    const stateJson=JSON.stringify(state);
+    const stateJson=JSON.stringify(buildPersistableState());
     await _fbSetDoc(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
     try{localStorage.setItem(STORAGE_KEY,stateJson);}catch(e){}
     snapshotMovsBaseline();
     snapshotDetBaseline();
     snapshotPagosBaseline();
-  }catch(e){}
+    clearPendingSync(); // guardado en la nube confirmado -- ya no hay nada pendiente
+  }catch(e){
+    // v-sync-fix: antes esto se tragaba en silencio, sin aviso ni respaldo.
+    // Ahora: guardamos la foto tomada al principio (pendingSnap) para poder
+    // reproducir este cambio más tarde -- en esta sesión (reintento
+    // automático) o, si la pestaña se cierra antes, en la próxima (ver
+    // replayPendingDelta en init()) -- y avisamos con el indicador visible.
+    markPendingSync(pendingSnap);
+  }finally{
+    _saveInFlight=false;
+  }
 }
 function mergeItemArrays(freshArr,savedArr){
   if(!Array.isArray(freshArr))return savedArr;
@@ -3685,6 +3814,11 @@ function applyState(s){
 // al conectar. Aprobado por Jofre para ambos roles.
 async function loadState(){
   try{
+    // v-sync-fix: si hay un cambio local sin confirmar en la nube, NO lo
+    // pisamos con lo que Firestore tenga guardado (por definición desactualizado
+    // respecto a ese cambio) -- se resincroniza solo cuando el reintento
+    // automático de saveState() confirme el guardado y limpie el pendiente.
+    if(hasPendingSync())return false;
     if(!await fbReady)return false;
     const snap=await _fbGetDoc(stateDocRef());
     if(!snap.exists())return false;
@@ -3703,6 +3837,7 @@ function startRealtimeSync(){
   if(!db)return;
   _fbOnSnapshot(stateDocRef(),(snap)=>{
     if(snap.metadata.hasPendingWrites)return; // eco de nuestro propio guardado, ya reflejado en pantalla
+    if(hasPendingSync())return; // v-sync-fix: ídem loadState() -- no pisar un cambio local aún no confirmado
     if(!snap.exists())return;
     const data=snap.data();if(!data||!data.json)return;
     try{applyState(JSON.parse(data.json));renderAll();localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
@@ -3725,9 +3860,14 @@ async function init(){
   }catch(e){}
   const loadP=loadState();
   if(hadCache){
+    // v-sync-fix: reproducir acá cualquier cambio que quedó pendiente de una
+    // sesión anterior (ver replayPendingDelta) -- ANTES de renderizar, para
+    // que el primer pintado ya muestre el movimiento/tarea que faltaba.
+    replayPendingDelta();
     ensureMonthsAhead(ACTIVE_ID,3);
     updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
     const bl=document.getElementById('bootLoader');if(bl)bl.remove();
+    checkPendingSyncOnBoot();
     loadP.then(ok=>{
       if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
       startRealtimeSync();
@@ -3742,9 +3882,11 @@ async function init(){
     loadP,
     new Promise(resolve=>setTimeout(()=>{timedOut=true;resolve('timeout');},6000))
   ]).catch(()=>{});
+  replayPendingDelta();
   ensureMonthsAhead(ACTIVE_ID,3);
   updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
   const bl=document.getElementById('bootLoader');if(bl)bl.remove();
+  checkPendingSyncOnBoot();
   if(timedOut){
     loadP.then(ok=>{
       if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
