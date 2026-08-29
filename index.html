@@ -2842,7 +2842,15 @@ const CATEGORIAS_POOL=['Mercado','Compartir Familiar'];
 // en el registro (nextAfter/renderReg), (b) filtrar qué ve Massiel
 // (categoriaSpendForMonth). Regla de default sugerida por Jofre: movimientos
 // en TR Massiel son compartidos por default (esa cuenta es el fondo familiar).
-const MIXED_OWNERSHIP_CATS=['Personales','Salud','Deporte','Carro/Moto'];
+// v74 (29-ago) -- Deporte SALE de esta lista. Corregido por Jofre: no es que
+// "hoy" Deporte sea 100% suyo -- es estructural, GENUA/Fisiosalud/Xirivella
+// SIEMPRE son 100% Jofre, Massiel no tiene ni va a tener responsabilidad ahi.
+// No hacia falta un gate temporal (nomina registrada o no) para esto -- la
+// pregunta de dueño simplemente nunca debio existir para Deporte. Ver v74 en
+// nextAfter('cuotas')/pick() para el gate temporal que SI aplica a las 3
+// categorias mixtas restantes (Personales/Salud/Carro-Moto), que si tienen
+// responsabilidad real y ocasional de Massiel.
+const MIXED_OWNERSHIP_CATS=['Personales','Salud','Carro/Moto'];
 // v72 (28-ago) -- la regla de arriba ("movimientos en TR Massiel son
 // compartidos por default, esa cuenta es el fondo familiar") estaba
 // documentada pero nunca conectada a nextAfter/renderReg: el paso de
@@ -2861,15 +2869,17 @@ const SHARED_FUND_ACCOUNTS=['TRM','TRJA','IBKR'];
 // - ITEM_FILTERED: ve SOLO lo que tiene su responsabilidad explícita (group
 //   'massiel'/'compartida'); todo lo demás -- incluido sin group asignado --
 //   se oculta por defecto. Son categorías sin un ancla compartida fija: en
-//   Personales cada gasto suelto es independiente; en Deporte hoy GENUA es
-//   100% Jofre, cero responsabilidad de ella.
+//   Personales cada gasto suelto es independiente.
 // - FULL_VISIBILITY: mientras tenga responsabilidad activa YA establecida en
 //   la categoría (Renting 50/50 en Carro/Moto; su mitad del gym combinado en
 //   Salud), ve TODO lo registrado ahí sin filtrar item por item -- es
 //   evidencia de cuánto se gasta en total en algo donde ella aporta, no solo
 //   "su parte" (ej. si Jofre asume un pago compartido por timing del Bizum,
 //   igual debe verse).
-const MIXED_ITEM_FILTERED_CATS=['Personales','Deporte'];
+// v74 -- Deporte salió de MIXED_OWNERSHIP_CATS (ver arriba), así que también
+// sale de acá: ya no aplica ningún filtro item-por-item porque Massiel nunca
+// ve la categoría Deporte, punto.
+const MIXED_ITEM_FILTERED_CATS=['Personales'];
 const MIXED_FULL_VISIBILITY_CATS=['Salud','Carro/Moto'];
 // v26 — Suma las dotaciones REALES (movimientos "aporte/dotación") que llenan
 // el fondo de un pool en el mes. Es lo que efectivamente se depositó, no el
@@ -3199,7 +3209,14 @@ function nextAfter(id){
     case 'account':return reg.type==='t'?'tareaMes':(reg.type==='g'?'cuotas':'confirm');
     case 'tareaMes':return POOL_FUNDED_CATS.includes(reg.category)?'confirm':'tareaReparto';
     case 'tareaReparto':return 'confirm';
-    case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)?'ownership':'confirm');
+    // v74 (29-ago) -- una vez registrada la nomina del mes activo (nominaReg),
+    // ya no hay forma de que a Massiel le llegue una parte nueva de un gasto
+    // mixto -- su Bizum del mes ya se calculo/entrego. Confirmado por Jofre
+    // (29-ago-2026): a partir de ahi, estas 3 categorias con responsabilidad
+    // real y ocasional de Massiel (Personales/Salud/Carro-Moto -- Deporte NO
+    // entra aca, ver MIXED_OWNERSHIP_CATS) saltan directo a group:'jofre' sin
+    // preguntar (ver el side-effect en pick(), campo 'isCuota').
+    case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)&&!nominaReg?'ownership':'confirm');
     case 'ownership':return 'confirm';
     case 'cType':return reg.cType==='aplazado'?'shared':'cNum';
     case 'cNum':return 'cuotasIguales';
@@ -3210,7 +3227,13 @@ function nextAfter(id){
     default:return 'confirm';
   }
 }
-function pick(field,value,id){reg[field]=value;if(field==='shared')reg.split=value?'50/50':null;if(field==='account'&&value==='CAIXA')reg.caixaCard=true;else if(field==='account')reg.caixaCard=false;regGoto(nextAfter(id));}
+function pick(field,value,id){reg[field]=value;if(field==='shared')reg.split=value?'50/50':null;if(field==='account'&&value==='CAIXA')reg.caixaCard=true;else if(field==='account')reg.caixaCard=false;
+  // v74 (29-ago) -- ver comentario en nextAfter('cuotas'): con nomina ya
+  // registrada, estas 3 categorias mixtas van directo a Jofre sin pasar por
+  // el paso 'ownership' -- hay que setear reg.group ACA porque nextAfter es
+  // una funcion pura (solo decide el proximo paso, no muta reg).
+  if(field==='isCuota'&&value===false&&reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)&&nominaReg){reg.group='jofre';}
+  regGoto(nextAfter(id));}
 function confirmAmount(){const raw=(document.getElementById('reg-amt')||{}).value;const v=toNum(raw);if(raw===''||isNaN(v)||v<0){toast('Indica un monto válido','var(--rd)');return;}reg.amount=v;reg.desc=(document.getElementById('reg-desc')||{}).value||'';regGoto(nextAfter('amount'));}
 function confirmCNum(){const v=parseInt((document.getElementById('reg-cnum')||{}).value);if(!v||v<1){toast('Indica el número de cuotas','var(--rd)');return;}reg.cNum=v;reg.cuotaMontos=[];regGoto(nextAfter('cNum'));}
 function confirmCuotaMonto(){const v=toNum((document.getElementById('reg-cmonto')||{}).value);if(!v||v<=0){toast('Indica el monto','var(--rd)');return;}reg.cuotaMonto=v;regGoto(nextAfter('cuotaMonto'));}
