@@ -1073,7 +1073,7 @@ function fondoMutuoTareaLabels(monthId){
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
   const saldo=fondoMutuoDisponible(id);
-  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Fondo compartido · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Dentro de TR Jofre · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
@@ -3209,14 +3209,17 @@ function nextAfter(id){
     case 'account':return reg.type==='t'?'tareaMes':(reg.type==='g'?'cuotas':'confirm');
     case 'tareaMes':return POOL_FUNDED_CATS.includes(reg.category)?'confirm':'tareaReparto';
     case 'tareaReparto':return 'confirm';
-    // v74 (29-ago) -- una vez registrada la nomina del mes activo (nominaReg),
-    // ya no hay forma de que a Massiel le llegue una parte nueva de un gasto
-    // mixto -- su Bizum del mes ya se calculo/entrego. Confirmado por Jofre
-    // (29-ago-2026): a partir de ahi, estas 3 categorias con responsabilidad
-    // real y ocasional de Massiel (Personales/Salud/Carro-Moto -- Deporte NO
-    // entra aca, ver MIXED_OWNERSHIP_CATS) saltan directo a group:'jofre' sin
-    // preguntar (ver el side-effect en pick(), campo 'isCuota').
-    case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)&&!nominaReg?'ownership':'confirm');
+    // v75 (29-ago) -- CORRIGE v74: Jofre señaló que Personales (y por el mismo
+    // patrón, Salud) tienen subitems con responsabilidad real de Massiel (ver
+    // DET.personales/gimnasios -- Uñas, Bono Transporte, gym2, todos 100%
+    // ella). Saltar directo a 'jofre' sin preguntar los habría misatribuido
+    // en silencio. El paso 'ownership' vuelve a mostrarse SIEMPRE para estas
+    // 3 categorías (Personales/Salud/Carro-Moto) -- lo que cambia post-nómina
+    // no es si se pregunta, sino que el botón "Compartido" se oculta (ver
+    // renderReg, step 'ownership'): no hay forma de que a Massiel le llegue
+    // una parte nueva compartida ese mes (su Bizum ya se calculó/entregó),
+    // pero jofre-vs-massiel sigue siendo una pregunta real y necesaria.
+    case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)?'ownership':'confirm');
     case 'ownership':return 'confirm';
     case 'cType':return reg.cType==='aplazado'?'shared':'cNum';
     case 'cNum':return 'cuotasIguales';
@@ -3227,13 +3230,7 @@ function nextAfter(id){
     default:return 'confirm';
   }
 }
-function pick(field,value,id){reg[field]=value;if(field==='shared')reg.split=value?'50/50':null;if(field==='account'&&value==='CAIXA')reg.caixaCard=true;else if(field==='account')reg.caixaCard=false;
-  // v74 (29-ago) -- ver comentario en nextAfter('cuotas'): con nomina ya
-  // registrada, estas 3 categorias mixtas van directo a Jofre sin pasar por
-  // el paso 'ownership' -- hay que setear reg.group ACA porque nextAfter es
-  // una funcion pura (solo decide el proximo paso, no muta reg).
-  if(field==='isCuota'&&value===false&&reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)&&nominaReg){reg.group='jofre';}
-  regGoto(nextAfter(id));}
+function pick(field,value,id){reg[field]=value;if(field==='shared')reg.split=value?'50/50':null;if(field==='account'&&value==='CAIXA')reg.caixaCard=true;else if(field==='account')reg.caixaCard=false;regGoto(nextAfter(id));}
 function confirmAmount(){const raw=(document.getElementById('reg-amt')||{}).value;const v=toNum(raw);if(raw===''||isNaN(v)||v<0){toast('Indica un monto válido','var(--rd)');return;}reg.amount=v;reg.desc=(document.getElementById('reg-desc')||{}).value||'';regGoto(nextAfter('amount'));}
 function confirmCNum(){const v=parseInt((document.getElementById('reg-cnum')||{}).value);if(!v||v<1){toast('Indica el número de cuotas','var(--rd)');return;}reg.cNum=v;reg.cuotaMontos=[];regGoto(nextAfter('cNum'));}
 function confirmCuotaMonto(){const v=toNum((document.getElementById('reg-cmonto')||{}).value);if(!v||v<=0){toast('Indica el monto','var(--rd)');return;}reg.cuotaMonto=v;regGoto(nextAfter('cuotaMonto'));}
@@ -3305,7 +3302,13 @@ function renderReg(){
   else if(reg.step==='shared'){const lbl=reg.cType==='frac'?'¿CUOTAS COMPARTIDAS?':'¿GASTO COMPARTIDO?';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">${lbl}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('shared',true,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí · 50/50</button><button onclick="pick('shared',false,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No · solo Jofre</button></div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='cuotasCuenta'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DESDE QUÉ CUENTA SE DESCUENTAN LAS CUOTAS?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${reg.amount>0?`Cuota 1 (hoy) descontada de ${ACC_META[reg.account].n}.`:`Sin pago hoy — cuotas cargan a partir del mes de inicio.`}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${ACCOUNTS_LIST.filter(a=>a.id!=='IBKR'&&a.id!=='TRM').map(a=>`<button onclick="reg.cuotaCuentaDeduccion='${a.id}';regGoto(nextAfter('cuotasCuenta'))" class="acc-c${(reg.cuotaCuentaDeduccion||reg.account)===a.id?' on':''}">${a.n}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='mesInicio'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const meses=MONTH_ORDER.filter((k,i)=>i>=(ai<0?0:ai));h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿EN QUÉ MES INICIAN LAS CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('mesInicio','${m}','mesInicio')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
-  else if(reg.step==='ownership'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DE QUIÉN ES ESTE GASTO?</div><div style="font-size:11px;color:var(--t3);margin-bottom:12px">"${reg.category}" mezcla gastos 100% de una persona con compartidos — sin esto no se puede mostrar bien en la vista de Massiel.</div><div style="display:flex;flex-direction:column;gap:8px"><button onclick="pick('group','jofre','ownership')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Solo Jofre <span style="color:var(--t3);font-weight:400;font-size:11px">— Massiel no lo ve</span></button><button onclick="pick('group','massiel','ownership')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Solo Massiel</button><button onclick="pick('group','compartida','ownership')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Compartido <span style="color:var(--t3);font-weight:400;font-size:11px">${reg.account==='TRM'?'— sugerido (cuenta familiar)':''}</span></button></div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='ownership'){
+    // v75 (29-ago) -- con la nomina del mes activo ya registrada, no hay forma
+    // de que a Massiel le llegue una parte nueva compartida este mes (su
+    // Bizum ya se calculó/entregó) -- se oculta el botón "Compartido", pero
+    // jofre-vs-massiel sigue preguntándose siempre (ver nextAfter('cuotas')).
+    const bloqCompartida=!!nominaReg;
+    h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DE QUIÉN ES ESTE GASTO?</div><div style="font-size:11px;color:var(--t3);margin-bottom:12px">"${reg.category}" mezcla gastos 100% de una persona con compartidos — sin esto no se puede mostrar bien en la vista de Massiel.${bloqCompartida?' Nómina del mes ya registrada: no se ofrece "Compartido".':''}</div><div style="display:flex;flex-direction:column;gap:8px"><button onclick="pick('group','jofre','ownership')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Solo Jofre <span style="color:var(--t3);font-weight:400;font-size:11px">— Massiel no lo ve</span></button><button onclick="pick('group','massiel','ownership')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Solo Massiel</button>${bloqCompartida?'':'<button onclick="pick(\'group\',\'compartida\',\'ownership\')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Compartido <span style="color:var(--t3);font-weight:400;font-size:11px">'+(reg.account==='TRM'?'— sugerido (cuenta familiar)':'')+'</span></button>'}</div>`;nav.innerHTML=backBtn;}
   else{h=renderRegSummary();nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="saveReg()">Guardar movimiento</button>`;}
   body.innerHTML=h;
 }
