@@ -1073,7 +1073,7 @@ function fondoMutuoTareaLabels(monthId){
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
   const saldo=fondoMutuoDisponible(id);
-  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Dentro de TR Jofre · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Fondo compartido · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
@@ -1186,14 +1186,14 @@ function buildMonthPagos(id){
     if(removedSet.has(tid))return;
     list.push(Object.assign({id:tid,l:label,acc,amt:Math.round(amt*100)/100,cat:'gasto',done:false},extra||{}));
   }
-  function handleTaggedItem(label,tag,amt){
+  function handleTaggedItem(label,tag,amt,extra){
     if(!(amt>0))return;
     if(removedSet.has(computeTaskId(label)))return;
     const acc=tagToAcc(tag);
     if(!acc)return;
-    if(acc==='CAIXA'){caixaSum+=amt;pushDirect(label,'CAIXA',amt);}
-    else if(acc==='TRJ'){trjSum+=amt;pushDirect(label,'TRJ',amt);}
-    else pushDirect(label,'BBVA',amt);
+    if(acc==='CAIXA'){caixaSum+=amt;pushDirect(label,'CAIXA',amt,extra);}
+    else if(acc==='TRJ'){trjSum+=amt;pushDirect(label,'TRJ',amt,extra);}
+    else pushDirect(label,'BBVA',amt,extra);
   }
   const arrCat=(MONTHS[id].cats||[]).find(c=>c.l==='Arriendo');
   // Arriendo + Luz van al mismo destinatario (Ma. Lara), así que en vez de
@@ -1274,7 +1274,7 @@ function buildMonthPagos(id){
   }
   cuotasFor(id).forEach(c=>{
     const tag=(c.tags&&c.tags.includes('Caixa'))?'CB':((c.tags&&c.tags.includes('TR Jofre'))?'TR':'BBVA');
-    handleTaggedItem(c.l+(c.prog?' · '+c.prog:''),tag,moneyFromStr(c.amt));
+    handleTaggedItem(c.l+(c.prog?' · '+c.prog:''),tag,moneyFromStr(c.amt),c.tdcRelease?{tdcRelease:true}:undefined);
   });
   // Tareas de Hotel (gasto BBVA, cat Vacaciones). v67 -- redirigido de TRJ a
   // BBVA (el Fondo Mutuo vivía en TR Jofre; confirmado por Jofre 22-ago-2026
@@ -1298,7 +1298,15 @@ function buildMonthPagos(id){
     const tid=p+x.idTrj;
     if(removedSet.has(tid))return;
     caixaSum+=x.a;
-    list.push({id:tid,l:x.lTrj,acc:'CAIXA',amt:Math.round(x.a*100)/100,cat:'gasto',done:false,vacacion:true});
+  // v73 (29-ago) -- BUG encontrado: esta tarea es, por definicion, un cargo
+  // que YA redujo CAIXA_TDC.disponible al registrarse (regCaixaCard). Le
+  // faltaba tdcRelease:true, asi que al marcarla pagada (markPago) nunca
+  // liberaba ese cupo -- CAIXA_TDC quedaba permanentemente reducido y el
+  // banner "pendiente de liquidar" del home de Caixa no tenia forma de
+  // bajar a 0, aunque la tarea ya estuviera done. Caso real: Decathlon
+  // (EUR31,71) -- Jofre reporto que no podia "marcarla como cobrado" porque
+  // la tarea ya estaba pagada pero el banner seguia mostrando el monto.
+    list.push({id:tid,l:x.lTrj,acc:'CAIXA',amt:Math.round(x.a*100)/100,cat:'gasto',done:false,vacacion:true,tdcRelease:true});
   });
   (TAREAS_PROGRAMADAS[id]||[]).forEach(x=>{
     if(!(x.a>0))return;
@@ -3224,7 +3232,7 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
     const numCuota=n+offset;              // 2,3,... si hubo pago hoy; 1,2,... si no
     const esUltima=numCuota===totalCuotas;
     MONTHS[mid].cuotas=MONTHS[mid].cuotas||[];
-    MONTHS[mid].cuotas.push({l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false});
+    MONTHS[mid].cuotas.push({l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false,tdcRelease:!!(opts&&opts.tdcRelease)});
   }
 }
 function renderRegSummary(){
@@ -3318,7 +3326,7 @@ function saveReg(){
     updBbvaBadge();
   }
   else if(!reg.isCuota){regMov(reg.account,label,reg.amount,false,reg.category,reg.group);}
-  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});if(reg.account==='CAIXA')regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0});}
+  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0,tdcRelease:esCaixaTDC});}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
   // v28 — Al terminar de registrar, devolver al usuario a DONDE ESTABA:
