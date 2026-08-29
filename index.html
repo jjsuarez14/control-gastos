@@ -2836,20 +2836,18 @@ const CATEGORIAS_POOL=['Mercado','Compartir Familiar'];
 // v52 — Categorías donde, a diferencia del resto (que son 55/45 o 50/50 de
 // TODA la categoría), ítems individuales pueden ser 100% de una sola persona
 // (Barbería/Uñas/Transporte -> Personales; Gimnasio -> Salud). Confirmado por
-// Jofre (auditoría CDG-10): son las ÚNICAS dos. Todo movimiento suelto nuevo
-// en estas categorías DEBE traer `group` ('jofre'|'massiel'|'compartida') —
-// nunca queda sin dueño. Se usa para: (a) exigir el paso de responsabilidad
-// en el registro (nextAfter/renderReg), (b) filtrar qué ve Massiel
-// (categoriaSpendForMonth). Regla de default sugerida por Jofre: movimientos
-// en TR Massiel son compartidos por default (esa cuenta es el fondo familiar).
-// v74 (29-ago) -- Deporte SALE de esta lista. Corregido por Jofre: no es que
-// "hoy" Deporte sea 100% suyo -- es estructural, GENUA/Fisiosalud/Xirivella
-// SIEMPRE son 100% Jofre, Massiel no tiene ni va a tener responsabilidad ahi.
-// No hacia falta un gate temporal (nomina registrada o no) para esto -- la
-// pregunta de dueño simplemente nunca debio existir para Deporte. Ver v74 en
-// nextAfter('cuotas')/pick() para el gate temporal que SI aplica a las 3
-// categorias mixtas restantes (Personales/Salud/Carro-Moto), que si tienen
-// responsabilidad real y ocasional de Massiel.
+// Jofre (auditoría CDG-10): son las ÚNICAS dos. v76 (29-ago) -- REVIERTE v52/
+// v74/v75: ya NO se exige `group` en el registro ad-hoc -- se eliminó el paso
+// 'ownership' del wizard (ver nextAfter('cuotas')). La visibilidad de Massiel
+// se decide por CATEGORÍA: Salud/Carro-Moto -> ve TODO lo registrado ahí sin
+// filtrar (MIXED_FULL_VISIBILITY_CATS); Personales -> solo ve lo que ya viene
+// fijo desde Previsión (DET.personales con group 'massiel'/'compartida', vía
+// categoriaFijosDetalle) -- un registro ad-hoc nuevo en Personales queda sin
+// `group`, y por eso MIXED_ITEM_FILTERED_CATS lo excluye automáticamente de
+// su vista (categoriaSpendForMonth/categoriaNivel2Rows exigen group
+// 'massiel'/'compartida'). Deporte quedó fuera de esta lista desde v74:
+// GENUA/Fisiosalud/Xirivella son estructuralmente 100% Jofre, Massiel no
+// tiene ni tendrá responsabilidad ahí.
 const MIXED_OWNERSHIP_CATS=['Personales','Salud','Carro/Moto'];
 // v72 (28-ago) -- la regla de arriba ("movimientos en TR Massiel son
 // compartidos por default, esa cuenta es el fondo familiar") estaba
@@ -3209,18 +3207,19 @@ function nextAfter(id){
     case 'account':return reg.type==='t'?'tareaMes':(reg.type==='g'?'cuotas':'confirm');
     case 'tareaMes':return POOL_FUNDED_CATS.includes(reg.category)?'confirm':'tareaReparto';
     case 'tareaReparto':return 'confirm';
-    // v75 (29-ago) -- CORRIGE v74: Jofre señaló que Personales (y por el mismo
-    // patrón, Salud) tienen subitems con responsabilidad real de Massiel (ver
-    // DET.personales/gimnasios -- Uñas, Bono Transporte, gym2, todos 100%
-    // ella). Saltar directo a 'jofre' sin preguntar los habría misatribuido
-    // en silencio. El paso 'ownership' vuelve a mostrarse SIEMPRE para estas
-    // 3 categorías (Personales/Salud/Carro-Moto) -- lo que cambia post-nómina
-    // no es si se pregunta, sino que el botón "Compartido" se oculta (ver
-    // renderReg, step 'ownership'): no hay forma de que a Massiel le llegue
-    // una parte nueva compartida ese mes (su Bizum ya se calculó/entregó),
-    // pero jofre-vs-massiel sigue siendo una pregunta real y necesaria.
-    case 'cuotas':return reg.isCuota?'cType':(reg.type==='g'&&MIXED_OWNERSHIP_CATS.includes(reg.category)&&!SHARED_FUND_ACCOUNTS.includes(reg.account)?'ownership':'confirm');
-    case 'ownership':return 'confirm';
+    // v76 (29-ago) -- REVIERTE v75: Jofre determinó que preguntar
+    // responsabilidad (jofre/massiel/compartida) en el registro ad-hoc es
+    // innecesario en general -- la visibilidad de Massiel se decide por
+    // CATEGORÍA, no por movimiento suelto. Salud y Carro/Moto: ella ve TODO
+    // lo que se registre ahí, sin filtrar (MIXED_FULL_VISIBILITY_CATS).
+    // Personales: ella solo ve lo que ya viene fijo desde Previsión (Uñas,
+    // Bono Transporte, ítems compartidos -- ver categoriaFijosDetalle/
+    // DET.personales); un registro ad-hoc nuevo en Personales ya no lleva
+    // `group` (nadie lo pregunta) y por eso MIXED_ITEM_FILTERED_CATS lo deja
+    // fuera de su vista automáticamente (categoriaSpendForMonth/
+    // categoriaNivel2Rows exigen group 'massiel'/'compartida'). El paso
+    // 'ownership' del wizard se elimina por completo.
+    case 'cuotas':return reg.isCuota?'cType':'confirm';
     case 'cType':return reg.cType==='aplazado'?'shared':'cNum';
     case 'cNum':return 'cuotasIguales';
     case 'cuotasIguales':return reg.cuotasIguales?'cuotaMonto':'cuotaVarInit';
@@ -3302,13 +3301,6 @@ function renderReg(){
   else if(reg.step==='shared'){const lbl=reg.cType==='frac'?'¿CUOTAS COMPARTIDAS?':'¿GASTO COMPARTIDO?';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">${lbl}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('shared',true,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí · 50/50</button><button onclick="pick('shared',false,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No · solo Jofre</button></div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='cuotasCuenta'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DESDE QUÉ CUENTA SE DESCUENTAN LAS CUOTAS?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${reg.amount>0?`Cuota 1 (hoy) descontada de ${ACC_META[reg.account].n}.`:`Sin pago hoy — cuotas cargan a partir del mes de inicio.`}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${ACCOUNTS_LIST.filter(a=>a.id!=='IBKR'&&a.id!=='TRM').map(a=>`<button onclick="reg.cuotaCuentaDeduccion='${a.id}';regGoto(nextAfter('cuotasCuenta'))" class="acc-c${(reg.cuotaCuentaDeduccion||reg.account)===a.id?' on':''}">${a.n}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='mesInicio'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const meses=MONTH_ORDER.filter((k,i)=>i>=(ai<0?0:ai));h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿EN QUÉ MES INICIAN LAS CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('mesInicio','${m}','mesInicio')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
-  else if(reg.step==='ownership'){
-    // v75 (29-ago) -- con la nomina del mes activo ya registrada, no hay forma
-    // de que a Massiel le llegue una parte nueva compartida este mes (su
-    // Bizum ya se calculó/entregó) -- se oculta el botón "Compartido", pero
-    // jofre-vs-massiel sigue preguntándose siempre (ver nextAfter('cuotas')).
-    const bloqCompartida=!!nominaReg;
-    h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DE QUIÉN ES ESTE GASTO?</div><div style="font-size:11px;color:var(--t3);margin-bottom:12px">"${reg.category}" mezcla gastos 100% de una persona con compartidos — sin esto no se puede mostrar bien en la vista de Massiel.${bloqCompartida?' Nómina del mes ya registrada: no se ofrece "Compartido".':''}</div><div style="display:flex;flex-direction:column;gap:8px"><button onclick="pick('group','jofre','ownership')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Solo Jofre <span style="color:var(--t3);font-weight:400;font-size:11px">— Massiel no lo ve</span></button><button onclick="pick('group','massiel','ownership')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Solo Massiel</button>${bloqCompartida?'':'<button onclick="pick(\'group\',\'compartida\',\'ownership\')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Compartido <span style="color:var(--t3);font-weight:400;font-size:11px">'+(reg.account==='TRM'?'— sugerido (cuenta familiar)':'')+'</span></button>'}</div>`;nav.innerHTML=backBtn;}
   else{h=renderRegSummary();nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="saveReg()">Guardar movimiento</button>`;}
   body.innerHTML=h;
 }
