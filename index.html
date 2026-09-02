@@ -3081,7 +3081,7 @@ function showMaMonthDetail(id,backTo){
   // en meses no futuros. Mismo criterio acá: en mes futuro (Prevision) se listan
   // todas (plan), en mes actual/pasado (ejecucion real) solo las YA pagadas.
   const cuotasBase=maovEsVistaMassiel?cuotasForMassiel(id):cuotasFor(id);
-  const cuotasLista=esMesFuturo(id)?cuotasBase:cuotasBase.filter(c=>tareaGastoDoneExacta(id,new RegExp(c.l.replace(/[.*+?^${}()|[\]\\]/g,'\\  const cuotasLista=maovEsVistaMassiel?cuotasForMassiel(id):cuotasFor(id);'),'i')));
+  const cuotasLista=esMesFuturo(id)?cuotasBase:cuotasBase.filter(c=>tareaGastoDoneExacta(id,new RegExp(c.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i')));
   const cuotaRowFn=jofreCuotaRowHTML;
   const cuotasVacioTxt=maovEsVistaMassiel?'Sin cuotas a tu cargo este mes':'Sin cuotas este mes';
   const cuotasHTML=cuotasLista.length?cuotasLista.map(cuotaRowFn).join(''):`<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">${cuotasVacioTxt}</div>`;
