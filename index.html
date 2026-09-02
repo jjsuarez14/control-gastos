@@ -534,7 +534,7 @@ function gastosPropiosPend(acc){
   // v78 -- FIX: las tareas cat:'gasto' con vacacion:true (Hotel, aplazados TDC
   // financiados por el Fondo Mutuo) son un compromiso DEL FONDO, no un gasto
   // propio generico de la cuenta -- ya se restan aparte via fmReservado
-  // (fondoMutuoDisponible) en disponibleCuenta('BBVA'). Sin este filtro se
+  // (fondoMutuoEnCuenta, desde v80) en disponibleCuenta('BBVA'). Sin este filtro se
   // restaban DOS veces (aca y en fmReservado), inflando el "gasto pendiente"
   // y desinflando el disponible real de BBVA (reportado por Jofre 2-sep-2026,
   // caso Hotel - Cumpleanos de Massiel). Solo aplica a BBVA: en CAIXA/TRJ no
@@ -557,9 +557,20 @@ function disponibleCuenta(acc){
   // que en realidad esta reservado para gastos de Vacaciones/Compartir
   // Familiar. Confirmado por Jofre: ese dinero solo debe empezar a tocar el
   // Disponible cuando el fondo llegue a 0 (se consuma via los movimientos
-  // que ya filtra fondoMutuoConsumido). Restamos el remanente reservado
-  // (fondoMutuoDisponible) solo en BBVA, que es donde vive hoy.
-  const fmReservado=(acc==='BBVA')?fondoMutuoDisponible(ACTIVE_ID):0;
+  // que ya filtra fondoMutuoConsumido).
+  // v80 -- FIX (error grave, Jofre 2-sep-2026): se restaba fondoMutuoDisponible
+  // (el remanente YA neto de lo pendiente, ej. 108.22) en vez del monto TOTAL
+  // que hoy sigue fisicamente en la cuenta (ej. 197.78). Eso dejaba sin
+  // reservar la porcion ya comprometida con tareas pendientes del fondo (ej.
+  // Hotel 89.56), que tampoco aparece en gastosPropiosPend/bbvaPendienteList
+  // (excluidas ahi desde v78 por ser vacacion) -- ese dinero desaparecia de
+  // los dos lados a la vez y se mostraba como "disponible" en BBVA sin
+  // estarlo. Detectado por Jofre con la cuenta cruzada: Saldo BBVA (1.939,86)
+  // - Pdte. cobro BBVA (1.377,27) - Fondo Mutuo en cuenta (197,78) = 364,81,
+  // pero el Disponible mostrado era 454,37 (diferencia de 89,56, el Hotel
+  // fantasma). Ahora se resta fondoMutuoEnCuenta -- el total reservado en la
+  // cuenta, este ya ejecutado o todavia pendiente.
+  const fmReservado=(acc==='BBVA')?fondoMutuoEnCuenta(ACTIVE_ID):0;
   const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc)-fmReservado;
   return Math.round(d*100)/100;
 }
@@ -1106,24 +1117,36 @@ function fondoMutuoTareaLabels(monthId){
 function fondoMutuoPendientes(monthId){
   return (MONTH_PAGOS[monthId]||[]).filter(p=>p.cat==='gasto'&&p.vacacion&&p.amt>0&&tareaPendiente(p)).map(p=>({id:p.id,l:p.l,a:p.amt}));
 }
+// v80 -- FIX (error grave, Jofre 2-sep-2026): "en la cuenta" (asignacion menos
+// SOLO lo ya ejecutado, sin descontar lo pendiente) es el monto REAL de euros
+// del Fondo Mutuo que hoy sigue fisicamente en BBVA. v79 ya calculaba este
+// numero para el desglose visual del modal, pero disponibleCuenta('BBVA')
+// seguia usando fondoMutuoDisponible() (que SI descuenta lo pendiente, ej.
+// 108.22) como fmReservado -- entonces la porcion pendiente del fondo (ej.
+// Hotel 89.56) no se restaba del disponible de BBVA en NINGUN lado: no esta
+// en bbvaPendienteList/gastosPropiosPend (v78 los excluyo por ser vacacion)
+// ni se restaba del todo via fmReservado (solo se restaba lo neto). Se extrae
+// esta funcion como fuente unica de verdad (antes vivia solo inline en
+// renderFondoMutuoMassiel) para que disponibleCuenta y el modal del Fondo
+// Mutuo SIEMPRE muestren numeros consistentes entre si.
+function fondoMutuoEnCuenta(monthId){
+  if(!fondoMutuoMesFinanciado(monthId))return 0;
+  const pendienteTotal=fondoMutuoPendientes(monthId).reduce((s,x)=>s+x.a,0);
+  const consumidoEjecutado=fondoMutuoConsumido(monthId)-pendienteTotal;
+  const asignacion=fondoMutuoEntradas(monthId).reduce((s,x)=>s+x.a,0);
+  return Math.max(0,Math.round((asignacion-consumidoEjecutado)*100)/100);
+}
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
   const saldo=fondoMutuoDisponible(id);
   const pendientes=fondoMutuoPendientes(id);
   const pendienteTotal=Math.round(pendientes.reduce((s,x)=>s+x.a,0)*100)/100;
   const asignacion=fondoMutuoEntradas(id).reduce((s,x)=>s+x.a,0);
-  // v79 -- FIX (Jofre, 2-sep-2026): el desglose de v78 (Disponible real + Pdte.
-  // de cobro) dejaba una ambiguedad real -- "el disponible en cuenta del fondo,
-  // es 108.22 o 197.78??". Faltaba el tercer numero: cuanto hay REALMENTE
-  // reservado en el fondo este mes (asignacion menos lo YA ejecutado, sin
-  // descontar todavia lo pendiente) -- distinto del disponible real (que SI
-  // descuenta lo pendiente) y distinto de la asignacion bruta (que no descuenta
-  // ni lo ejecutado). fondoMutuoConsumido() ya mezcla ejecutado + pendiente en
-  // un solo total; acá se separa esa mezcla para poder mostrar los 3 numeros
-  // sin inventar ningun dato nuevo (es la misma aritmetica de siempre).
-  const consumidoTotal=fondoMutuoConsumido(id);
-  const consumidoEjecutado=Math.round((consumidoTotal-pendienteTotal)*100)/100;
-  const montoEnCuenta=Math.max(0,Math.round((asignacion-consumidoEjecutado)*100)/100);
+  // v80 -- montoEnCuenta ahora viene de fondoMutuoEnCuenta() (fuente unica,
+  // compartida con disponibleCuenta('BBVA') -- ver comentario ahi arriba) en
+  // vez de calcularse aparte aca, que fue justamente lo que provoco que los
+  // dos numeros se desincronizaran.
+  const montoEnCuenta=fondoMutuoEnCuenta(id);
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">${isMassielRole()?'Fondo compartido · solo lectura':'Fondo compartido · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   // v79 -- 3 numeros cuando hay pendientes: EN LA CUENTA (lo que queda de lo
   // reservado este mes, sin descontar lo pendiente todavia) arriba, y abajo el
