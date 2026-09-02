@@ -1138,6 +1138,18 @@ function fondoMutuoEnCuenta(monthId){
 }
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
+  // v81 -- FIX (bug real, Jofre 2-sep-2026): Massiel pudo marcar como
+  // completada la tarea del Hotel, algo explicitamente prohibido. Causa:
+  // este modal (#fmov) se abre tambien desde el tile "Fondo Mutuo" del tab
+  // Massiel (#p-m, linea 'pm-fmutuo'), que Jofre usa para PREVISUALIZAR
+  // exactamente lo que ella ve -- sin cambiar de sesion/rol. isMassielRole()
+  // solo mira el rol de SESION (fijo durante toda la sesion), asi que ahi
+  // seguia dando false y el modal quedaba con permisos de Jofre (click para
+  // completar) aunque se abriera desde el tile marcado "TR Jofre · lectura".
+  // Mismo bug que v54/v55 ya habian corregido en showMaMonthDetail -- se
+  // aplica aca el mismo criterio ya establecido (ver esa funcion): depende
+  // de AMBAS señales, no solo del rol de sesion.
+  const massielView=isMassielRole()||(document.getElementById('p-m')?.classList.contains('on')||false);
   const saldo=fondoMutuoDisponible(id);
   const pendientes=fondoMutuoPendientes(id);
   const pendienteTotal=Math.round(pendientes.reduce((s,x)=>s+x.a,0)*100)/100;
@@ -1147,7 +1159,7 @@ function renderFondoMutuoMassiel(){
   // vez de calcularse aparte aca, que fue justamente lo que provoco que los
   // dos numeros se desincronizaran.
   const montoEnCuenta=fondoMutuoEnCuenta(id);
-  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">${isMassielRole()?'Fondo compartido · solo lectura':'Fondo compartido · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">${massielView?'Fondo compartido · solo lectura':'Fondo compartido · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   // v79 -- 3 numeros cuando hay pendientes: EN LA CUENTA (lo que queda de lo
   // reservado este mes, sin descontar lo pendiente todavia) arriba, y abajo el
   // desglose DISPONIBLE REAL / PDTE. DE COBRO (que sí lo descuenta) -- mismo
@@ -1161,8 +1173,8 @@ function renderFondoMutuoMassiel(){
       // v78 -- Jofre: las tareas pendientes del fondo las puede VER Massiel,
       // pero solo Jofre puede marcarlas como completadas (misma logica de
       // permisos que ya usa el boton "+ Registrar movimiento" de esta vista).
-      const clickAttr=isMassielRole()?'':`onclick="markPago('${p.id}')" `;
-      const cursor=isMassielRole()?'default':'pointer';
+      const clickAttr=massielView?'':`onclick="markPago('${p.id}')" `;
+      const cursor=massielView?'default':'pointer';
       html+=`<div ${clickAttr}style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd);cursor:${cursor}"><div style="width:20px;height:20px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1;font-size:12px;color:var(--t1)">${p.l}</div><div style="font-size:13px;font-weight:700;color:#8B6FDF">-${fmtE(p.a)}</div></div>`;
     });
     html+='</div>';
@@ -1200,7 +1212,7 @@ function renderFondoMutuoMassiel(){
   // Massiel (solo lectura real) -- antes nunca ofrecia registrar un movimiento
   // ni para Jofre, porque el boton no existia acá (a diferencia del overlay
   // normal de cuenta, ver renderAccountOverlay). Se agrega solo si NO es Massiel.
-  if(!isMassielRole())html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA')">+ Registrar movimiento</button></div>`;
+  if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA')">+ Registrar movimiento</button></div>`;
   document.getElementById('fmov-c').innerHTML=html;
 }
 function showFondoMutuoMassiel(){renderFondoMutuoMassiel();document.getElementById('fmov').style.display='block';}
