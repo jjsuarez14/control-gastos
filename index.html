@@ -480,7 +480,10 @@ function tieneMovEjecutado(p){
 function tareaPendiente(p){ return !p.done && !tieneMovEjecutado(p); }
 function trjPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='TRJ'&&p.cat==='gasto'&&p.id!=='j-fmutuo'&&tareaPendiente(p)).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
 function caixaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>p.acc==='CAIXA'&&p.cat==='gasto'&&tareaPendiente(p)).map(p=>({id:p.id,l:p.l,a:p.amt})):[];}
-function bbvaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'))&&tareaPendiente(p)&&p.amt!=null).map(p=>({l:p.l,a:p.amt})):[];}
+// v78 -- excluye vacacion:true (ver gastosPropiosPend): esas tareas viven en
+// el "Pdte. de cobro" propio del Fondo Mutuo (renderFondoMutuoMassiel /
+// fondoMutuoPendientes), no en el Pdte. cobro generico de BBVA.
+function bbvaPendienteList(){return MONTH_PAGOS[ACTIVE_ID]?MONTH_PAGOS[ACTIVE_ID].filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'&&!p.vacacion))&&tareaPendiente(p)&&p.amt!=null).map(p=>({l:p.l,a:p.amt})):[];}
 // ── DISPONIBLE (v29, spec confirmada por Jofre) ──────────────────────────────
 // El problema previo: "Pdte. cobro" mezclaba GASTOS reales (salen a terceros)
 // con FONDEOS (cat:'enviar'/'retiro' — dinero que va de BBVA a otra cuenta
@@ -528,7 +531,16 @@ function fondeoSalientePend(acc){
 function gastosPropiosPend(acc){
   const list=MONTH_PAGOS[ACTIVE_ID]||[];
   let sum=0;
-  list.forEach(p=>{ if(p.amt!=null&&p.cat==='gasto'&&p.acc===acc&&tareaPendiente(p))sum+=p.amt; });
+  // v78 -- FIX: las tareas cat:'gasto' con vacacion:true (Hotel, aplazados TDC
+  // financiados por el Fondo Mutuo) son un compromiso DEL FONDO, no un gasto
+  // propio generico de la cuenta -- ya se restan aparte via fmReservado
+  // (fondoMutuoDisponible) en disponibleCuenta('BBVA'). Sin este filtro se
+  // restaban DOS veces (aca y en fmReservado), inflando el "gasto pendiente"
+  // y desinflando el disponible real de BBVA (reportado por Jofre 2-sep-2026,
+  // caso Hotel - Cumpleanos de Massiel). Solo aplica a BBVA: en CAIXA/TRJ no
+  // existe ese doble conteo (fmReservado solo se resta de BBVA, que es donde
+  // vive hoy el Fondo Mutuo -- ver fondoMutuoDisponible).
+  list.forEach(p=>{ if(p.amt!=null&&p.cat==='gasto'&&p.acc===acc&&tareaPendiente(p)&&!(acc==='BBVA'&&p.vacacion))sum+=p.amt; });
   return Math.round(sum*100)/100;
 }
 // Disponible unificado por cuenta (la fórmula única, para todas las cuentas):
@@ -790,9 +802,11 @@ function askAmount(title,sub,defaultVal){
 }
 function closeAmtPrompt(){const el=document.getElementById('amtprompt');el.style.display='none';const r=amtPromptResolve;amtPromptResolve=null;if(r)r(null);}
 function confirmAmtPrompt(){const v=document.getElementById('amtprompt-input').value;document.getElementById('amtprompt').style.display='none';const r=amtPromptResolve;amtPromptResolve=null;if(r)r(v);}
-function updBbvaBadge(){const pend=PAGOS.filter(x=>tareaPendiente(x)&&(x.cat==='enviar'||x.cat==='retiro'||(x.cat==='gasto'&&x.acc==='BBVA'))).length;const tt=document.getElementById('bbva-task-txt');if(tt){tt.textContent=!nominaReg&&PAGOS.some(x=>x.cat==='ingreso'&&!x.done)?'Esperando nómina':pend>0?pend+' pendientes':'✓ Al día';tt.style.color=!nominaReg?'var(--t3)':pend>0?'var(--gd)':'var(--tl)';}}
+function updBbvaBadge(){const pend=PAGOS.filter(x=>tareaPendiente(x)&&(x.cat==='enviar'||x.cat==='retiro'||(x.cat==='gasto'&&x.acc==='BBVA'&&!x.vacacion))).length;const tt=document.getElementById('bbva-task-txt');if(tt){tt.textContent=!nominaReg&&PAGOS.some(x=>x.cat==='ingreso'&&!x.done)?'Esperando nómina':pend>0?pend+' pendientes':'✓ Al día';tt.style.color=!nominaReg?'var(--t3)':pend>0?'var(--gd)':'var(--tl)';}}
 const ACC_META={BBVA:{n:'BBVA',c:'#4C8DFA',desc:'Cuenta principal'},CAIXA:{n:'Caixa',c:'#F97316',desc:'Renting + TDC'},TRJ:{n:'TR Jofre',c:'#8B6FDF',desc:'Fondo social'},TRM:{n:'TR Massiel',c:'#D4537E',desc:'Mercado'},TRJA:{n:'TR J.A.',c:'#22C55E',desc:'Fondo emergencia'},IBKR:{n:'IBKR',c:'#4C8DFA',desc:'Inversión bolsa'},EFECTIVO:{n:'Efectivo',c:'#9CA3AF',desc:'Retiros para pagos en efectivo'}};
-function tasksFor(accId){if(accId==='BBVA')return PAGOS.filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'))&&tareaPendiente(p));return PAGOS.filter(p=>p.cat==='gasto'&&p.acc===accId&&tareaPendiente(p));}
+// v78 -- mismo criterio que bbvaPendienteList: excluye vacacion:true (Fondo
+// Mutuo tiene su propia lista de pendientes, ver fondoMutuoPendientes).
+function tasksFor(accId){if(accId==='BBVA')return PAGOS.filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'&&!p.vacacion))&&tareaPendiente(p));return PAGOS.filter(p=>p.cat==='gasto'&&p.acc===accId&&tareaPendiente(p));}
 function srcReady(accId){if(accId==='CAIXA'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='CAIXA');return t?t.done:true;}if(accId==='TRJ'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='TRJ');return t?t.done:true;}if(accId==='EFECTIVO'){const t=PAGOS.find(p=>p.cat==='retiro');return t?t.done:true;}return true;}
 function renderAccountOverlay(accId){
   currentOverlayAcc=accId;const d=ACC_META[accId];let balHTML='';
@@ -1077,11 +1091,49 @@ function fondoMutuoTareaLabels(monthId){
   CUOTAS_NUEVAS.forEach(c=>{if(c.account==='TRJ'){const base=(c.desc||c.category||'');set.add(base+' · cuota 1/'+(((c.cNum)||0)+1));}});
   return set;
 }
+// v78 -- Lista de tareas pendientes QUE CONSUME el Fondo Mutuo (Hotel,
+// aplazados TDC financiados por el fondo, cualquier tarea cat:'gasto' con
+// vacacion:true), sin importar en que cuenta se vaya a pagar de verdad
+// (BBVA o CAIXA). fondoMutuoConsumido() YA resta estos montos del disponible
+// del fondo aunque sigan pendientes (confirmado por Jofre 2-sep-2026: el
+// compromiso existe desde que la tarea aparece, no desde que se paga) -- esta
+// funcion es la contraparte visual, para que Jofre y Massiel vean CUALES
+// tareas explican la diferencia entre el aporte bruto del mes y lo que de
+// verdad queda libre, en vez de un unico numero sin desglosar. Ejemplo pedido
+// por Jofre: "Hotel - Cumpleanos de Massiel" debe verse aca, restando del
+// Fondo Mutuo, y NO en el Pdte. de cobro generico de BBVA (ver bbvaPendienteList
+// / gastosPropiosPend / tasksFor / updBbvaBadge, que ahora excluyen vacacion).
+function fondoMutuoPendientes(monthId){
+  return (MONTH_PAGOS[monthId]||[]).filter(p=>p.cat==='gasto'&&p.vacacion&&p.amt>0&&tareaPendiente(p)).map(p=>({id:p.id,l:p.l,a:p.amt}));
+}
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
   const saldo=fondoMutuoDisponible(id);
+  const pendientes=fondoMutuoPendientes(id);
+  const pendienteTotal=Math.round(pendientes.reduce((s,x)=>s+x.a,0)*100)/100;
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">${isMassielRole()?'Fondo compartido · solo lectura':'Fondo compartido · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
-  html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
+  // v78 -- FIX (pedido explicito de Jofre 2-sep-2026): antes se mostraba un
+  // unico "SALDO DISPONIBLE" ya neteado, sin explicar por que. Cuando el fondo
+  // tiene tareas pendientes por completar (ej. el Hotel), ahora se desglosa en
+  // DISPONIBLE REAL (lo que de verdad se puede gastar) + PDTE. DE COBRO (lo ya
+  // comprometido, con el detalle de cada tarea abajo) -- mismo patron visual
+  // que ya usa Caixa (Disp. real / Pdte. pagar) para su tarjeta TDC. Si no hay
+  // nada pendiente, se muestra el numero simple de siempre (son el mismo dato).
+  if(pendienteTotal>0){
+    html+=`<div style="padding:14px 16px 8px"><div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:9px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--tl);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:22px;font-weight:800;color:var(--tl)">${fmtE(saldo)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. DE COBRO</div><div style="font-size:15px;font-weight:700;color:#8B6FDF">${fmtE(pendienteTotal)}</div></div></div></div></div>`;
+    html+=`<div style="padding:4px 16px 12px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">PENDIENTES DEL FONDO</div>`;
+    pendientes.forEach(p=>{
+      // v78 -- Jofre: las tareas pendientes del fondo las puede VER Massiel,
+      // pero solo Jofre puede marcarlas como completadas (misma logica de
+      // permisos que ya usa el boton "+ Registrar movimiento" de esta vista).
+      const clickAttr=isMassielRole()?'':`onclick="markPago('${p.id}')" `;
+      const cursor=isMassielRole()?'default':'pointer';
+      html+=`<div ${clickAttr}style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd);cursor:${cursor}"><div style="width:20px;height:20px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1;font-size:12px;color:var(--t1)">${p.l}</div><div style="font-size:13px;font-weight:700;color:#8B6FDF">-${fmtE(p.a)}</div></div>`;
+    });
+    html+='</div>';
+  }else{
+    html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
+  }
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
   if(!desdeJul){html+=`<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin trazabilidad para este mes</div></div>`;document.getElementById('fmov-c').innerHTML=html;return;}
