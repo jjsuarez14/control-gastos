@@ -1002,9 +1002,16 @@ const FONDO_MUTUO_CATS=['Vacaciones','Compartir Familiar'];
 function fondoMutuoConsumido(monthId){
   let c=0;
   // 1) Gastos de vacaciones ya presupuestados como tarea del mes con
-  //    vacacion:true y YA pagados (cualquier cuenta).
+  //    vacacion:true -- PAGADOS o PENDIENTES (cualquier cuenta). v77 -- FIX
+  //    (confirmado por Jofre 2-sep): antes exigia p.done, así que una tarea
+  //    pendiente (ej. Hotel Cumpleaños Massiel, o el aplazado de Decathlon en
+  //    Caixa) NO restaba del Fondo Mutuo disponible aunque ya fuera un gasto
+  //    COMPROMETIDO contra el fondo -- el disponible mostrado quedaba inflado
+  //    (parecía haber más plata de la que realmente queda libre). El viejo
+  //    "Escenario A" de abajo (asigVacaciones) intentaba cubrir este caso pero
+  //    solo por texto/label "vacacion" en la asignación (agosto); no generalizaba.
   (MONTH_PAGOS[monthId]||[]).forEach(p=>{
-    if(p.cat==='gasto'&&p.done&&p.vacacion&&p.amt>0)c+=p.amt;
+    if(p.cat==='gasto'&&p.vacacion&&p.amt>0)c+=p.amt;
   });
   // 2) Movimientos manuales de vacaciones/familiar que salen de TRJ.
   // v67 -- BBVA en vez de TRJ (el Fondo Mutuo se redirigió ahí; el filtro por
@@ -1073,7 +1080,7 @@ function fondoMutuoTareaLabels(monthId){
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
   const saldo=fondoMutuoDisponible(id);
-  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">Dentro de TR Jofre · solo lectura</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">${isMassielRole()?'Fondo compartido · solo lectura':'Fondo compartido · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
   html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#8B6FDF">${fmtE(saldo)}</div></div>`;
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
@@ -1103,6 +1110,11 @@ function renderFondoMutuoMassiel(){
   });
   html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos este mes</div>';
   html+='</div>';
+  // v77 -- Esta vista (#fmov) se reusa para Jofre (desde su tile BBVA) Y para
+  // Massiel (solo lectura real) -- antes nunca ofrecia registrar un movimiento
+  // ni para Jofre, porque el boton no existia acá (a diferencia del overlay
+  // normal de cuenta, ver renderAccountOverlay). Se agrega solo si NO es Massiel.
+  if(!isMassielRole())html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA')">+ Registrar movimiento</button></div>`;
   document.getElementById('fmov-c').innerHTML=html;
 }
 function showFondoMutuoMassiel(){renderFondoMutuoMassiel();document.getElementById('fmov').style.display='block';}
@@ -1160,7 +1172,10 @@ function ordenarMovsPorFecha(arr){
     const ka=pa.length===2?(parseInt(pa[1],10)*100+parseInt(pa[0],10)):-1;
     const kb=pb.length===2?(parseInt(pb[1],10)*100+parseInt(pb[0],10)):-1;
     if(kb!==ka)return kb-ka;
-    return B.i-A.i;
+    // v77 -- FIX: el desempate estaba invertido. Con unshift(), un movimiento
+    // agregado DESPUES (mas reciente) queda en un indice MENOR que uno agregado
+    // antes ese mismo dia -- habia que preferir indice MENOR primero, no mayor.
+    return A.i-B.i;
   }).map(x=>x.m);
 }
 function splitFromCuotaTags(tags){
@@ -3059,7 +3074,14 @@ function showMaMonthDetail(id,backTo){
   // una fracción calculada. cuotasForMassiel ya filtra a lo que es de ella
   // (50/50 + Solo Massiel); acá solo cambiamos el render a monto completo
   // para ambas vistas. maCuotaRowHTML (partía a la mitad) queda retirada.
-  const cuotasLista=maovEsVistaMassiel?cuotasForMassiel(id):cuotasFor(id);
+  // v77 -- Bug: esta lista (tab "Cuotas" del mes en Historial, Solo lectura)
+  // mostraba TODAS las cuotas programadas del mes via cuotasFor/cuotasForMassiel,
+  // sin filtrar por si la tarea real ya esta paga -- inconsistente con el tab
+  // "Categorias", que en categoriaFijosDetalle SI filtra por tareaGastoDoneExacta
+  // en meses no futuros. Mismo criterio acá: en mes futuro (Prevision) se listan
+  // todas (plan), en mes actual/pasado (ejecucion real) solo las YA pagadas.
+  const cuotasBase=maovEsVistaMassiel?cuotasForMassiel(id):cuotasFor(id);
+  const cuotasLista=esMesFuturo(id)?cuotasBase:cuotasBase.filter(c=>tareaGastoDoneExacta(id,new RegExp(c.l.replace(/[.*+?^${}()|[\]\\]/g,'\\  const cuotasLista=maovEsVistaMassiel?cuotasForMassiel(id):cuotasFor(id);'),'i')));
   const cuotaRowFn=jofreCuotaRowHTML;
   const cuotasVacioTxt=maovEsVistaMassiel?'Sin cuotas a tu cargo este mes':'Sin cuotas este mes';
   const cuotasHTML=cuotasLista.length?cuotasLista.map(cuotaRowFn).join(''):`<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">${cuotasVacioTxt}</div>`;
@@ -3491,6 +3513,27 @@ function stateDocRef(){return _fbDoc(db,'budgetApp','state');}
 // tanto -- cada una aplica solo SU propio cambio real.
 let MOVS_BASELINE={};
 function snapshotMovsBaseline(){MOVS_BASELINE=JSON.parse(JSON.stringify(MOVS));}
+// v77 -- BAL/CAIXA_TDC.disponible se guardaban en buildPersistableState() como
+// campos planos last-write-wins (a diferencia de MOVS/MONTH_PAGOS/DET_*, que ya
+// tenían merge-by-delta desde v28/v-sync-fix). Por eso un movimiento registrado
+// en el teléfono podía sobrevivir en el historial (MOVS sí se fusionaba) pero su
+// efecto en el saldo se perdía si otra sesión (desktop) guardaba después con su
+// propio BAL local desactualizado -- "lo que registro en el teléfono se pierde"
+// (reportado 2-sep-2026, persistía tras el fix de v-sync-fix). Mismo patrón de
+// baseline+delta que ya usa MOVS, aplicado a estos dos objetos escalares planos.
+let BAL_BASELINE={},CAIXA_TDC_BASELINE={};
+function snapshotBalBaseline(){BAL_BASELINE=JSON.parse(JSON.stringify(BAL));CAIXA_TDC_BASELINE=JSON.parse(JSON.stringify(CAIXA_TDC));}
+function mergeScalarDelta(freshObj,baseObj,actualObj){
+  const out=Object.assign({},freshObj);
+  Object.keys(actualObj||{}).forEach(k=>{
+    const a=actualObj[k];if(typeof a!=='number')return;
+    const b=(baseObj||{})[k];
+    const delta=Math.round((a-(typeof b==='number'?b:a))*100)/100;
+    const base=(typeof out[k]==='number')?out[k]:a;
+    out[k]=Math.round((base+delta)*100)/100;
+  });
+  return out;
+}
 // v28 — Merge-by-delta para MONTH_PAGOS (tareas del mes: "Enviar a Caixa",
 // "Retirar efectivo", pagos, etc.). ANTES: saveState guardaba el bloque completo
 // de tareas (last-write-wins), así que si Jofre marcaba una tarea y Massiel
@@ -3679,6 +3722,11 @@ async function saveState(){
               MOVS[k]=mergeMovsConDelta(freshState.MOVS[k],MOVS_BASELINE[k],MOVS[k]);
             });
           }
+          // v77 -- ver nota junto a snapshotBalBaseline: mismo merge-by-delta
+          // que MOVS, para que el saldo real de una cuenta nunca pise en silencio
+          // lo que otra sesión (ej. el teléfono) ya haya sumado/restado.
+          if(freshState.BAL)Object.assign(BAL,mergeScalarDelta(freshState.BAL,BAL_BASELINE,BAL));
+          if(freshState.CAIXA_TDC)Object.assign(CAIXA_TDC,mergeScalarDelta(freshState.CAIXA_TDC,CAIXA_TDC_BASELINE,CAIXA_TDC));
           if(freshState.DET_MONTH_OVERRIDES){
             const merged=mergeDetObjConDelta(freshState.DET_MONTH_OVERRIDES,DET_OV_BASELINE,DET_MONTH_OVERRIDES);
             Object.keys(merged).forEach(k=>{DET_MONTH_OVERRIDES[k]=merged[k];});
@@ -3725,6 +3773,7 @@ async function saveState(){
     snapshotMovsBaseline();
     snapshotDetBaseline();
     snapshotPagosBaseline();
+    snapshotBalBaseline();
     clearPendingSync(); // guardado en la nube confirmado -- ya no hay nada pendiente
   }catch(e){
     // v-sync-fix: antes esto se tragaba en silencio, sin aviso ni respaldo.
@@ -3814,6 +3863,7 @@ function applyState(s){
   if(s.MOVS)Object.keys(s.MOVS).forEach(k=>{MOVS[k]=s.MOVS[k];});
   snapshotMovsBaseline();
   snapshotDetBaseline();
+  snapshotBalBaseline();
   if(s.CUOTAS_NUEVAS){CUOTAS_NUEVAS.length=0;CUOTAS_NUEVAS.push(...s.CUOTAS_NUEVAS);}
   // v14 (jul-30): bloque pagosByMonth movido hasta ACÁ. buildMonthPagos() depende de
   // DET / DET_MONTH_OVERRIDES / DET_EXTRA / DET_MONTH_REMOVED, mCats/mCuotas y CUOTAS_NUEVAS.
@@ -3981,6 +4031,14 @@ function startRealtimeSync(){
   _fbOnSnapshot(stateDocRef(),(snap)=>{
     if(snap.metadata.hasPendingWrites)return; // eco de nuestro propio guardado, ya reflejado en pantalla
     if(hasPendingSync())return; // v-sync-fix: ídem loadState() -- no pisar un cambio local aún no confirmado
+    // v77 -- FIX: si esta sesión tiene su propio saveState() en curso (fetch+merge
+    // interno todavía sin terminar), un snapshot remoto que llega en esa ventana
+    // pisaba MOVS/BAL/etc en memoria vía applyState() ANTES de que ese saveState()
+    // pudiera fusionar/guardar el cambio local -- el cambio quedaba sobrescrito sin
+    // haber llegado a persistirse nunca (raíz real de "se pierde lo que registro en
+    // el teléfono", reportado 2-sep-2026). El propio saveState() en curso ya se va a
+    // encargar de traer lo fresco y fusionarlo -- este snapshot es redundante acá.
+    if(_saveInFlight)return;
     if(!snap.exists())return;
     const data=snap.data();if(!data||!data.json)return;
     try{applyState(JSON.parse(data.json));renderAll();localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
