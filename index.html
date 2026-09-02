@@ -1111,16 +1111,28 @@ function renderFondoMutuoMassiel(){
   const saldo=fondoMutuoDisponible(id);
   const pendientes=fondoMutuoPendientes(id);
   const pendienteTotal=Math.round(pendientes.reduce((s,x)=>s+x.a,0)*100)/100;
+  const asignacion=fondoMutuoEntradas(id).reduce((s,x)=>s+x.a,0);
+  // v79 -- FIX (Jofre, 2-sep-2026): el desglose de v78 (Disponible real + Pdte.
+  // de cobro) dejaba una ambiguedad real -- "el disponible en cuenta del fondo,
+  // es 108.22 o 197.78??". Faltaba el tercer numero: cuanto hay REALMENTE
+  // reservado en el fondo este mes (asignacion menos lo YA ejecutado, sin
+  // descontar todavia lo pendiente) -- distinto del disponible real (que SI
+  // descuenta lo pendiente) y distinto de la asignacion bruta (que no descuenta
+  // ni lo ejecutado). fondoMutuoConsumido() ya mezcla ejecutado + pendiente en
+  // un solo total; acá se separa esa mezcla para poder mostrar los 3 numeros
+  // sin inventar ningun dato nuevo (es la misma aritmetica de siempre).
+  const consumidoTotal=fondoMutuoConsumido(id);
+  const consumidoEjecutado=Math.round((consumidoTotal-pendienteTotal)*100)/100;
+  const montoEnCuenta=Math.max(0,Math.round((asignacion-consumidoEjecutado)*100)/100);
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#8B6FDF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:17px;color:#8B6FDF"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Mutuo</div><div style="font-size:11px;color:var(--t2)">${isMassielRole()?'Fondo compartido · solo lectura':'Fondo compartido · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
-  // v78 -- FIX (pedido explicito de Jofre 2-sep-2026): antes se mostraba un
-  // unico "SALDO DISPONIBLE" ya neteado, sin explicar por que. Cuando el fondo
-  // tiene tareas pendientes por completar (ej. el Hotel), ahora se desglosa en
-  // DISPONIBLE REAL (lo que de verdad se puede gastar) + PDTE. DE COBRO (lo ya
-  // comprometido, con el detalle de cada tarea abajo) -- mismo patron visual
-  // que ya usa Caixa (Disp. real / Pdte. pagar) para su tarjeta TDC. Si no hay
-  // nada pendiente, se muestra el numero simple de siempre (son el mismo dato).
+  // v79 -- 3 numeros cuando hay pendientes: EN LA CUENTA (lo que queda de lo
+  // reservado este mes, sin descontar lo pendiente todavia) arriba, y abajo el
+  // desglose DISPONIBLE REAL / PDTE. DE COBRO (que sí lo descuenta) -- mismo
+  // patron visual que ya usa Caixa (Disp. real / Pdte. pagar) para su TDC. Si
+  // no hay nada pendiente los 3 numeros coinciden, así que se sigue mostrando
+  // el numero simple de siempre (son el mismo dato, sin desglosar).
   if(pendienteTotal>0){
-    html+=`<div style="padding:14px 16px 8px"><div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:9px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--tl);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:22px;font-weight:800;color:var(--tl)">${fmtE(saldo)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. DE COBRO</div><div style="font-size:15px;font-weight:700;color:#8B6FDF">${fmtE(pendienteTotal)}</div></div></div></div></div>`;
+    html+=`<div style="padding:14px 16px 8px"><div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.06em">EN LA CUENTA</div><div style="font-size:15px;font-weight:700;color:var(--t1)">${fmtE(montoEnCuenta)}</div></div><div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:9px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--tl);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:22px;font-weight:800;color:var(--tl)">${fmtE(saldo)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. DE COBRO</div><div style="font-size:15px;font-weight:700;color:#8B6FDF">${fmtE(pendienteTotal)}</div></div></div></div></div>`;
     html+=`<div style="padding:4px 16px 12px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">PENDIENTES DEL FONDO</div>`;
     pendientes.forEach(p=>{
       // v78 -- Jofre: las tareas pendientes del fondo las puede VER Massiel,
@@ -1137,7 +1149,6 @@ function renderFondoMutuoMassiel(){
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
   if(!desdeJul){html+=`<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin trazabilidad para este mes</div></div>`;document.getElementById('fmov-c').innerHTML=html;return;}
-  const asignacion=fondoMutuoEntradas(id).reduce((s,x)=>s+x.a,0);
   const envioDone=fondoMutuoMesFinanciado(id); // v67 -- ver fondoMutuoDisponible
   const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${aStr}</div></div>`;
   let rows='';
