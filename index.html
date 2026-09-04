@@ -113,7 +113,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
     <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--gd2),transparent);border:1.5px solid var(--gd);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:800;color:var(--gd);font-size:20px;margin-bottom:18px">J</div>
     <div style="font-size:13px;color:var(--t2);font-weight:500" id="pre-greeting">Buenas tardes,</div>
     <div style="font-family:var(--fd);font-size:25px;font-weight:800;color:var(--t1);margin-bottom:22px">Jofre</div>
-    <button class="btng" style="min-height:58px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="dismissPreInicio();openReg()"><i class="ti ti-plus" style="font-size:19px"></i>Registrar Gasto</button>
+    <button class="btng" style="min-height:58px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="openRegFromPre()"><i class="ti ti-plus" style="font-size:19px"></i>Registrar Gasto</button>
   </div>
   <button onclick="dismissPreInicio()" style="margin-top:20px;background:transparent;border:none;color:var(--t2);font-weight:600;cursor:pointer;font-size:13px">Ver todo</button>
 </div>
@@ -676,6 +676,7 @@ function updEyeIcons(){
   });
 }
 function dismissPreInicio(){const el=document.getElementById('preInicio');if(el)el.style.display='none';}
+function openRegFromPre(){const fov=document.getElementById('fov');if(fov)fov.style.zIndex='141';openReg();}
 function maybeShowPreInicio(){
   if(document.body.classList.contains('role-massiel'))return;
   if(!localStorage.getItem('cg_role'))return;
@@ -3359,7 +3360,7 @@ const CATS=['Mercado','Baby J.A.','Deporte','Salud','Casa','Trabajo','Carro/Moto
 const ACCOUNTS_LIST=[{id:'BBVA',n:'BBVA'},{id:'CAIXA',n:'Caixa'},{id:'TRJ',n:'TR Jofre'},{id:'TRJA',n:'TR J.A.'},{id:'TRM',n:'TR Massiel'},{id:'IBKR',n:'IBKR'}];
 const CUOTAS_NUEVAS=[];let reg={},regPath=[];
 function openReg(presetAcc){reg={type:null,desc:'',amount:null,category:null,account:presetAcc||null,isCuota:null,cNum:null,cType:null,shared:null,caixaCard:null,mesInicio:null,cuotaMonto:null,cuotaMontos:[],cuotasIguales:null,cuotaCuentaDeduccion:null,tareaMes:null,tareaRule:null,step:'type'};regPath=[];renderReg();document.getElementById('fov').style.display='block';}
-function closeReg(){document.getElementById('fov').style.display='none';}
+function closeReg(){const fov=document.getElementById('fov');fov.style.display='none';fov.style.zIndex='';}
 function regBack(){if(!regPath.length){closeReg();return;}reg.step=regPath.pop();renderReg();}
 function regGoto(nextId){regPath.push(reg.step);reg.step=nextId;renderReg();}
 function nextAfter(id){
