@@ -476,17 +476,34 @@ function normLabelCG(s){
     .trim();
 }
 // ¿La tarea p ya tiene su movimiento real ejecutado en su cuenta y mes activo?
+// v89 -- BUG REAL (HSN, 4-sep-2026): con .some(), UN solo movimiento real
+// podia saldar VARIAS tareas distintas que comparten label normalizado +
+// monto (ej. dos cuotas iguales del mismo plan: "HSN - Suplementos · cuota
+// 1/3" pagada hoy y la tarea "HSN - Suplementos · 2/3" del mismo mes, mismo
+// monto EUR55,58, mismo label tras normLabelCG que descarta todo desde "·").
+// El movimiento de la cuota 1 marcaba la cuota 2 como "ya ejecutada" sin
+// estarlo -- desaparecia de pendientes/disponible sin que nadie la hubiera
+// pagado, sin dejar rastro visible. Fix: asignacion 1 a 1 entre movimientos
+// y tareas que comparten firma (monto+label) dentro del mismo mes activo, en
+// el orden en que aparecen en MONTH_PAGOS -- cada movimiento real salda como
+// maximo UNA tarea, nunca todas las que matcheen la firma. No cambia nada
+// para el caso normal (una sola tarea con esa firma ese mes, como Barberia,
+// que ya se distingue por numero fuera de "·").
 function tieneMovEjecutado(p){
   if(!p||p.amt==null)return false;
   const acc=p.acc; if(!acc)return false;
   const list=MOVS[acc]||[];
   const nl=normLabelCG(p.l);
   const a=Math.round(Math.abs(p.amt)*100)/100;
-  return list.some(mv=>{
+  const movsMatch=list.filter(mv=>{
     if(!movBelongsToMonth(mv,ACTIVE_ID))return false;
     const mAbs=Math.round(Math.abs(parseEuro(mv.a))*100)/100;
     return mAbs===a && normLabelCG(mv.l)===nl;
-  });
+  }).length;
+  if(!movsMatch)return false;
+  const siblings=(MONTH_PAGOS[ACTIVE_ID]||[]).filter(t=>t.acc===acc&&t.amt!=null&&Math.round(Math.abs(t.amt)*100)/100===a&&normLabelCG(t.l)===nl);
+  const idxInSiblings=siblings.indexOf(p);
+  return idxInSiblings>=0&&idxInSiblings<movsMatch;
 }
 // Tarea genuinamente pendiente = no marcada done Y sin movimiento real que la salde.
 function tareaPendiente(p){ return !p.done && !tieneMovEjecutado(p); }
@@ -1191,7 +1208,7 @@ function renderFondoMutuoMassiel(){
   // Mismo bug que v54/v55 ya habian corregido en showMaMonthDetail -- se
   // aplica aca el mismo criterio ya establecido (ver esa funcion): depende
   // de AMBAS señales, no solo del rol de sesion.
-  const massielView=isMassielRole()||(document.getElementById('p-m')?.classList.contains('on')||false);
+  const massielView=massielViewActive(); // v89: centralizado, ver definición junto a isMassielRole()
   const saldo=fondoMutuoDisponible(id);
   const pendientes=fondoMutuoPendientes(id);
   const pendienteTotal=Math.round(pendientes.reduce((s,x)=>s+x.a,0)*100)/100;
@@ -2590,6 +2607,16 @@ function jofreCuotaRowHTML(c){
 function sMTma(n){[1,2,3].forEach(i=>{const b=document.getElementById('mamt'+i),t=document.getElementById('mamt-tab'+i);if(b)b.classList.remove('on');if(t)t.classList.remove('on');});const b=document.getElementById('mamt'+n),t=document.getElementById('mamt-tab'+n);if(b)b.classList.add('on');if(t)t.classList.add('on');}
 function maRowHTML(x){return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="flex:1"><div style="font-size:13px;color:#fff">${x.l}</div><div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">${x.d}</div></div><div style="font-size:13px;font-weight:700;color:${x.a>0?'#64D2FF':'rgba(255,255,255,.3)'}">${fmtE(x.a)}</div></div>`;}
 function isMassielRole(){return document.body.classList.contains('role-massiel');}
+// v89 -- helper centralizado (antes duplicado en renderFondoMutuoMassiel y
+// showMaMonthDetail, ver v54/v55/v81). isMassielRole() solo mira el ROL DE
+// SESION (fijo durante la sesion); pero Jofre puede previsualizar EXACTAMENTE
+// lo que Massiel ve desde su propio tab (#p-m) sin cambiar de rol -- ahi
+// isMassielRole() sigue dando false. Cualquier vista/funcion NUEVA que deba
+// comportarse distinto para Massiel (ocultar montos, quitar acciones de
+// click) debe gatear con este helper, NUNCA solo con isMassielRole() -- ese
+// fue exactamente el bug de v81 (Massiel pudo completar la tarea del Hotel
+// porque renderFondoMutuoMassiel todavia no usaba este criterio).
+function massielViewActive(){return isMassielRole()||(document.getElementById('p-m')?.classList.contains('on')||false);}
 const CATS_COLORS={'Mercado':'#30D158','Baby J.A.':'#FF375F','Deporte':'#0A84FF','Salud':'#FF453A','Casa':'#FF9F0A','Trabajo':'#BF5AF2','Carro/Moto':'#64D2FF','Remesas':'#FFD60A','Compartir Familiar':'#A855F7','Personales':'#EC4899','Ahorro':'#64D2FF','Adicionales':'#6B85A8'};
 function totalGastoMes(id){
   const d=MONTHS[id];if(!d)return 0;
@@ -3196,7 +3223,7 @@ function showMaMonthDetail(id,backTo){
   //     sin filtrar.
   // Ver auditoría CDG(10), "Personales sigue en blanco" + "debería depender
   // de ambos".
-  maovEsVistaMassiel=isMassielRole()||(document.getElementById('p-m')?.classList.contains('on')||false);
+  maovEsVistaMassiel=massielViewActive(); // v89: centralizado, ver definición junto a isMassielRole()
   const d=MONTHS[id];if(!d)return;
   const ahorro=itemsForKey('ahorro',id);
   const ahorroTotal=ahorro.reduce((s,x)=>s+x.a,0);
@@ -3397,6 +3424,20 @@ function confirmCuotaMonto(){const v=toNum((document.getElementById('reg-cmonto'
 let cuotaVarCurrent=0;
 function startCuotaVar(){cuotaVarCurrent=0;regPath.push(reg.step);reg.step='cuotaVar';renderReg();}
 function confirmCuotaVar(){const v=toNum((document.getElementById('reg-cvar')||{}).value);if(!v||v<=0){toast('Indica el monto','var(--rd)');return;}reg.cuotaMontos.push(v);cuotaVarCurrent++;if(cuotaVarCurrent>=reg.cNum){reg.cuotaMonto=reg.cuotaMontos.reduce((s,x)=>s+x,0)/reg.cNum;regPath.push(reg.step);reg.step='cuotaVarDone';renderReg();}else renderReg();}
+// v89 -- refresca MONTH_PAGOS[monthId] con buildMonthPagos, preservando
+// done/amt de lo que ya hubiera (mismo patron que ya usaba el paso "Tarea
+// futura" del wizard desde v28 -- ver saveReg). Si el mes no estaba cargado
+// en memoria, no hace nada: buildMonthPagos(monthId) lo va a generar fresco
+// la primera vez que se visite, ya con la cuota incluida (MONTHS[id].cuotas
+// es la fuente de verdad -- cuotasFor() ya la lee, ver buildMonthPagos).
+function refreshMonthPagosPreservingState(monthId){
+  if(!MONTH_PAGOS[monthId])return;
+  const prevById={};MONTH_PAGOS[monthId].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
+  const freshP=buildMonthPagos(monthId);
+  freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!(np.cat==='enviar'&&!prev.done))np.amt=prev.amt;}});
+  MONTH_PAGOS[monthId]=freshP;
+  if(monthId===ACTIVE_ID)PAGOS=MONTH_PAGOS[monthId];
+}
 function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
   // T6: opts.offset = nº de cuotas ya pagadas hoy (0 o 1). El label de progreso
   // debe reflejar el TOTAL real de cuotas, no solo las adicionales. Bug Nike:
@@ -3406,6 +3447,16 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
   ensureMonthsAhead(startId,cNum);
   let idx=MONTH_ORDER.indexOf(startId);if(idx<0)idx=MONTH_ORDER.indexOf(ACTIVE_ID)+1;
   const isArr=Array.isArray(cuotaAmts);
+  // v89 -- BUG REAL (HSN, 4-sep-2026): esta funcion solo escribia en
+  // MONTHS[mid].cuotas (la fuente de la pestaña "Cuotas", de solo lectura)
+  // pero nunca refrescaba MONTH_PAGOS[mid] -- la tarea real, pagable, que
+  // afecta disponible/pendientes/badge. Si ese mes ya estaba cargado en
+  // memoria (caso normal: meses cercanos al activo, ya "ensured" al
+  // arrancar), la cuota nueva quedaba invisible para disponibleCuenta /
+  // bbvaPendienteList / markPago hasta el proximo full reload que disparara
+  // un rebuild -- exactamente la "impresion de que no esta sumando"
+  // reportada por Jofre. Fix: refrescar cada mes tocado al momento.
+  const touched=[];
   for(let n=1;n<=cNum;n++){
     const mid=MONTH_ORDER[idx+n-1];if(!mid)break;
     const perCuota=isArr?cuotaAmts[n-1]:cuotaAmts;
@@ -3413,7 +3464,10 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
     const esUltima=numCuota===totalCuotas;
     MONTHS[mid].cuotas=MONTHS[mid].cuotas||[];
     MONTHS[mid].cuotas.push({l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false,tdcRelease:!!(opts&&opts.tdcRelease)});
+    touched.push(mid);
   }
+  touched.forEach(refreshMonthPagosPreservingState);
+  return touched;
 }
 function renderRegSummary(){
   const accName=ACC_META[reg.account]?ACC_META[reg.account].n:reg.account;
@@ -3461,7 +3515,15 @@ function renderReg(){
   else if(reg.step==='cuotaVarDone'){const hasHoy=reg.amount>0;const off=hasHoy?1:0;const hoyRow=hasHoy?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="font-size:12px;color:var(--t2)">Cuota 1 (hoy)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">${fmtE(reg.amount)}</span></div>`:'';const totalTodo=(reg.amount||0)+reg.cuotaMontos.reduce((s,x)=>s+x,0);h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CUOTAS INGRESADAS</div><div style="background:var(--s2);border-radius:12px;padding:12px">${hoyRow}${reg.cuotaMontos.map((v,i)=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="font-size:12px;color:var(--t2)">Cuota ${i+1+off}</span><span style="font-size:13px;font-weight:700;color:var(--t1)">${fmtE(v)}</span></div>`).join('')}<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:12px;font-weight:700;color:var(--t2)">Total ${hasHoy?'de la compra':'cuotas'}</span><span style="font-size:13px;font-weight:800;color:var(--tl)">${fmtE(totalTodo)}</span></div></div>`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="regGoto(nextAfter('cuotaVarDone'))">Confirmar</button>`;}
   else if(reg.step==='shared'){const lbl=reg.cType==='frac'?'¿CUOTAS COMPARTIDAS?':'¿GASTO COMPARTIDO?';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">${lbl}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('shared',true,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí · 50/50</button><button onclick="pick('shared',false,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No · solo Jofre</button></div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='cuotasCuenta'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DESDE QUÉ CUENTA SE DESCUENTAN LAS CUOTAS?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${reg.amount>0?`Cuota 1 (hoy) descontada de ${ACC_META[reg.account].n}.`:`Sin pago hoy — cuotas cargan a partir del mes de inicio.`}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${ACCOUNTS_LIST.filter(a=>a.id!=='IBKR'&&a.id!=='TRM').map(a=>`<button onclick="reg.cuotaCuentaDeduccion='${a.id}';regGoto(nextAfter('cuotasCuenta'))" class="acc-c${(reg.cuotaCuentaDeduccion||reg.account)===a.id?' on':''}">${a.n}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
-  else if(reg.step==='mesInicio'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const meses=MONTH_ORDER.filter((k,i)=>i>=(ai<0?0:ai));h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿EN QUÉ MES INICIAN LAS CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('mesInicio','${m}','mesInicio')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
+  // v89 -- BUG REAL (HSN, 4-sep-2026): este paso ofrecia el mes activo como
+  // opcion de inicio de las cuotas ADICIONALES aunque ya hubiera "cuota 1
+  // hoy" pagada ese mismo mes -- Jofre eligio el mes activo (sep) para HSN y
+  // termino con 2 cuotas iguales cayendo en el mismo mes (la de hoy + la
+  // "2/3"), justo el escenario que dispara la colision de tieneMovEjecutado
+  // (ver fix arriba). Si ya hay pago hoy, se oculta el mes activo de las
+  // opciones -- las cuotas adicionales solo pueden empezar el mes siguiente
+  // en adelante, que es lo unico que tiene sentido conceptualmente.
+  else if(reg.step==='mesInicio'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const aiSkip=(ai<0?0:ai)+(reg.amount>0?1:0);const meses=MONTH_ORDER.filter((k,i)=>i>=aiSkip);h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿EN QUÉ MES INICIAN LAS CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('mesInicio','${m}','mesInicio')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else{h=renderRegSummary();nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="saveReg()">Guardar movimiento</button>`;}
   body.innerHTML=h;
 }
@@ -3505,7 +3567,7 @@ function saveReg(){
     updBbvaBadge();
   }
   else if(!reg.isCuota){regMov(reg.account,label,reg.amount,false,reg.category,reg.group);}
-  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0,tdcRelease:esCaixaTDC});}
+  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0,tdcRelease:esCaixaTDC});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
   // v28 — Al terminar de registrar, devolver al usuario a DONDE ESTABA:
@@ -3715,7 +3777,13 @@ function mergePagosConDelta(freshArr,baseArr,actualArr){
   actualArr.forEach(ap=>{if(!freshById[ap.id])resultado.push(ap);});
   return resultado;
 }
-function movKey(m){return [m.dt,m.l,m.a,m.t,m.cat||''].join('||');}
+// v89 -- se agrega mesId a la firma: antes, corregir a mano el mesId de un
+// movimiento existente (ver Barberia, v77) era invisible para el merge-by-
+// delta (la key no cambiaba entre baseline y actual) y requeria bypass
+// directo a Firestore (_fbSetDoc) para persistir. Ahora un cambio de mesId
+// se detecta como "quito la key vieja, agrego la key nueva" y persiste con
+// saveState() normal, igual que agregar o quitar un movimiento.
+function movKey(m){return [m.dt,m.l,m.a,m.t,m.cat||'',m.mesId||''].join('||');}
 function mergeMovsConDelta(freshArr,baseArr,actualArr){
   freshArr=freshArr||[];baseArr=baseArr||[];actualArr=actualArr||[];
   const baseKeys=new Set(baseArr.map(movKey));
