@@ -107,10 +107,15 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <button class="role-btn massiel" onclick="setRole('massiel')">Massiel</button>
 </div>
 <div class="role-switch" onclick="if(confirm('¿Cambiar de usuario en este dispositivo?'))clearRole()">⇄ Cambiar usuario</div>
-<div id="preInicio" style="position:absolute;inset:0;background:var(--bg);z-index:140;display:none;flex-direction:column;justify-content:center;gap:16px;padding:28px">
-  <div><div style="font-size:13px;color:var(--t2);font-weight:500" id="pre-greeting">Buenas tardes,</div><div style="font-family:var(--fd);font-size:28px;font-weight:800;color:var(--t1)">Jofre</div></div>
-  <button class="btng" style="min-height:64px;font-size:16px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="dismissPreInicio();openReg()"><i class="ti ti-plus" style="font-size:20px"></i>Registrar Gasto</button>
-  <button onclick="dismissPreInicio()" style="background:transparent;border:1px solid var(--bd2);border-radius:14px;padding:14px;color:var(--t2);font-weight:600;cursor:pointer;font-size:14px">Ver todo</button>
+<div id="preInicio" style="position:absolute;inset:0;background:radial-gradient(120% 55% at 50% -8%,#1C1C1E 0%,var(--bg) 48%),var(--bg);z-index:140;display:none;flex-direction:column;align-items:center;justify-content:center;padding:28px">
+  <div style="width:100%;max-width:340px;background:var(--s2);border:1px solid var(--bd2);border-radius:20px;padding:24px;box-shadow:var(--sh2);position:relative">
+    <button id="eye-pre" onclick="toggleSaldosOcultos()" title="Ocultar saldos" style="position:absolute;top:18px;right:18px;background:var(--s1);border:1px solid var(--bd2);border-radius:12px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer"><i class="ti ti-eye" style="font-size:17px;color:var(--t2)"></i></button>
+    <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--gd2),transparent);border:1.5px solid var(--gd);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:800;color:var(--gd);font-size:20px;margin-bottom:18px">J</div>
+    <div style="font-size:13px;color:var(--t2);font-weight:500" id="pre-greeting">Buenas tardes,</div>
+    <div style="font-family:var(--fd);font-size:25px;font-weight:800;color:var(--t1);margin-bottom:22px">Jofre</div>
+    <button class="btng" style="min-height:58px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="dismissPreInicio();openReg()"><i class="ti ti-plus" style="font-size:19px"></i>Registrar Gasto</button>
+  </div>
+  <button onclick="dismissPreInicio()" style="margin-top:20px;background:transparent;border:none;color:var(--t2);font-weight:600;cursor:pointer;font-size:13px">Ver todo</button>
 </div>
 <div class="ov" id="aov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="aov-c"></div></div></div>
 <div class="ov" id="fxov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="fxov-c"></div></div></div>
@@ -259,7 +264,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <div style="padding:9px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
     <div class="ts" onclick="showA('TRJ')"><svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.35;pointer-events:none"><path d="M0,72 C30,70 45,60 70,58 C95,56 110,44 140,42 C170,40 185,28 215,25 C245,22 270,15 300,10" fill="none" stroke="url(#sg-trj)" stroke-width="2.2" stroke-linecap="round" filter="url(#sf-glow)"/><circle cx="300" cy="10" r="2.8" fill="#BF5AF2" filter="url(#sf-glow)"/></svg><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#BF5AF222;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:12px;color:#BF5AF2"></i></div><div style="font-size:10px;font-weight:700;color:#BF5AF2;letter-spacing:.04em">TR JOFRE</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-trj">€0,00</div><div style="font-size:10px;color:var(--rd);margin-top:5px">Pdte: <span id="d-trj-pend">€209,44</span></div></div></div>
     <div class="ts" onclick="showA('TRJA')"><svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.35;pointer-events:none"><path d="M0,68 C30,65 45,50 72,48 C100,46 115,32 145,30 C175,28 195,18 225,16 C255,14 275,10 300,7" fill="none" stroke="url(#sg-trja)" stroke-width="2.2" stroke-linecap="round" filter="url(#sf-glow)"/><circle cx="300" cy="7" r="2.8" fill="#30D158" filter="url(#sf-glow)"/></svg><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#30D15822;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-shield-check" style="font-size:12px;color:#30D158"></i></div><div style="font-size:10px;font-weight:700;color:#30D158;letter-spacing:.04em">TR J.A.</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-trja">€0,00</div><div style="font-size:11px;color:var(--t2);margin-top:5px">Emergencia</div></div></div>
-    <div class="ts" onclick="showA('IBKR')"><svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.35;pointer-events:none"><path d="M0,74 C32,71 50,62 78,58 C106,54 122,38 152,35 C182,32 200,22 228,19 C256,16 278,11 300,8" fill="none" stroke="url(#sg-ibkr)" stroke-width="2.2" stroke-linecap="round" filter="url(#sf-glow)"/><circle cx="300" cy="8" r="2.8" fill="#0A84FF" filter="url(#sf-glow)"/></svg><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#0A84FF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chart-line" style="font-size:12px;color:#0A84FF"></i></div><div style="font-size:10px;font-weight:700;color:#0A84FF;letter-spacing:.04em">IBKR</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1">$0,00</div><div style="font-size:11px;color:var(--t2);margin-top:5px">≈ €0 · cerrada</div></div></div>
+    <div class="ts" onclick="showA('IBKR')"><svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.35;pointer-events:none"><path d="M0,74 C32,71 50,62 78,58 C106,54 122,38 152,35 C182,32 200,22 228,19 C256,16 278,11 300,8" fill="none" stroke="url(#sg-ibkr)" stroke-width="2.2" stroke-linecap="round" filter="url(#sf-glow)"/><circle cx="300" cy="8" r="2.8" fill="#0A84FF" filter="url(#sf-glow)"/></svg><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#0A84FF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chart-line" style="font-size:12px;color:#0A84FF"></i></div><div style="font-size:10px;font-weight:700;color:#0A84FF;letter-spacing:.04em">IBKR</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-ibkr">$0,00</div><div style="font-size:11px;color:var(--t2);margin-top:5px">≈ €0 · cerrada</div></div></div>
     <div class="ts" onclick="showA('EFECTIVO')"><svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.3;pointer-events:none"><path d="M0,55 C40,56 60,52 90,53 C120,54 140,48 170,49 C200,50 220,46 250,47 C270,47 285,44 300,42" fill="none" stroke="url(#sg-ef)" stroke-width="2" stroke-linecap="round" filter="url(#sf-glow)"/></svg><div style="position:relative;z-index:1"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><div style="width:22px;height:22px;border-radius:7px;background:#9CA3AF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-cash" style="font-size:12px;color:#9CA3AF"></i></div><div style="font-size:10px;font-weight:700;color:var(--t3);letter-spacing:.04em">EFECTIVO</div></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-efectivo">€0,00</div><div style="font-size:11px;color:var(--t2);margin-top:5px">Retiros BBVA</div></div></div>
   </div>
   <div style="padding:16px 18px 0">
@@ -284,7 +289,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('TRM')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#FF375F;letter-spacing:.04em;margin-bottom:6px">TR MASSIEL</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-trm">€0,10</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">Mercado</div></div>
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('TRJA')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">TR J.A.</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-trja">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">Fondo familiar</div></div>
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#BF5AF2;letter-spacing:.04em;margin-bottom:6px">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-fmutuo">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">TR Jofre · lectura</div></div>
-    <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('IBKR')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#0A84FF;letter-spacing:.04em;margin-bottom:6px">IBKR · BOLSA</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1">$0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">≈ €0 · cerrada</div></div>
+    <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('IBKR')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#0A84FF;letter-spacing:.04em;margin-bottom:6px">IBKR · BOLSA</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-ibkr">$0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">≈ €0 · cerrada</div></div>
   </div>
   <div style="padding:8px 18px 0"><div class="lc" style="margin-bottom:0"><div style="font-size:9px;font-weight:700;color:#94A3B8;letter-spacing:.05em;margin-bottom:10px">HISTORIAL DE AHORRO</div><div id="pm-ahorro-bars" style="display:flex;align-items:flex-end;gap:8px;height:76px"></div><div id="pm-ahorro-detail"></div></div></div>
   <div style="height:18px"></div>
@@ -663,7 +668,7 @@ function toggleSaldosOcultos(){
   updTile();
 }
 function updEyeIcons(){
-  ['eye-i','eye-m'].forEach(id=>{
+  ['eye-i','eye-m','eye-pre'].forEach(id=>{
     const b=document.getElementById(id);if(!b)return;
     const ic=b.querySelector('i');
     if(ic)ic.className=SALDOS_OCULTOS?'ti ti-eye-off':'ti ti-eye';
@@ -689,7 +694,7 @@ function updTile(){
   const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);
   const cDisp=disponibleCuenta('CAIXA');
   const cd=document.getElementById('d-caixa-disp');if(cd){cd.textContent=fmtSaldo(cDisp);cd.style.color=colorSaldo(cDisp,'var(--rd)','var(--tl)');}
-  const ct=document.getElementById('d-caixa-tarjeta');if(ct)ct.textContent=fmtE(CAIXA_TDC.disponible);
+  const ct=document.getElementById('d-caixa-tarjeta');if(ct)ct.textContent=fmtSaldo(CAIXA_TDC.disponible);
   const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtSaldo(BAL.EFECTIVO);
   const j=document.getElementById('d-trj');if(j)j.textContent=fmtSaldo(BAL.TRJ);
   const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
@@ -700,23 +705,25 @@ function updTile(){
   // en ámbar si el fondeo entrante los cubre (no es alarma, el dinero viene);
   // en rojo solo si faltaría dinero (sobregasto real). Fórmula unificada.
   const jpend=document.getElementById('d-trj-pend');
-  if(jpend){jpend.textContent=fmtE(trjPend);
+  if(jpend){jpend.textContent=fmtSaldo(trjPend);
     const trjDisp=disponibleCuenta('TRJ');
-    jpend.parentElement.style.color=trjPend<=0?'var(--t3)':(trjDisp<0?'var(--rd)':'var(--or)');
+    jpend.parentElement.style.color=SALDOS_OCULTOS?'var(--t3)':(trjPend<=0?'var(--t3)':(trjDisp<0?'var(--rd)':'var(--or)'));
   }
   const ja=document.getElementById('d-trja');if(ja)ja.textContent=fmtSaldo(BAL.TRJA);
   const m=document.getElementById('d-trm');if(m)m.textContent=fmtSaldo(BAL.TRM);
   const pmT=document.getElementById('pm-trm');if(pmT)pmT.textContent=fmtSaldo(BAL.TRM);
   const pmJa=document.getElementById('pm-trja');if(pmJa)pmJa.textContent=fmtSaldo(BAL.TRJA);
-  const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtE(fondoMutuoDisponible(ACTIVE_ID));
+  const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtSaldo(fondoMutuoDisponible(ACTIVE_ID));
   // BBVA: Disponible con la fórmula unificada (fondeos que salen restan, gastos
   // propios restan). "Pdte." = lo que reserva de BBVA (gastos BBVA + fondeos que
   // salen + retiros) — coincide con bbvaPendienteList, que ya suma justo eso.
   const bbvaPend=bbvaPendienteList().reduce((s,x)=>s+x.a,0);
   const bDisp=disponibleCuenta('BBVA');
   const bd=document.getElementById('bbva-disponible');if(bd){bd.textContent=fmtSaldo(bDisp);bd.style.color=colorSaldo(bDisp,'var(--rd)','var(--tl)');}
-  const bp=document.getElementById('bbva-pendiente');if(bp)bp.textContent=fmtE(bbvaPend);
-  const bfm=document.getElementById('bbva-tile-fmutuo');if(bfm)bfm.textContent=fmtE(fondoMutuoDisponible(ACTIVE_ID));
+  const bp=document.getElementById('bbva-pendiente');if(bp)bp.textContent=fmtSaldo(bbvaPend);
+  const bfm=document.getElementById('bbva-tile-fmutuo');if(bfm)bfm.textContent=fmtSaldo(fondoMutuoDisponible(ACTIVE_ID));
+  const ib=document.getElementById('d-ibkr');if(ib)ib.textContent=SALDOS_OCULTOS?'\u2022\u2022\u2022\u2022':'$'+fmtE(BAL.IBKR).slice(1);
+  const pmIb=document.getElementById('pm-ibkr');if(pmIb)pmIb.textContent=SALDOS_OCULTOS?'\u2022\u2022\u2022\u2022':'$'+fmtE(BAL.IBKR).slice(1);
   renderCatDonut();
 }
 const CAT_DONUT_PALETTE={'Mercado':'#F5A623','Baby J.A.':'#0A84FF','Deporte':'#30D158','Salud':'#EF4444','Casa':'#BF5AF2','Trabajo':'#06B6D4','Carro/Moto':'#FF9F0A','Remesas':'#EC4899','Compartir Familiar':'#FF375F','Vacaciones':'#14B8A6','Personales':'#A78BFA','Ahorro':'#10B981','Adicionales':'#9CA3AF'};
