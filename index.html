@@ -107,6 +107,11 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <button class="role-btn massiel" onclick="setRole('massiel')">Massiel</button>
 </div>
 <div class="role-switch" onclick="if(confirm('¿Cambiar de usuario en este dispositivo?'))clearRole()">⇄ Cambiar usuario</div>
+<div id="preInicio" style="position:absolute;inset:0;background:var(--bg);z-index:140;display:none;flex-direction:column;justify-content:center;gap:16px;padding:28px">
+  <div><div style="font-size:13px;color:var(--t2);font-weight:500" id="pre-greeting">Buenas tardes,</div><div style="font-family:var(--fd);font-size:28px;font-weight:800;color:var(--t1)">Jofre</div></div>
+  <button class="btng" style="min-height:64px;font-size:16px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="dismissPreInicio();openReg()"><i class="ti ti-plus" style="font-size:20px"></i>Registrar Gasto</button>
+  <button onclick="dismissPreInicio()" style="background:transparent;border:1px solid var(--bd2);border-radius:14px;padding:14px;color:var(--t2);font-weight:600;cursor:pointer;font-size:14px">Ver todo</button>
+</div>
 <div class="ov" id="aov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="aov-c"></div></div></div>
 <div class="ov" id="fxov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="fxov-c"></div></div></div>
 <div class="ov" id="maov" onclick="if(event.target===this)this.style.display='none'"><div class="ovc"><div id="maov-c"></div></div></div>
@@ -229,6 +234,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <div style="padding:18px 18px 0;display:flex;justify-content:space-between;align-items:center">
     <div><div style="font-size:12px;color:var(--t2);font-weight:500" id="hdr-greeting">Buenas tardes,</div><div style="font-family:var(--fd);font-size:19px;font-weight:800;color:var(--t1)">Jofre</div></div>
     <div style="display:flex;align-items:center;gap:10px">
+      <button id="eye-i" onclick="toggleSaldosOcultos()" title="Ocultar saldos" style="position:relative;background:var(--s1);border:1px solid var(--bd2);border-radius:12px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer"><i class="ti ti-eye" style="font-size:17px;color:var(--t2)"></i></button>
       <button onclick="document.getElementById('alov').style.display='flex'" style="position:relative;background:var(--s1);border:1px solid rgba(100,210,255,.3);border-radius:12px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer"><i class="ti ti-bell" style="font-size:17px;color:var(--tl)"></i><span id="bell-dot" style="position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--gd);box-shadow:0 0 6px 1px var(--gd);display:none"></span></button>
       <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--gd2),transparent);border:1.5px solid var(--gd);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:800;color:var(--gd);font-size:15px">J</div>
     </div>
@@ -272,7 +278,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <div style="padding:10px 18px 0" id="hist-body"></div>
 </div>
 <div class="pg pgm" id="p-m">
-  <div style="padding:20px 18px 0"><div style="font-size:9px;color:#94A3B8;font-weight:700;letter-spacing:.1em;margin-bottom:3px" id="hdr-massiel-month">JUNIO 2026</div><div style="font-size:22px;font-weight:700;color:#0F172A;letter-spacing:-.02em">Tu resumen</div></div>
+  <div style="padding:20px 18px 0;display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:9px;color:#94A3B8;font-weight:700;letter-spacing:.1em;margin-bottom:3px" id="hdr-massiel-month">JUNIO 2026</div><div style="font-size:22px;font-weight:700;color:#0F172A;letter-spacing:-.02em">Tu resumen</div></div><button id="eye-m" onclick="toggleSaldosOcultos()" title="Ocultar saldos" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.08)"><i class="ti ti-eye" style="font-size:17px;color:#0F172A"></i></button></div>
   <div style="padding:12px 18px 0"><div style="background:#064E3B;border-radius:18px;padding:16px;cursor:pointer" onclick="showMaTasks()" id="ma-status-card"></div></div>
   <div style="padding:10px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:9px">
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('TRM')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#FF375F;letter-spacing:.04em;margin-bottom:6px">TR MASSIEL</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-trm">€0,10</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">Mercado</div></div>
@@ -646,19 +652,46 @@ function auditarTodo(){
   return Object.keys(BAL).filter(a=>MOVS[a]!==undefined||['BBVA','CAIXA','TRM','TRJ','TRJA','EFECTIVO'].includes(a)).map(auditarCuenta);
 }
 function fmtE(v){const s=Math.abs(v).toFixed(2);const[i,d]=s.split('.');return(v<0?'-':'')+'€'+parseInt(i).toLocaleString('es-ES',{useGrouping:true})+','+d;}
+let SALDOS_OCULTOS=false;
+try{SALDOS_OCULTOS=localStorage.getItem('cg_saldos_ocultos')==='1';}catch(e){}
+function fmtSaldo(v){return SALDOS_OCULTOS?'\u2022\u2022\u2022\u2022':fmtE(v);}
+function colorSaldo(v,neg,pos){return SALDOS_OCULTOS?'var(--t3)':(v<0?neg:pos);}
+function toggleSaldosOcultos(){
+  SALDOS_OCULTOS=!SALDOS_OCULTOS;
+  try{localStorage.setItem('cg_saldos_ocultos',SALDOS_OCULTOS?'1':'0');}catch(e){}
+  updEyeIcons();
+  updTile();
+}
+function updEyeIcons(){
+  ['eye-i','eye-m'].forEach(id=>{
+    const b=document.getElementById(id);if(!b)return;
+    const ic=b.querySelector('i');
+    if(ic)ic.className=SALDOS_OCULTOS?'ti ti-eye-off':'ti ti-eye';
+    b.title=SALDOS_OCULTOS?'Mostrar saldos':'Ocultar saldos';
+  });
+}
+function dismissPreInicio(){const el=document.getElementById('preInicio');if(el)el.style.display='none';}
+function maybeShowPreInicio(){
+  if(document.body.classList.contains('role-massiel'))return;
+  if(!localStorage.getItem('cg_role'))return;
+  const pre=document.getElementById('preInicio');if(!pre)return;
+  const hr=new Date().getHours();
+  const g=document.getElementById('pre-greeting');if(g)g.textContent=(hr<12?'Buenos d\u00edas,':hr<20?'Buenas tardes,':'Buenas noches,');
+  pre.style.display='flex';
+}
 function updTile(){
   const b=document.getElementById('bbva-tile-bal');
-  if(b){const s=fmtE(BAL.BBVA).replace('€','').split(',');b.innerHTML='€'+s[0]+'<span style="font-size:18px;font-weight:500">,'+s[1]+'</span>';}
-  const c=document.getElementById('d-caixa');if(c)c.textContent=fmtE(BAL.CAIXA);
+  if(b){if(SALDOS_OCULTOS){b.innerHTML='\u2022\u2022\u2022\u2022';}else{const s=fmtE(BAL.BBVA).replace('€','').split(',');b.innerHTML='€'+s[0]+'<span style="font-size:18px;font-weight:500">,'+s[1]+'</span>';}}
+  const c=document.getElementById('d-caixa');if(c)c.textContent=fmtSaldo(BAL.CAIXA);
   // Caixa (destino de fondeo): Disponible incluye el fondeo entrante pendiente
   // ("Enviar a Caixa" aún no done) — el dinero viene en camino, no debe dar
   // negativo falso. Fórmula unificada disponibleCuenta.
   const caixaPend=caixaPendienteList().reduce((s,x)=>s+x.a,0);
   const cDisp=disponibleCuenta('CAIXA');
-  const cd=document.getElementById('d-caixa-disp');if(cd){cd.textContent=fmtE(cDisp);cd.style.color=cDisp<0?'var(--rd)':'var(--tl)';}
+  const cd=document.getElementById('d-caixa-disp');if(cd){cd.textContent=fmtSaldo(cDisp);cd.style.color=colorSaldo(cDisp,'var(--rd)','var(--tl)');}
   const ct=document.getElementById('d-caixa-tarjeta');if(ct)ct.textContent=fmtE(CAIXA_TDC.disponible);
-  const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtE(BAL.EFECTIVO);
-  const j=document.getElementById('d-trj');if(j)j.textContent=fmtE(BAL.TRJ);
+  const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtSaldo(BAL.EFECTIVO);
+  const j=document.getElementById('d-trj');if(j)j.textContent=fmtSaldo(BAL.TRJ);
   const trjPend=trjPendienteList().reduce((s,x)=>s+x.a,0);
   // v67 -- Fondo Mutuo se redirigió a BBVA (ver fondoMutuoDisponible /
   // bbva-tile-fmutuo más abajo), ya no se muestra bajo TR Jofre.
@@ -671,17 +704,17 @@ function updTile(){
     const trjDisp=disponibleCuenta('TRJ');
     jpend.parentElement.style.color=trjPend<=0?'var(--t3)':(trjDisp<0?'var(--rd)':'var(--or)');
   }
-  const ja=document.getElementById('d-trja');if(ja)ja.textContent=fmtE(BAL.TRJA);
-  const m=document.getElementById('d-trm');if(m)m.textContent=fmtE(BAL.TRM);
-  const pmT=document.getElementById('pm-trm');if(pmT)pmT.textContent=fmtE(BAL.TRM);
-  const pmJa=document.getElementById('pm-trja');if(pmJa)pmJa.textContent=fmtE(BAL.TRJA);
+  const ja=document.getElementById('d-trja');if(ja)ja.textContent=fmtSaldo(BAL.TRJA);
+  const m=document.getElementById('d-trm');if(m)m.textContent=fmtSaldo(BAL.TRM);
+  const pmT=document.getElementById('pm-trm');if(pmT)pmT.textContent=fmtSaldo(BAL.TRM);
+  const pmJa=document.getElementById('pm-trja');if(pmJa)pmJa.textContent=fmtSaldo(BAL.TRJA);
   const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtE(fondoMutuoDisponible(ACTIVE_ID));
   // BBVA: Disponible con la fórmula unificada (fondeos que salen restan, gastos
   // propios restan). "Pdte." = lo que reserva de BBVA (gastos BBVA + fondeos que
   // salen + retiros) — coincide con bbvaPendienteList, que ya suma justo eso.
   const bbvaPend=bbvaPendienteList().reduce((s,x)=>s+x.a,0);
   const bDisp=disponibleCuenta('BBVA');
-  const bd=document.getElementById('bbva-disponible');if(bd){bd.textContent=fmtE(bDisp);bd.style.color=bDisp<0?'var(--rd)':'var(--tl)';}
+  const bd=document.getElementById('bbva-disponible');if(bd){bd.textContent=fmtSaldo(bDisp);bd.style.color=colorSaldo(bDisp,'var(--rd)','var(--tl)');}
   const bp=document.getElementById('bbva-pendiente');if(bp)bp.textContent=fmtE(bbvaPend);
   const bfm=document.getElementById('bbva-tile-fmutuo');if(bfm)bfm.textContent=fmtE(fondoMutuoDisponible(ACTIVE_ID));
   renderCatDonut();
@@ -4167,7 +4200,7 @@ async function init(){
     ensureMonthsAhead(ACTIVE_ID,3);
     updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
     const bl=document.getElementById('bootLoader');if(bl)bl.remove();
-    checkPendingSyncOnBoot();
+    checkPendingSyncOnBoot();maybeShowPreInicio();
     loadP.then(ok=>{
       if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
       startRealtimeSync();
@@ -4186,7 +4219,7 @@ async function init(){
   ensureMonthsAhead(ACTIVE_ID,3);
   updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
   const bl=document.getElementById('bootLoader');if(bl)bl.remove();
-  checkPendingSyncOnBoot();
+  checkPendingSyncOnBoot();maybeShowPreInicio();
   if(timedOut){
     loadP.then(ok=>{
       if(ok){ensureMonthsAhead(ACTIVE_ID,3);renderAll();}
@@ -4220,6 +4253,7 @@ function applyRole(){
   if(p==='jofre'||p==='massiel')localStorage.setItem('cg_role',p);
 })();
 applyRole();
+updEyeIcons();
 init();
 document.getElementById('maov').style.background='rgba(3,5,12,.95)';
 document.getElementById('maov').querySelector('.ovc').style.background='#111827';
