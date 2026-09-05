@@ -1219,7 +1219,14 @@ function fondoMutuoEnCuenta(monthId){
 // clase de bug que costó resolver en Fondo Mutuo entre v78-v81 (doble
 // conteo disponible real / pdte. de cobro / saldo bruto de BBVA).
 function fondoEmergenciaEntradas(monthId){
-  return itemsForKey('ahorro',monthId).filter(x=>/Fondo Emergencia/i.test(x.l)).map(x=>({id:x.id,l:x.l,a:x.a,d:x.d}));
+  // v92-fix -- excluye ítems legacy destinados a TR J.A. (ej. "Fondo
+  // Emergencia (TR J.A.)" de junio, a:100, aho1 del template base DET.ahorro):
+  // ese dinero nunca se movió realmente a BBVA (el fondo vive en TR J.A. hoy,
+  // en €0 real, confirmado por Jofre) -- contarlo acá inflaba feReservado y
+  // restaba de más el disponible de BBVA desde el primer commit de v92, sin
+  // que ese dinero existiera físicamente ahí. Solo cuentan ítems cuyo destino
+  // (d) NO sea TR J.A. -- a partir del reparto de Ahorro que viva en BBVA.
+  return itemsForKey('ahorro',monthId).filter(x=>/Fondo Emergencia/i.test(x.l)&&!/TR\s*J\.?A\.?/i.test(x.d||'')).map(x=>({id:x.id,l:x.l,a:x.a,d:x.d}));
 }
 function fondoEmergenciaAportadoTotal(){
   const idxActivo=MONTH_ORDER.indexOf(ACTIVE_ID);
