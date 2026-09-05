@@ -1141,10 +1141,37 @@ function fondoMutuoConsumido(monthId){
 function fondoMutuoMesFinanciado(monthId){
   return MONTH_ORDER.indexOf(monthId)<=MONTH_ORDER.indexOf(ACTIVE_ID);
 }
+// v93 -- FIX (Jofre 5-sep-2026): "el fondo mutuo tambien es acumulativo, solo
+// que mes a mes gastamos todo lo asignado, pero cuando no sea asi, debe
+// acumularse". El calculo anterior de fondoMutuoDisponible/EnCuenta SOLO
+// miraba la asignacion y el consumo del MES ACTIVO, perdiendo cualquier
+// sobrante (o deficit) de meses anteriores en cuanto cambiaba el mes. Ahora es
+// una cuenta corriente real: se acumulan entradas y consumos desde
+// FONDO_MUTUO_INICIO_ACUMULADO hasta el mes consultado, inclusive.
+// Por que arranca en 'ago' y no desde jun/jul: el fondo vivia en TR Jofre
+// antes de esa fecha (redirigido a BBVA, confirmado por Jofre 22-ago-2026) y
+// su consumo real de esos meses esta en MOVS.TRJ, que fondoMutuoConsumido()
+// NO revisa (solo MOVS.BBVA) -- sumarlos generaria un sobrante fantasma
+// (+160 jun, +412 jul) que no es plata real disponible hoy. 'ago' es el
+// primer mes con tracking fiable end-to-end sobre BBVA.
+const FONDO_MUTUO_INICIO_ACUMULADO='ago';
+function fondoMutuoMesesAcumulables(monthId){
+  const desde=MONTH_ORDER.indexOf(FONDO_MUTUO_INICIO_ACUMULADO);
+  const hasta=MONTH_ORDER.indexOf(monthId);
+  if(desde<0||hasta<0||hasta<desde)return [];
+  return MONTH_ORDER.slice(desde,hasta+1).filter(mid=>fondoMutuoMesFinanciado(mid));
+}
+function fondoMutuoAsignacionAcumulada(monthId){
+  const total=fondoMutuoMesesAcumulables(monthId).reduce((s,mid)=>s+fondoMutuoEntradas(mid).reduce((s2,x)=>s2+x.a,0),0);
+  return Math.round(total*100)/100;
+}
+function fondoMutuoConsumidoAcumulado(monthId){
+  const total=fondoMutuoMesesAcumulables(monthId).reduce((s,mid)=>s+fondoMutuoConsumido(mid),0);
+  return Math.round(total*100)/100;
+}
 function fondoMutuoDisponible(monthId){
   if(!fondoMutuoMesFinanciado(monthId))return 0;
-  const asignacion=fondoMutuoEntradas(monthId).reduce((s,x)=>s+x.a,0);
-  const disp=Math.round((asignacion-fondoMutuoConsumido(monthId))*100)/100;
+  const disp=Math.round((fondoMutuoAsignacionAcumulada(monthId)-fondoMutuoConsumidoAcumulado(monthId))*100)/100;
   return disp<0?0:disp;
 }
 // Saldo REAL del Fondo Mutuo (lo que ve Massiel): aportes acumulados de todos
@@ -1176,13 +1203,22 @@ function fondoMutuoTareaLabels(monthId){
 // del fondo aunque sigan pendientes (confirmado por Jofre 2-sep-2026: el
 // compromiso existe desde que la tarea aparece, no desde que se paga) -- esta
 // funcion es la contraparte visual, para que Jofre y Massiel vean CUALES
-// tareas explican la diferencia entre el aporte bruto del mes y lo que de
+// tareas explican la diferencia entre el aporte bruto acumulado y lo que de
 // verdad queda libre, en vez de un unico numero sin desglosar. Ejemplo pedido
 // por Jofre: "Hotel - Cumpleanos de Massiel" debe verse aca, restando del
 // Fondo Mutuo, y NO en el Pdte. de cobro generico de BBVA (ver bbvaPendienteList
 // / gastosPropiosPend / tasksFor / updBbvaBadge, que ahora excluyen vacacion).
+// v93 -- ahora recorre TODOS los meses acumulables (no solo el mes activo),
+// asi una tarea pendiente que quedo sin pagar en un mes anterior sigue
+// apareciendo aca mientras siga pendiente, consistente con que su monto ya
+// esta descontado del acumulado (ver fondoMutuoConsumidoAcumulado arriba).
 function fondoMutuoPendientes(monthId){
-  return (MONTH_PAGOS[monthId]||[]).filter(p=>p.cat==='gasto'&&p.vacacion&&p.amt>0&&tareaPendiente(p)).map(p=>({id:p.id,l:p.l,a:p.amt}));
+  if(!fondoMutuoMesFinanciado(monthId))return [];
+  const out=[];
+  fondoMutuoMesesAcumulables(monthId).forEach(mid=>{
+    (MONTH_PAGOS[mid]||[]).filter(p=>p.cat==='gasto'&&p.vacacion&&p.amt>0&&tareaPendiente(p)).forEach(p=>out.push({id:p.id,l:p.l,a:p.amt}));
+  });
+  return out;
 }
 // v80 -- FIX (error grave, Jofre 2-sep-2026): "en la cuenta" (asignacion menos
 // SOLO lo ya ejecutado, sin descontar lo pendiente) es el monto REAL de euros
@@ -1196,20 +1232,24 @@ function fondoMutuoPendientes(monthId){
 // esta funcion como fuente unica de verdad (antes vivia solo inline en
 // renderFondoMutuoMassiel) para que disponibleCuenta y el modal del Fondo
 // Mutuo SIEMPRE muestren numeros consistentes entre si.
+// v93 -- asignacion y consumidoEjecutado ahora son ACUMULADOS (ver arriba),
+// no solo del mes activo -- si un mes anterior gasto de mas (ej. ago 2026,
+// viaje real a Mallorca), ese deficit resta del disponible de hoy en vez de
+// desaparecer al cambiar de mes.
 function fondoMutuoEnCuenta(monthId){
   if(!fondoMutuoMesFinanciado(monthId))return 0;
   const pendienteTotal=fondoMutuoPendientes(monthId).reduce((s,x)=>s+x.a,0);
-  const consumidoEjecutado=fondoMutuoConsumido(monthId)-pendienteTotal;
-  const asignacion=fondoMutuoEntradas(monthId).reduce((s,x)=>s+x.a,0);
-  return Math.max(0,Math.round((asignacion-consumidoEjecutado)*100)/100);
+  const consumidoEjecutado=fondoMutuoConsumidoAcumulado(monthId)-pendienteTotal;
+  return Math.max(0,Math.round((fondoMutuoAsignacionAcumulada(monthId)-consumidoEjecutado)*100)/100);
 }
 // ── FONDO EMERGENCIA (v92) ────────────────────────────────────────────────
-// A diferencia del Fondo Mutuo (que se resetea cada mes: asignación del mes
-// menos gasto del mes -- ver fondoMutuoEnCuenta arriba), el Fondo Emergencia
-// es ACUMULATIVO: se arma mes a mes con su parte del reparto de Ahorro y solo
-// baja cuando se registra un gasto real contra él -- lo aportado nunca se
-// "resetea" al pasar de mes. Vive en BBVA (reservado dentro de su saldo,
-// mismo patrón que fondoMutuoEnCuenta/fmReservado en disponibleCuenta).
+// Igual que el Fondo Mutuo (v93: también es ACUMULATIVO -- ver
+// fondoMutuoAsignacionAcumulada/fondoMutuoConsumidoAcumulado arriba, fix del
+// 5-sep-2026), el Fondo Emergencia se arma mes a mes con su parte del reparto
+// de Ahorro y solo baja cuando se registra un gasto real contra él -- lo
+// aportado nunca se "resetea" al pasar de mes. Vive en BBVA (reservado dentro
+// de su saldo, mismo patrón que fondoMutuoEnCuenta/fmReservado en
+// disponibleCuenta).
 // Deliberadamente SIN tareas pendientes programadas (a diferencia de
 // fondoMutuoPendientes/FONDO_MUTUO_CATS): no hay gastos calendarizados
 // contra este fondo, solo registros ad-hoc cuando ocurre una emergencia real
