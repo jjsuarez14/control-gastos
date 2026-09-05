@@ -2810,7 +2810,7 @@ function categoriaFijosDetalle(cat,id){
       // dependía de "Enviar a TR Jofre" done), no el gasto real -- casi
       // siempre se gasta más del fondo de lo que entra ese mes (ver líneas de
       // Vacaciones abajo, que sí son gasto real).
-      const fm=itemsForKey('ahorro',id).find(x=>/Fondo Mutuo/i.test(x.l));
+      const fm=itemsForKey('ahorro',id).find(x=>x.key!=='vacaciones'&&/Fondo Mutuo/i.test(x.l));
       if(fm&&fondoMutuoMesFinanciado(id))out.push({l:'Fondo Mutuo · asignación mensual',a:fm.a,drill:null});
       tareasGastoEjecutadas(id,'Compartir Familiar').forEach(t=>out.push({l:t.l,a:t.a,drill:null}));
     }else if(cat==='Deporte'){
@@ -2873,7 +2873,7 @@ function categoriaFijosDetalle(cat,id){
   }else if(cat==='Remesas'){
     if(cs.rem)out.push({l:'Remesas',a:itemsForKey('remesas',id).reduce((s,x)=>s+x.a,0),drill:{key:'remesas',label:'Remesas',backCat:'Remesas'}});
   }else if(cat==='Compartir Familiar'){
-    const fm=itemsForKey('ahorro',id).find(x=>/Fondo Mutuo/i.test(x.l));
+    const fm=itemsForKey('ahorro',id).find(x=>x.key!=='vacaciones'&&/Fondo Mutuo/i.test(x.l));
     if(fm)out.push({l:'Fondo Mutuo · asignación mensual',a:fm.a,drill:null});
   }else if(cat==='Vacaciones'){
     itemsForKey('ahorro',id).filter(x=>x.key==='vacaciones').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
@@ -3574,26 +3574,12 @@ function saveReg(){
     updBbvaBadge();
   }
   else if(!reg.isCuota){
-    // v90 -- BUG REAL (Barbería ago/sep v77, Netflix/Disney/Decathlon sep
-    // v89): "Registrar movimiento" con texto libre siempre etiquetaba
-    // mesId:ACTIVE_ID, sin importar que Jofre estuviera pagando algo
-    // ATRASADO de un mes anterior -- si el mes activo YA tenía su propia
-    // tarea con el mismo nombre marcada pagada, el movimiento nuevo quedaba
-    // mal atribuido y colisionaba con esa tarea (tieneMovEjecutado la
-    // encuentra por firma label+monto). Ahora, si el texto coincide con una
-    // tarea de gasto de ESTE mes que YA está pagada, se pregunta antes de
-    // asumir nada.
-    let mesIdMov=null;
-    const nlReg=normLabelCG(label);
-    const yaPagadaEsteMes=(MONTH_PAGOS[ACTIVE_ID]||[]).some(t=>t.cat==='gasto'&&t.acc===reg.account&&t.done&&normLabelCG(t.l)===nlReg);
-    if(yaPagadaEsteMes&&confirm('Ya hay un pago de "'+label+'" registrado este mes ('+MONTHS[ACTIVE_ID].name+'). ¿Es un pago ATRASADO de un mes anterior?')){
-      const idxActivoReg=MONTH_ORDER.indexOf(ACTIVE_ID);
-      const opcionesMes=MONTH_ORDER.slice(Math.max(0,idxActivoReg-3),idxActivoReg);
-      const respMes=(prompt('¿De qué mes es este pago? Escribe uno de: '+opcionesMes.join(', '))||'').trim().toLowerCase();
-      if(opcionesMes.includes(respMes))mesIdMov=respMes;
-      else if(respMes)toast('Mes no reconocido -- se registró en '+MONTHS[ACTIVE_ID].name,'var(--or)');
-    }
-    regMov(reg.account,label,reg.amount,false,reg.category,reg.group,mesIdMov);
+    // v91 -- revertido el guard de mesId de v90 (Jofre, 5-sep-2026): el caso
+    // de Barbería (ago/sep v77) fue un error puntual, no se van a pagar
+    // tareas atrasadas de otros meses -- cada tarea debe quedar cerrada en
+    // el mes al que pertenece. Vuelve al comportamiento simple: siempre
+    // mesId:ACTIVE_ID, sin preguntar.
+    regMov(reg.account,label,reg.amount,false,reg.category,reg.group);
   }
   else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0,tdcRelease:esCaixaTDC});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
