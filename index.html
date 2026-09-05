@@ -600,7 +600,8 @@ function disponibleCuenta(acc){
   // fantasma). Ahora se resta fondoMutuoEnCuenta -- el total reservado en la
   // cuenta, este ya ejecutado o todavia pendiente.
   const fmReservado=(acc==='BBVA')?fondoMutuoEnCuenta(ACTIVE_ID):0;
-  const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc)-fmReservado;
+  const feReservado=(acc==='BBVA')?fondoEmergenciaEnCuenta():0; // v92 -- reservado del Fondo Emergencia, mismo patrón que fmReservado
+  const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc)-fmReservado-feReservado;
   return Math.round(d*100)/100;
 }
 const MONTH_NUM={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
@@ -744,7 +745,7 @@ function updTile(){
   const pmIb=document.getElementById('pm-ibkr');if(pmIb)pmIb.textContent=SALDOS_OCULTOS?'\u2022\u2022\u2022\u2022':'$'+fmtE(BAL.IBKR).slice(1);
   renderCatDonut();
 }
-const CAT_DONUT_PALETTE={'Mercado':'#F5A623','Baby J.A.':'#0A84FF','Deporte':'#30D158','Salud':'#EF4444','Casa':'#BF5AF2','Trabajo':'#06B6D4','Carro/Moto':'#FF9F0A','Remesas':'#EC4899','Compartir Familiar':'#FF375F','Vacaciones':'#14B8A6','Personales':'#A78BFA','Ahorro':'#10B981','Adicionales':'#9CA3AF'};
+const CAT_DONUT_PALETTE={'Mercado':'#F5A623','Baby J.A.':'#0A84FF','Deporte':'#30D158','Salud':'#EF4444','Casa':'#BF5AF2','Trabajo':'#06B6D4','Carro/Moto':'#FF9F0A','Remesas':'#EC4899','Compartir Familiar':'#FF375F','Vacaciones':'#14B8A6','Personales':'#A78BFA','Ahorro':'#10B981','Adicionales':'#9CA3AF','Fondo Emergencia':'#30D158'};
 function renderCatDonut(){
   const svg=document.getElementById('cat-donut');
   if(!svg)return;
@@ -1201,6 +1202,45 @@ function fondoMutuoEnCuenta(monthId){
   const consumidoEjecutado=fondoMutuoConsumido(monthId)-pendienteTotal;
   const asignacion=fondoMutuoEntradas(monthId).reduce((s,x)=>s+x.a,0);
   return Math.max(0,Math.round((asignacion-consumidoEjecutado)*100)/100);
+}
+// ── FONDO EMERGENCIA (v92) ────────────────────────────────────────────────
+// A diferencia del Fondo Mutuo (que se resetea cada mes: asignación del mes
+// menos gasto del mes -- ver fondoMutuoEnCuenta arriba), el Fondo Emergencia
+// es ACUMULATIVO: se arma mes a mes con su parte del reparto de Ahorro y solo
+// baja cuando se registra un gasto real contra él -- lo aportado nunca se
+// "resetea" al pasar de mes. Vive en BBVA (reservado dentro de su saldo,
+// mismo patrón que fondoMutuoEnCuenta/fmReservado en disponibleCuenta).
+// Deliberadamente SIN tareas pendientes programadas (a diferencia de
+// fondoMutuoPendientes/FONDO_MUTUO_CATS): no hay gastos calendarizados
+// contra este fondo, solo registros ad-hoc cuando ocurre una emergencia real
+// -- se registran con categoría 'Fondo Emergencia' desde "Registrar
+// movimiento" (mismo wizard, agregada a CATS) y quedan como movimiento
+// normal de BBVA, nunca como tarea "pendiente". Esto evita por diseño la
+// clase de bug que costó resolver en Fondo Mutuo entre v78-v81 (doble
+// conteo disponible real / pdte. de cobro / saldo bruto de BBVA).
+function fondoEmergenciaEntradas(monthId){
+  return itemsForKey('ahorro',monthId).filter(x=>/Fondo Emergencia/i.test(x.l)).map(x=>({id:x.id,l:x.l,a:x.a,d:x.d}));
+}
+function fondoEmergenciaAportadoTotal(){
+  const idxActivo=MONTH_ORDER.indexOf(ACTIVE_ID);
+  let total=0;
+  MONTH_ORDER.forEach(mid=>{
+    if(MONTH_ORDER.indexOf(mid)>idxActivo)return;
+    total+=fondoEmergenciaEntradas(mid).reduce((s,x)=>s+x.a,0);
+  });
+  return Math.round(total*100)/100;
+}
+function fondoEmergenciaConsumidoTotal(){
+  let c=0;
+  (MOVS.BBVA||[]).forEach(mv=>{
+    if(mv.t)return; // solo salidas
+    if(mv.cat!=='Fondo Emergencia')return;
+    c+=Math.abs(moneyFromStr(mv.a));
+  });
+  return Math.round(c*100)/100;
+}
+function fondoEmergenciaEnCuenta(){
+  return Math.max(0,Math.round((fondoEmergenciaAportadoTotal()-fondoEmergenciaConsumidoTotal())*100)/100);
 }
 function renderFondoMutuoMassiel(){
   const id=ACTIVE_ID;const m=MONTHS[id];
@@ -2624,7 +2664,7 @@ function isMassielRole(){return document.body.classList.contains('role-massiel')
 // fue exactamente el bug de v81 (Massiel pudo completar la tarea del Hotel
 // porque renderFondoMutuoMassiel todavia no usaba este criterio).
 function massielViewActive(){return isMassielRole()||(document.getElementById('p-m')?.classList.contains('on')||false);}
-const CATS_COLORS={'Mercado':'#30D158','Baby J.A.':'#FF375F','Deporte':'#0A84FF','Salud':'#FF453A','Casa':'#FF9F0A','Trabajo':'#BF5AF2','Carro/Moto':'#64D2FF','Remesas':'#FFD60A','Compartir Familiar':'#A855F7','Personales':'#EC4899','Ahorro':'#64D2FF','Adicionales':'#6B85A8'};
+const CATS_COLORS={'Mercado':'#30D158','Baby J.A.':'#FF375F','Deporte':'#0A84FF','Salud':'#FF453A','Casa':'#FF9F0A','Trabajo':'#BF5AF2','Carro/Moto':'#64D2FF','Remesas':'#FFD60A','Compartir Familiar':'#A855F7','Personales':'#EC4899','Ahorro':'#64D2FF','Adicionales':'#6B85A8','Fondo Emergencia':'#30D158'};
 function totalGastoMes(id){
   const d=MONTHS[id];if(!d)return 0;
   return (d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0);
@@ -3389,7 +3429,7 @@ function renderPrevision(){
     return `<div style="margin-bottom:10px"><div class="tp" onclick="openMov('${id}')" style="border-color:${mc}55"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;font-weight:700;color:${mc};letter-spacing:.07em;margin-bottom:5px">${m.name.toUpperCase()}</div><div style="font-size:28px;font-weight:800;color:var(--t1);line-height:1">€${(_ap.jofre+_ap.massiel).toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0,useGrouping:true})}</div></div><div style="text-align:right"><div style="display:inline-flex;align-items:center;gap:4px;background:${mc}18;border:1px solid ${mc}44;border-radius:8px;padding:4px 8px;margin-bottom:8px"><div style="width:6px;height:6px;border-radius:50%;background:${mc}"></div><span style="font-size:10px;font-weight:700;color:${mc}">${m.badge}</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:center"><div style="background:var(--bl2);border-radius:8px;padding:6px 8px"><div style="font-size:8px;color:var(--bl);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Jofre</div><div style="font-size:16px;font-weight:800;color:var(--bl)">${_jS}</div></div><div style="background:var(--pk2);border-radius:8px;padding:6px 8px"><div style="font-size:8px;color:var(--pk);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Massiel</div><div style="font-size:16px;font-weight:800;color:var(--pk)">${_mS}</div></div></div></div></div><div style="height:3px;border-radius:2px;background:var(--bd);overflow:hidden;margin-top:10px"><div class="bfl" style="width:80%;background:${mc}"></div></div></div></div>`;
   }).join('');
 }
-const CATS=['Mercado','Baby J.A.','Deporte','Salud','Casa','Trabajo','Carro/Moto','Remesas','Compartir Familiar','Vacaciones','Personales','Ahorro','Adicionales'];
+const CATS=['Mercado','Baby J.A.','Deporte','Salud','Casa','Trabajo','Carro/Moto','Remesas','Compartir Familiar','Vacaciones','Personales','Ahorro','Adicionales','Fondo Emergencia'];
 const ACCOUNTS_LIST=[{id:'BBVA',n:'BBVA'},{id:'CAIXA',n:'Caixa'},{id:'TRJ',n:'TR Jofre'},{id:'TRJA',n:'TR J.A.'},{id:'TRM',n:'TR Massiel'},{id:'IBKR',n:'IBKR'}];
 const CUOTAS_NUEVAS=[];let reg={},regPath=[];
 function openReg(presetAcc){reg={type:null,desc:'',amount:null,category:null,account:presetAcc||null,isCuota:null,cNum:null,cType:null,shared:null,caixaCard:null,mesInicio:null,cuotaMonto:null,cuotaMontos:[],cuotasIguales:null,cuotaCuentaDeduccion:null,tareaMes:null,tareaRule:null,step:'type'};regPath=[];renderReg();document.getElementById('fov').style.display='block';}
