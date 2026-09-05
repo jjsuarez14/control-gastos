@@ -764,7 +764,14 @@ function renderCatDonut(){
   svg.innerHTML=parts;
 }
 function toNum(v){return parseFloat(String(v==null?'':v).trim().replace(',','.'));}
-function regMov(acc,label,amt,plus,cat,group){
+// v90 -- 7mo parámetro opcional mesIdOverride: por defecto sigue siendo
+// ACTIVE_ID (sin cambios para ningún llamado existente). Lo usa el guardado
+// manual de "Registrar movimiento" (ver saveReg) cuando detecta que el
+// texto escrito coincide con una tarea de ESTE mes ya marcada como pagada --
+// en vez de asumir en silencio que es de este mes (el bug real de Barbería/
+// Netflix, ver v78/v81), le pregunta a Jofre si es un pago atrasado de un
+// mes anterior y, si confirma, etiqueta el movimiento con el mes correcto.
+function regMov(acc,label,amt,plus,cat,group,mesIdOverride){
   BAL[acc]=Math.round((BAL[acc]+(plus?amt:-amt))*100)/100;
   const dt=new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS[acc]=MOVS[acc]||[];
@@ -772,7 +779,7 @@ function regMov(acc,label,amt,plus,cat,group){
   // (ACTIVE_ID), no a qué mes calendario real fue registrado. Necesario
   // porque se suele trabajar "adelantado" (ej. mes activo=septiembre
   // mientras la fecha real todavía es agosto) -- ver fix en movBelongsToMonth.
-  MOVS[acc].unshift({dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:ACTIVE_ID});
+  MOVS[acc].unshift({dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID});
   updTile();
 }
 function regCaixaCard(label,amt){
@@ -3566,7 +3573,28 @@ function saveReg(){
     }
     updBbvaBadge();
   }
-  else if(!reg.isCuota){regMov(reg.account,label,reg.amount,false,reg.category,reg.group);}
+  else if(!reg.isCuota){
+    // v90 -- BUG REAL (Barbería ago/sep v77, Netflix/Disney/Decathlon sep
+    // v89): "Registrar movimiento" con texto libre siempre etiquetaba
+    // mesId:ACTIVE_ID, sin importar que Jofre estuviera pagando algo
+    // ATRASADO de un mes anterior -- si el mes activo YA tenía su propia
+    // tarea con el mismo nombre marcada pagada, el movimiento nuevo quedaba
+    // mal atribuido y colisionaba con esa tarea (tieneMovEjecutado la
+    // encuentra por firma label+monto). Ahora, si el texto coincide con una
+    // tarea de gasto de ESTE mes que YA está pagada, se pregunta antes de
+    // asumir nada.
+    let mesIdMov=null;
+    const nlReg=normLabelCG(label);
+    const yaPagadaEsteMes=(MONTH_PAGOS[ACTIVE_ID]||[]).some(t=>t.cat==='gasto'&&t.acc===reg.account&&t.done&&normLabelCG(t.l)===nlReg);
+    if(yaPagadaEsteMes&&confirm('Ya hay un pago de "'+label+'" registrado este mes ('+MONTHS[ACTIVE_ID].name+'). ¿Es un pago ATRASADO de un mes anterior?')){
+      const idxActivoReg=MONTH_ORDER.indexOf(ACTIVE_ID);
+      const opcionesMes=MONTH_ORDER.slice(Math.max(0,idxActivoReg-3),idxActivoReg);
+      const respMes=(prompt('¿De qué mes es este pago? Escribe uno de: '+opcionesMes.join(', '))||'').trim().toLowerCase();
+      if(opcionesMes.includes(respMes))mesIdMov=respMes;
+      else if(respMes)toast('Mes no reconocido -- se registró en '+MONTHS[ACTIVE_ID].name,'var(--or)');
+    }
+    regMov(reg.account,label,reg.amount,false,reg.category,reg.group,mesIdMov);
+  }
   else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0,tdcRelease:esCaixaTDC});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
@@ -3685,17 +3713,17 @@ window.addEventListener('online',()=>{
   }
 });
 /* ---- Firebase (persistencia compartida Jofre/Massiel) ---- */
-let db=null,_fbDoc,_fbSetDoc,_fbGetDoc,_fbDeleteDoc,_fbOnSnapshot;
+let db=null,_fbDoc,_fbSetDoc,_fbGetDoc,_fbDeleteDoc,_fbOnSnapshot,_fbRunTransaction;
 const fbReady=(async()=>{
   try{
     const {initializeApp}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
-    const {getFirestore,doc,getDoc,setDoc,deleteDoc,onSnapshot}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+    const {getFirestore,doc,getDoc,setDoc,deleteDoc,onSnapshot,runTransaction}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
     const {getAuth,signInAnonymously,onAuthStateChanged}=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js');
     const firebaseConfig={apiKey:"AIzaSyCUqFUjsV881VyE8vqUXkiWe0Y3UTQRT1I",authDomain:"control-gastos-jofre.firebaseapp.com",projectId:"control-gastos-jofre",storageBucket:"control-gastos-jofre.firebasestorage.app",messagingSenderId:"918073876245",appId:"1:918073876245:web:5b30a58af0b9a00b93d31c"};
     const app=initializeApp(firebaseConfig);
     const auth=getAuth(app);
     db=getFirestore(app);
-    _fbDoc=doc;_fbSetDoc=setDoc;_fbGetDoc=getDoc;_fbDeleteDoc=deleteDoc;_fbOnSnapshot=onSnapshot;
+    _fbDoc=doc;_fbSetDoc=setDoc;_fbGetDoc=getDoc;_fbDeleteDoc=deleteDoc;_fbOnSnapshot=onSnapshot;_fbRunTransaction=runTransaction;
     await new Promise((resolve)=>{
       onAuthStateChanged(auth,u=>{if(u)resolve();else signInAnonymously(auth).catch(()=>resolve());});
     });
@@ -3872,7 +3900,16 @@ function mergeDetObjConDelta(freshObj,baseObj,actualObj){
   });
   return resultado;
 }
-function buildPersistableState(){
+// v90 -- acepta `overrides` opcional ({MOVS,MONTH_PAGOS,DET_MONTH_OVERRIDES,
+// DET_EXTRA,BAL,CAIXA_TDC}) para poder construir el JSON a persistir DENTRO
+// de la transacción de saveState() a partir del resultado ya fusionado en
+// variables locales, sin tener que volcarlo primero a las globales en vivo
+// (necesario porque el callback de una transacción de Firestore puede
+// reintentarse más de una vez -- ver saveState). Sin argumento, se comporta
+// exactamente igual que antes (lee todo de las globales en vivo).
+function buildPersistableState(overrides){
+  const o=overrides||{};
+  const MOVS_=o.MOVS||MOVS,MONTH_PAGOS_=o.MONTH_PAGOS||MONTH_PAGOS,DET_MONTH_OVERRIDES_=o.DET_MONTH_OVERRIDES||DET_MONTH_OVERRIDES,DET_EXTRA_=o.DET_EXTRA||DET_EXTRA,BAL_=o.BAL||BAL,CAIXA_TDC_=o.CAIXA_TDC||CAIXA_TDC;
   const mCats={},mCuotas={};Object.keys(MONTHS).forEach(k=>{mCats[k]=MONTHS[k].cats;mCuotas[k]=MONTHS[k].cuotas;});
   // Bug corregido (18-jul): tareas agregadas a mano en MONTH_PAGOS (ej. vía
   // consola en el chat diario) con un id que el código no genera solo
@@ -3882,15 +3919,15 @@ function buildPersistableState(){
   // Ahora: si el id es regenerable por código, se sigue guardando liviano
   // (solo estado); si no (custom/ad-hoc), se guarda completo.
   const pagosByMonth={};
-  Object.keys(MONTH_PAGOS).forEach(k=>{
+  Object.keys(MONTH_PAGOS_).forEach(k=>{
     const freshIds=new Set(buildMonthPagos(k).map(x=>x.id));
-    pagosByMonth[k]=MONTH_PAGOS[k].map(p=>
+    pagosByMonth[k]=MONTH_PAGOS_[k].map(p=>
       freshIds.has(p.id)
         ?{id:p.id,done:p.done,amt:p.amt}
         :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
     );
   });
-  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL,CAIXA_TDC,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES,DET_EXTRA,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS,CUOTAS_NUEVAS};
+  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:BAL_,CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS};
 }
 async function saveState(){
   if(_saveInFlight)return; // ya hay un guardado en curso -- el reintento programado lo cubre
@@ -3910,37 +3947,63 @@ async function saveState(){
       pagos:JSON.parse(JSON.stringify(MONTH_PAGOS)),
       detOv:JSON.parse(JSON.stringify(DET_MONTH_OVERRIDES)),
       detExtra:JSON.parse(JSON.stringify(DET_EXTRA)),
+      bal:JSON.parse(JSON.stringify(BAL)),
+      caixaTdc:JSON.parse(JSON.stringify(CAIXA_TDC)),
       baselineMovs:JSON.parse(JSON.stringify(MOVS_BASELINE)),
       baselinePagos:JSON.parse(JSON.stringify(MONTH_PAGOS_BASELINE)),
       baselineDetOv:JSON.parse(JSON.stringify(DET_OV_BASELINE)),
-      baselineDetExtra:JSON.parse(JSON.stringify(DET_EXTRA_BASELINE))
+      baselineDetExtra:JSON.parse(JSON.stringify(DET_EXTRA_BASELINE)),
+      baselineBal:JSON.parse(JSON.stringify(BAL_BASELINE)),
+      baselineCaixaTdc:JSON.parse(JSON.stringify(CAIXA_TDC_BASELINE))
     };
   }catch(e){}
   try{
     if(!await fbReady){markPendingSync(pendingSnap);return;}
-    try{
-      const freshSnap=await _fbGetDoc(stateDocRef());
+    // v90 -- FIX ESTRUCTURAL (incidente real, 5-sep-2026: Disney/Netflix/
+    // Decathlon volvieron a "pendiente" pese a que Jofre ya las había marcado
+    // pagadas). Causa raíz: leer lo fresco (_fbGetDoc) y escribir el merge
+    // (_fbSetDoc) eran 2 pasos SUELTOS -- si el guardado de OTRA sesión
+    // (Jofre marcando Disney/Netflix/Decathlon) caía justo DESPUÉS de nuestra
+    // lectura pero ANTES de nuestra escritura, esta sesión pisaba ese cambio
+    // sin darse cuenta (nuestra lectura ya era vieja, pero nuestra escritura
+    // ganaba por ser la última). runTransaction hace que Firestore garantice
+    // que el documento no cambió entre el get() y el set() de este bloque --
+    // si cambió mientras tanto, reintenta el bloque completo solo, con datos
+    // frescos de nuevo. Por eso el merge parte SIEMPRE de las fotos
+    // congeladas en pendingSnap (no de MOVS/MONTH_PAGOS/BAL/CAIXA_TDC en
+    // vivo): el callback puede ejecutarse más de una vez si hay reintento, y
+    // tiene que dar el mismo resultado correcto cada vez, no aplicar el
+    // delta de esta sesión dos veces sobre un valor ya fusionado la vez
+    // anterior. Recién cuando la transacción termina bien se vuelca el
+    // resultado a las globales en vivo, una sola vez.
+    let mergedOut=null;
+    await _fbRunTransaction(db, async (tx)=>{
+      const freshSnap=await tx.get(stateDocRef());
+      const mMovs=JSON.parse(JSON.stringify(pendingSnap.movs));
+      const mPagos=JSON.parse(JSON.stringify(pendingSnap.pagos));
+      let mDetOv=JSON.parse(JSON.stringify(pendingSnap.detOv));
+      let mDetExtra=JSON.parse(JSON.stringify(pendingSnap.detExtra));
+      const mBal=JSON.parse(JSON.stringify(pendingSnap.bal));
+      const mCaixaTdc=JSON.parse(JSON.stringify(pendingSnap.caixaTdc));
       if(freshSnap.exists()){
         const freshData=freshSnap.data();
         if(freshData&&freshData.json){
           const freshState=JSON.parse(freshData.json);
           if(freshState.MOVS){
-            Object.keys(MOVS).forEach(k=>{
-              MOVS[k]=mergeMovsConDelta(freshState.MOVS[k],MOVS_BASELINE[k],MOVS[k]);
+            Object.keys(mMovs).forEach(k=>{
+              mMovs[k]=mergeMovsConDelta(freshState.MOVS[k],pendingSnap.baselineMovs[k],pendingSnap.movs[k]);
             });
           }
           // v77 -- ver nota junto a snapshotBalBaseline: mismo merge-by-delta
           // que MOVS, para que el saldo real de una cuenta nunca pise en silencio
           // lo que otra sesión (ej. el teléfono) ya haya sumado/restado.
-          if(freshState.BAL)Object.assign(BAL,mergeScalarDelta(freshState.BAL,BAL_BASELINE,BAL));
-          if(freshState.CAIXA_TDC)Object.assign(CAIXA_TDC,mergeScalarDelta(freshState.CAIXA_TDC,CAIXA_TDC_BASELINE,CAIXA_TDC));
+          if(freshState.BAL)Object.assign(mBal,mergeScalarDelta(freshState.BAL,pendingSnap.baselineBal,pendingSnap.bal));
+          if(freshState.CAIXA_TDC)Object.assign(mCaixaTdc,mergeScalarDelta(freshState.CAIXA_TDC,pendingSnap.baselineCaixaTdc,pendingSnap.caixaTdc));
           if(freshState.DET_MONTH_OVERRIDES){
-            const merged=mergeDetObjConDelta(freshState.DET_MONTH_OVERRIDES,DET_OV_BASELINE,DET_MONTH_OVERRIDES);
-            Object.keys(merged).forEach(k=>{DET_MONTH_OVERRIDES[k]=merged[k];});
+            mDetOv=mergeDetObjConDelta(freshState.DET_MONTH_OVERRIDES,pendingSnap.baselineDetOv,pendingSnap.detOv);
           }
           if(freshState.DET_EXTRA){
-            const mergedEx=mergeDetObjConDelta(freshState.DET_EXTRA,DET_EXTRA_BASELINE,DET_EXTRA);
-            Object.keys(mergedEx).forEach(k=>{DET_EXTRA[k]=mergedEx[k];});
+            mDetExtra=mergeDetObjConDelta(freshState.DET_EXTRA,pendingSnap.baselineDetExtra,pendingSnap.detExtra);
           }
           // v28 — Fusionar tareas (MONTH_PAGOS) con delta para no pisar las
           // marcas done/amt que la otra sesión (ej. Massiel) haya hecho mientras
@@ -3948,7 +4011,7 @@ async function saveState(){
           // se reconstruye a objetos de tarea vía buildMonthPagos + overlay, y se
           // fusiona contra el baseline de esta sesión.
           if(freshState.pagosByMonth){
-            Object.keys(MONTH_PAGOS).forEach(k=>{
+            Object.keys(mPagos).forEach(k=>{
               const freshLiviano=freshState.pagosByMonth[k];
               if(!Array.isArray(freshLiviano))return;
               // Reconstruir tareas frescas: base generada + estado (done/amt) del liviano.
@@ -3968,15 +4031,25 @@ async function saveState(){
                 if(!lp.done&&!esCustomAdHoc)return null;
                 return {id:lp.id,l:lp.l,acc:lp.acc,cat:lp.cat,amt:lp.amt,done:lp.done,vacacion:lp.vacacion};
               }).filter(Boolean);
-              MONTH_PAGOS[k]=mergePagosConDelta(freshTasks,MONTH_PAGOS_BASELINE[k],MONTH_PAGOS[k]);
+              mPagos[k]=mergePagosConDelta(freshTasks,pendingSnap.baselinePagos[k],pendingSnap.pagos[k]);
             });
           }
         }
       }
-    }catch(e){} // si la relectura falla, seguimos con la copia local tal cual
-    const stateJson=JSON.stringify(buildPersistableState());
-    await _fbSetDoc(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
-    try{localStorage.setItem(STORAGE_KEY,stateJson);}catch(e){}
+      mergedOut={movs:mMovs,pagos:mPagos,detOv:mDetOv,detExtra:mDetExtra,bal:mBal,caixaTdc:mCaixaTdc};
+      const stateJson=JSON.stringify(buildPersistableState({MOVS:mMovs,MONTH_PAGOS:mPagos,DET_MONTH_OVERRIDES:mDetOv,DET_EXTRA:mDetExtra,BAL:mBal,CAIXA_TDC:mCaixaTdc}));
+      tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
+    });
+    // Transacción confirmada por Firestore -- recién ahora se aplica el
+    // resultado fusionado a las globales en vivo, una sola vez.
+    Object.assign(MOVS,mergedOut.movs);
+    Object.assign(MONTH_PAGOS,mergedOut.pagos);
+    Object.assign(DET_MONTH_OVERRIDES,mergedOut.detOv);
+    Object.assign(DET_EXTRA,mergedOut.detExtra);
+    Object.assign(BAL,mergedOut.bal);
+    Object.assign(CAIXA_TDC,mergedOut.caixaTdc);
+    if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildPersistableState()));}catch(e){}
     snapshotMovsBaseline();
     snapshotDetBaseline();
     snapshotPagosBaseline();
