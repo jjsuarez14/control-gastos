@@ -249,11 +249,15 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
       <svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.4;pointer-events:none"><path d="M0,75 C40,72 55,55 85,58 C115,61 130,40 165,42 C195,44 210,25 240,26 C265,27 280,14 300,8" fill="none" stroke="url(#sg-bbva)" stroke-width="2.5" stroke-linecap="round" filter="url(#sf-glow)"/><circle cx="300" cy="8" r="3.5" fill="#0A84FF" filter="url(#sf-glow)"/></svg>
       <div style="position:relative;z-index:1">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div style="width:34px;height:34px;border-radius:11px;background:#0A84FF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-building-bank" style="font-size:17px;color:#0A84FF"></i></div><div><div style="font-size:10px;font-weight:700;color:#0A84FF;letter-spacing:.06em;margin-bottom:4px">BBVA · CUENTA PRINCIPAL</div><div style="font-family:var(--fd);font-size:34px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1" id="bbva-tile-bal">€135<span style="font-size:18px;font-weight:600">,12</span></div></div></div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3);margin-top:6px"></i></div>
-      <div style="border-top:1px solid var(--bd);padding-top:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div style="border-top:1px solid var(--bd);padding-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div style="cursor:pointer" onclick="event.stopPropagation();showA('BBVA')"><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Disponible</div><div style="font-size:13px;font-weight:700;color:var(--tl)" id="bbva-disponible">€0,00</div></div>
-        <div style="cursor:pointer" onclick="event.stopPropagation();showFondoMutuoMassiel()"><div style="font-size:9px;color:#BF5AF2;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Fondo Mutuo</div><div style="font-size:13px;font-weight:700;color:#BF5AF2" id="bbva-tile-fmutuo">€0,00</div></div>
         <div style="cursor:pointer" onclick="event.stopPropagation();showPendienteAccount('BBVA')"><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Pdte. cobro</div><div style="font-size:13px;font-weight:700;color:var(--rd)" id="bbva-pendiente">€0,00</div></div>
       </div>
+      <div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 7px 1px">Fondos dentro de BBVA</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="cursor:pointer;background:rgba(255,255,255,.06);border-radius:12px;padding:10px 11px;position:relative;overflow:hidden" onclick="event.stopPropagation();showFondoEmergenciaDetail()"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:#30D158"></div><div style="font-size:10px;color:var(--t2);font-weight:600;margin-bottom:3px">F. Emergencia</div><div style="font-size:15px;font-weight:800;color:#30D158" id="bbva-tile-femerg">€0,00</div><div style="font-size:9px;color:var(--t3);margin-top:2px" id="bbva-tile-femerg-note">Sin iniciar</div></div>
+        <div style="cursor:pointer;background:rgba(255,255,255,.06);border-radius:12px;padding:10px 11px;position:relative;overflow:hidden" onclick="event.stopPropagation();showFondoMutuoMassiel()"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:#BF5AF2"></div><div style="font-size:10px;color:var(--t2);font-weight:600;margin-bottom:3px">Fondo Mutuo</div><div style="font-size:15px;font-weight:800;color:#BF5AF2" id="bbva-tile-fmutuo">€0,00</div><div style="font-size:9px;color:var(--t3);margin-top:2px" id="bbva-tile-fmutuo-note"></div></div>
+      </div></div>
       </div>
     </div>
   </div>
@@ -290,7 +294,8 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('TRJA')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">TR J.A.</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-trja">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">Fondo familiar</div></div>
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#BF5AF2;letter-spacing:.04em;margin-bottom:6px">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-fmutuo">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">TR Jofre · lectura</div></div>
     <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showA('IBKR')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#0A84FF;letter-spacing:.04em;margin-bottom:6px">IBKR · BOLSA</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-ibkr">$0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">≈ €0 · cerrada</div></div>
-  </div>
+  
+    <div class="lc" style="margin-bottom:0;cursor:pointer" onclick="showFondoEmergenciaDetail()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">FONDO EMERGENCIA</div><i class="ti ti-chevron-right" style="font-size:12px;color:#CBD5E1"></i></div><div style="font-size:22px;font-weight:800;color:#0F172A;line-height:1" id="pm-femerg">€0,00</div><div style="font-size:9px;color:#94A3B8;margin-top:4px">BBVA · lectura</div></div></div>
   <div style="padding:8px 18px 0"><div class="lc" style="margin-bottom:0"><div style="font-size:9px;font-weight:700;color:#94A3B8;letter-spacing:.05em;margin-bottom:10px">HISTORIAL DE AHORRO</div><div id="pm-ahorro-bars" style="display:flex;align-items:flex-end;gap:8px;height:76px"></div><div id="pm-ahorro-detail"></div></div></div>
   <div style="height:18px"></div>
 </div>
@@ -733,6 +738,7 @@ function updTile(){
   const pmT=document.getElementById('pm-trm');if(pmT)pmT.textContent=fmtSaldo(BAL.TRM);
   const pmJa=document.getElementById('pm-trja');if(pmJa)pmJa.textContent=fmtSaldo(BAL.TRJA);
   const pmFm=document.getElementById('pm-fmutuo');if(pmFm)pmFm.textContent=fmtSaldo(fondoMutuoDisponible(ACTIVE_ID));
+    const pmFe=document.getElementById('pm-femerg');if(pmFe)pmFe.textContent=fmtSaldo(fondoEmergenciaEnCuenta());
   // BBVA: Disponible con la fórmula unificada (fondeos que salen restan, gastos
   // propios restan). "Pdte." = lo que reserva de BBVA (gastos BBVA + fondeos que
   // salen + retiros) — coincide con bbvaPendienteList, que ya suma justo eso.
@@ -741,6 +747,9 @@ function updTile(){
   const bd=document.getElementById('bbva-disponible');if(bd){bd.textContent=fmtSaldo(bDisp);bd.style.color=colorSaldo(bDisp,'var(--rd)','var(--tl)');}
   const bp=document.getElementById('bbva-pendiente');if(bp)bp.textContent=fmtSaldo(bbvaPend);
   const bfm=document.getElementById('bbva-tile-fmutuo');if(bfm)bfm.textContent=fmtSaldo(fondoMutuoDisponible(ACTIVE_ID));
+  const bfe=document.getElementById('bbva-tile-femerg');if(bfe)bfe.textContent=fmtSaldo(fondoEmergenciaEnCuenta());
+  const bfeN=document.getElementById('bbva-tile-femerg-note');if(bfeN)bfeN.textContent=fondoEmergenciaEnCuenta()>0?'Reservado en BBVA':'Sin iniciar';
+  const bfmN=document.getElementById('bbva-tile-fmutuo-note');if(bfmN){const fmPend=fondoMutuoPendientes(ACTIVE_ID).reduce((s,x)=>s+x.a,0);bfmN.textContent=fmPend>0?fmtSaldo(fmPend)+' pdte.':'';}
   const ib=document.getElementById('d-ibkr');if(ib)ib.textContent=SALDOS_OCULTOS?'\u2022\u2022\u2022\u2022':'$'+fmtE(BAL.IBKR).slice(1);
   const pmIb=document.getElementById('pm-ibkr');if(pmIb)pmIb.textContent=SALDOS_OCULTOS?'\u2022\u2022\u2022\u2022':'$'+fmtE(BAL.IBKR).slice(1);
   renderCatDonut();
@@ -1369,6 +1378,42 @@ function renderFondoMutuoMassiel(){
   document.getElementById('fmov-c').innerHTML=html;
 }
 function showFondoMutuoMassiel(){renderFondoMutuoMassiel();document.getElementById('fmov').style.display='block';}
+// v94 -- Detalle del Fondo Emergencia (reusa el mismo shell #fmov/#fmov-c que
+// Fondo Mutuo). A diferencia de Fondo Mutuo, es CUMULATIVO (no hay concepto
+// de "mes activo" para su saldo -- ver fondoEmergenciaEnCuenta) y no tiene
+// pendientes programados: todo gasto contra el fondo es ad-hoc, registrado con
+// categoria 'Fondo Emergencia' desde "Registrar movimiento" (ya disponible en
+// CATS desde v92) -- por eso el desglose es mas simple: aportado acumulado,
+// consumido acumulado, disponible. Permiso de Massiel: visible, solo lectura
+// (igual que Fondo Mutuo, confirmado por Jofre 5-sep-2026).
+function renderFondoEmergenciaDetail(){
+  const massielView=massielViewActive();
+  const saldo=fondoEmergenciaEnCuenta();
+  const aportado=fondoEmergenciaAportadoTotal();
+  const consumido=fondoEmergenciaConsumidoTotal();
+  let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#30D15822;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-shield-check" style="font-size:17px;color:#30D158"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Emergencia</div><div style="font-size:11px;color:var(--t2)">${massielView?'Fondo de reserva · solo lectura':'Fondo de reserva · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
+  html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#30D158">${fmtE(saldo)}</div></div>`;
+  html+=`<div style="padding:0 16px 14px;display:flex;gap:10px"><div style="flex:1;background:var(--s1);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">APORTADO</div><div style="font-size:14px;font-weight:700;color:var(--t1)">${fmtE(aportado)}</div></div><div style="flex:1;background:var(--s1);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">CONSUMIDO</div><div style="font-size:14px;font-weight:700;color:var(--rd)">${fmtE(consumido)}</div></div></div>`;
+  html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS</div>`;
+  const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${aStr}</div></div>`;
+  let rows='';
+  const idx=MONTH_ORDER.indexOf(ACTIVE_ID);
+  MONTH_ORDER.forEach((mid,i)=>{
+    if(i>idx)return;
+    const ent=fondoEmergenciaEntradas(mid).reduce((s,x)=>s+x.a,0);
+    if(ent>0)rows+=rowHTML(MONTHS[mid]?MONTHS[mid].name.slice(0,3):mid,'Aporte mensual Fondo Emergencia','+'+fmtE(ent),true);
+  });
+  (MOVS.BBVA||[]).slice().reverse().forEach(mv=>{
+    if(mv.t)return;
+    if(mv.cat!=='Fondo Emergencia')return;
+    rows+=rowHTML(mv.dt,mv.l,mv.a,false);
+  });
+  html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos todavia</div>';
+  html+='</div>';
+  if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA')">+ Registrar movimiento</button></div>`;
+  document.getElementById('fmov-c').innerHTML=html;
+}
+function showFondoEmergenciaDetail(){renderFondoEmergenciaDetail();document.getElementById('fmov').style.display='block';}
 function gT(id){['i','p','h','m'].forEach(p=>{document.getElementById('p-'+p).classList.remove('on');document.getElementById('nb-'+p).classList.remove('on');});document.getElementById('p-'+id).classList.add('on');document.getElementById('nb-'+id).classList.add('on');document.getElementById('p-'+id).scrollTop=0;document.getElementById('fov').style.display='none';document.getElementById('maov').style.display='none';document.getElementById('aov').style.display='none';document.getElementById('fxov').style.display='none';
   // Al ENTRAR al home de Massiel, recalcular todo su resumen EN VIVO contra el
   // estado actual (repartoMes/BAL), para que al moverse entre sesiones (Jofre
