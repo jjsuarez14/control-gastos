@@ -2273,7 +2273,7 @@ function showFx(id,label){
   const key=keyMap[id];if(!key)return;
   currentFxKey=key;currentFxId=id;currentFxLabel=label;currentFxGroup=null;
   const items=itemsForKey(key,currentMonth);
-  const totalRow=(key==='ahorro')?(()=>{const tot=items.reduce((s,x)=>s+x.a,0);return `<div class="fxr" style="background:var(--s2)"><div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--t1)">Total Ahorro</div><div style="font-size:10px;color:var(--t3);margin-top:2px">Editar recalcula el split 400 Caixa · 50/25/25 del resto</div></div><div style="font-size:15px;font-weight:800;color:var(--t1);min-width:60px;text-align:right">${fmtE(tot)}</div><button onclick="openEdit('${id}','${label}',${tot})" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:8px"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button></div>`;})():'';
+  const totalRow=(key==='ahorro')?(()=>{const tot=items.reduce((s,x)=>s+x.a,0);return `<div class="fxr" style="background:var(--s2)"><div style="flex:1"><div style="font-size:12px;font-weight:700;color:var(--t1)">Total Ahorro</div><div style="font-size:10px;color:var(--t3);margin-top:2px">Editar recalcula el reparto 40/20/20/20 (100% Fondo Mutuo en octubre)</div></div><div style="font-size:15px;font-weight:800;color:var(--t1);min-width:60px;text-align:right">${fmtE(tot)}</div><button onclick="openEdit('${id}','${label}',${tot})" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:8px"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button></div>`;})():'';
   let rows;
   if(key==='personales'){
     const groups={jofre:[],massiel:[],compartida:[]};
@@ -2468,8 +2468,9 @@ function saveEdit(){
     let found=false;
     // Ahorro: si se edita un ÍTEM individual (id 'aho-...'), se edita solo ese
     // ítem vía applyItemEdit (snapshot override), respetando la edición puntual
-    // — el usuario puede fijar Renting/F.Emergencia/F.Mutuo/IBKR a mano sin que
-    // el split 400+50/25/25 los recalcule. Ese split solo se aplica cuando se
+    // — el usuario puede fijar F.Emergencia/F.Mutuo/Vacaciones/IBKR a mano sin
+    // que el reparto 40/20/20/20 (100% Fondo Mutuo en octubre, ver
+    // ahorroSplit/v97) los recalcule. Ese reparto solo se aplica cuando se
     // edita el TOTAL del ahorro (editingId===currentFxId), que es el disparador
     // del cálculo inicial. (v26: antes cualquier edición regeneraba todo el
     // split e impedía ajustar un fondo por separado.)
