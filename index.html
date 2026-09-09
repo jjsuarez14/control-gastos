@@ -1477,13 +1477,14 @@ function ensureBridgeTask(id){
     list.push({id:'nom-next-'+id,l:'Registrar nómina de '+(meta?meta.name:nid),acc:'BBVA',amt:null,cat:'ingreso',done:false,nextId:nid});
   }
 }
-const RENTING_MENSUAL=375; // pago mensual fijo del renting (REVEL) — revisar si el contrato cambia
+const RENTING_MENSUAL=375; // v99 -- YA NO se usa para la tarea real (ver DET.carromoto/buildMonthPagos); queda SOLO como fallback legacy para jun-sep (nunca migrados)
 // v97 (9-sep-2026) -- Renting sale de Ahorro, pasa a ser su propia línea
-// mensual top-level (categoría Carro/Moto), 400 presupuestado / 375 gasto
-// real (RENTING_MENSUAL arriba), quedan 25 de buffer en Caixa -- mismo
-// mecanismo que ya existía, solo cambia dónde vive la línea (ver
-// ensureMonthDefined y buildMonthPagos). Confirmado por Jofre 5-sep-2026.
-const CARRO_MOTO_PRESUPUESTO=400;
+// mensual top-level (categoría Carro/Moto).
+// v99 (9-sep-2026) -- Carro/Moto pasa a tener drill (2 ítems reales,
+// editables: Renting 375 + Gasolina 25 = 400, ver DET.carromoto/
+// CAT_SUFFIX_KEY). Ya NO hay "buffer" oculto: ambos ítems son gasto real,
+// 50/50, a Caixa. Confirmado por Jofre 9-sep-2026.
+const CARRO_MOTO_PRESUPUESTO=400; // suma de referencia (375+25); el total real siempre se recalcula desde DET.carromoto
 function moneyFromStr(s){return parseFloat(String(s).replace(/[^\d,.-]/g,'').replace(',','.'))||0;}
 function ordenarMovsPorFecha(arr){
   // BUG encontrado (18-jul): el listado de una cuenta tomaba los primeros 8
@@ -1668,21 +1669,28 @@ function buildMonthPagos(id){
     }
   });
   const ahorroItems=itemsForKey('ahorro',id);
-  // v97 -- Renting deja de vivir en Ahorro, ahora es su propia línea
-  // top-level (categoría Carro/Moto, ver ensureMonthDefined/
-  // CARRO_MOTO_PRESUPUESTO) -- confirmado por Jofre 5-sep-2026. El
-  // mecanismo de fondeo no cambia: el presupuesto (400) suma a "Enviar a
-  // Caixa"; el gasto real (RENTING_MENSUAL, 375) es la tarea individual
-  // dentro de Caixa; quedan 25 de buffer, igual que siempre.
+  // v99 (9-sep-2026) -- Carro/Moto pasa de "presupuesto único con buffer
+  // oculto" (400, de los cuales 25 nunca tenían tarea propia) a 2 ítems
+  // reales editables -- Renting + Gasolina, ver DET.carromoto/
+  // CAT_SUFFIX_KEY -- mismo patrón genérico que Servicios/Personales
+  // (handleTaggedItem por ítem). Ambos van 100% a Caixa, 50/50. Ya no
+  // queda ningún euro sin tarea propia. Confirmado por Jofre 9-sep-2026.
   // Fallback a la fuente vieja (ítem de Ahorro) para meses que todavía NO
   // tienen la línea Carro/Moto migrada (jun-sep, reales/ejecutados -- NUNCA
   // se tocan retroactivamente) -- evita que un mes ya cerrado (ej. sep, con
   // "sep-renting" ya done:true en Firestore) se rompa o muestre un
   // placeholder corrupto si por algún motivo no llegó a migrarse.
   const carCat=(MONTHS[id].cats||[]).find(c=>c.l==='Carro/Moto');
-  const rentingLegacy=carCat?null:ahorroItems.find(x=>x.l==='Renting');
-  const rentingAmt=carCat?carCat.a:(rentingLegacy?rentingLegacy.a:0);
-  if(rentingAmt>0&&!removedSet.has(computeTaskId('Renting'))){caixaSum+=rentingAmt;pushDirect('Renting','CAIXA',RENTING_MENSUAL);}
+  if(carCat){
+    itemsForKey('carromoto',id).forEach(x=>{
+      if(!(x.a>0))return;
+      handleTaggedItem(x.l,x.tag||'CB',x.a);
+    });
+  }else{
+    const rentingLegacy=ahorroItems.find(x=>x.l==='Renting');
+    const rentingAmt=rentingLegacy?rentingLegacy.a:0;
+    if(rentingAmt>0&&!removedSet.has(computeTaskId('Renting'))){caixaSum+=rentingAmt;pushDirect('Renting','CAIXA',RENTING_MENSUAL);}
+  }
   // Efectivo dinámico: cada ítem (Barbería/Limpieza) genera N tareas = total/inc en la cuenta EFECTIVO;
   // 'Retirar efectivo' (BBVA) = suma total de todo el efectivo del mes.
   let efectivoSum=0;
@@ -1755,7 +1763,7 @@ function ensureMonthDefined(id){
     {id:id+'-gym',l:'Gimnasios',a:gymLast,rule:'Split',drill:true,confirmed:false},
     {id:id+'-rem',l:'Remesas',a:rem,rule:'Solo Jofre',drill:true,confirmed:true},
     {id:id+'-per',l:'Personales',a:perLast,rule:'Split',drill:true,confirmed:false},
-    {id:id+'-car',l:'Carro/Moto',a:CARRO_MOTO_PRESUPUESTO,rule:'50/50',confirmed:true},
+    {id:id+'-car',l:'Carro/Moto',a:CARRO_MOTO_PRESUPUESTO,rule:'50/50',drill:true,confirmed:true},
     {id:id+'-aho',l:'Ahorro',a:ahoTarget,rule:'50/50',drill:true,confirmed:true}
   ];
   MONTHS[id]={name:meta.name+' '+yr,badge:'Estimado · revisar montos',badgeC:'var(--t3)',badgeBg:'rgba(107,133,168,.14)',jofre:'—',massiel:'—',cuotas:[],partial:true,cats};
@@ -2240,10 +2248,16 @@ const DET={
   gimnasios:[{id:'gym1',l:'On Air Nuevo Centro • Jofre',a:22,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'},{id:'gym2',l:'On Air Nuevo Centro · Massiel',a:22,d:'Solo Massiel',tag:null,group:'massiel'}],
   personales:[{id:'per1',l:'Barbería · Jofre',a:40,d:'Solo Jofre · Efectivo',tag:'EFECTIVO',efInc:10,group:'jofre'},{id:'per2',l:'Uñas · Massiel',a:35,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per3',l:'Bono Transporte · Massiel',a:21,d:'Solo Massiel',tag:null,group:'massiel'},{id:'per5',l:'Peluquería J.A.',a:0,d:'Compartido 50/50 · se agrega cuando aplique',tag:null,group:'compartida'},{id:'per6',l:'GENUA · Fisio',a:50,d:'Solo Jofre · TR Jofre',tag:'TR',group:'jofre'}],
   remesas:[{id:'rem1',l:'Yoffre Suárez',a:125,d:'Solo Jofre'},{id:'rem2',l:'Zoraima Cueva',a:65,d:'Solo Jofre'}],
+  // v99 (9-sep-2026) -- Carro/Moto: 2 ítems reales editables, 50/50, ambos a
+  // Caixa (ver CAT_SUFFIX_KEY.car y buildMonthPagos). Renting 375 (pago fijo
+  // REVEL, ver RENTING_MENSUAL) + Gasolina 25 (antes vivía como buffer
+  // implícito dentro del presupuesto de 400, ahora es su propio ítem con
+  // tarea real). Confirmado por Jofre 9-sep-2026.
+  carromoto:[{id:'car1',l:'Renting',a:375,d:'Caixa · 50/50',tag:'CB'},{id:'car2',l:'Gasolina',a:25,d:'Caixa · 50/50',tag:'CB'}],
   ahorro:[{id:'aho1',l:'Fondo Emergencia (TR J.A.)',a:100,d:'TR J.A.'},{id:'aho2',l:'Inversión Hipoteca (TR)',a:140,d:'Trade Republic'},{id:'aho3',l:'Fondo Mutuo (TR Jofre)',a:160,d:'TR Jofre'},{id:'aho4',l:'Inversión Bolsa (IBKR)',a:0,d:'IBKR'}],
   variables:[{id:'var1',l:'Compartir Fam. / Varios',a:509.80,d:'Detalle completo en Base 06/26',fixed:true}]
 };
-const CAT_SUFFIX_KEY={svc:'servicios',col:'colegio',gym:'gimnasios',per:'personales',rem:'remesas',aho:'ahorro',var:'variables'};
+const CAT_SUFFIX_KEY={svc:'servicios',col:'colegio',gym:'gimnasios',per:'personales',rem:'remesas',aho:'ahorro',var:'variables',car:'carromoto'};
 const keyMap=new Proxy({},{get(_,catId){if(typeof catId!=='string')return undefined;const suf=catId.split('-')[1];return CAT_SUFFIX_KEY[suf];}});
 let currentMonth=null,editingId=null;
 function openMov(id){
@@ -2910,7 +2924,7 @@ const TAREA_CAT_RULES=[
   {re:/On Air|^Sweat|^Odontolog/i,cat:'Salud'},
   {re:/^GENUA|CB Xirivella|^Deporte|^Fisiosalud/i,cat:'Deporte'},
   {re:/^Claude/i,cat:'Trabajo'},
-  {re:/^Renting/i,cat:'Carro/Moto'},
+  {re:/^Renting|^Gasolina/i,cat:'Carro/Moto'},
   {re:/^Vacaciones/i,cat:'Compartir Familiar'},
   {re:/^Hotel|Restante - Hotel/i,cat:'Vacaciones'},
   {re:/^Remesa/i,cat:'Remesas'},
@@ -3074,11 +3088,13 @@ function categoriaFijosDetalle(cat,id){
     const claude=itemsForKey('servicios',id).find(x=>x.id==='svc-claude');
     if(claude)out.push({l:'Claude',a:claude.a,drill:null});
   }else if(cat==='Carro/Moto'){
-    // v97 -- Renting ya no vive en Ahorro, se lee directo de su propia línea
-    // top-level (ver ensureMonthDefined/CARRO_MOTO_PRESUPUESTO). Fallback al
-    // ítem viejo de Ahorro si el mes todavía no tiene la línea migrada.
-    if(cs.car)out.push({l:'Renting',a:cs.car.a,drill:null});
-    else{
+    // v99 (9-sep-2026) -- Carro/Moto ahora son 2 ítems reales (Renting +
+    // Gasolina, ver DET.carromoto), cada uno con su propia línea acá --
+    // mismo patrón que Salud/gimnasios arriba. Fallback al ítem viejo de
+    // Ahorro si el mes todavía no tiene la línea migrada.
+    if(cs.car){
+      itemsForKey('carromoto',id).forEach(x=>{if(x.a>0)out.push({l:x.l,a:x.a,drill:null});});
+    }else{
       const rentingObj=itemsForKey('ahorro',id).find(x=>/Renting/i.test(x.l));
       if(rentingObj)out.push({l:'Renting',a:rentingObj.a,drill:null});
     }
@@ -3658,6 +3674,22 @@ function refreshMonthPagosPreservingState(monthId){
   MONTH_PAGOS[monthId]=freshP;
   if(monthId===ACTIVE_ID)PAGOS=MONTH_PAGOS[monthId];
 }
+// v99 (9-sep-2026) -- BUG REAL (HSN, reportado por Jofre): las cuotas 2/3 y
+// 3/3 de "HSN - Suplementos" no aparecían bajo la categoría Deporte en
+// Historial/Previsión, aunque la cuota 1 (pagada el día de la compra, vía
+// regMov con reg.category) sí. Causa raíz: categoriaFijosDetalle resuelve la
+// categoría de una cuota SOLO por `tags.includes(cat)` (ver más abajo), pero
+// las 3 llamadas a pushCuotaToMonths en saveReg (tarea futura / aplazado /
+// fraccionado) armaban `tags` con SOLO cuenta+responsabilidad, sin la
+// categoría -- cualquier cuota de 2+ pagos, de CUALQUIER categoría, quedaba
+// invisible en el desglose por categoría (aunque sí se pagara y sumara bien
+// al disponible/pendientes). Nike/CB Xirivella no mostraban el bug porque
+// alguna sesión anterior les había parcheado el tag a mano en Firestore --
+// no porque el código ya estuviera bien. Fix real: las 3 llamadas ahora
+// agregan `reg.category` a `tags` (ver saveReg) -- ninguna cuota nueva,
+// de ninguna categoría, va a volver a quedar "en el aire". HSN mismo se
+// corrigió con un parche de datos puntual sobre sus 2 cuotas ya creadas
+// (agregar el tag que les faltaba), documentado en el proyecto.
 function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
   // T6: opts.offset = nº de cuotas ya pagadas hoy (0 o 1). El label de progreso
   // debe reflejar el TOTAL real de cuotas, no solo las adicionales. Bug Nike:
@@ -3772,7 +3804,7 @@ function saveReg(){
       TAREAS_PROGRAMADAS[targetMonth]=TAREAS_PROGRAMADAS[targetMonth]||[];
       TAREAS_PROGRAMADAS[targetMonth].push({id:'prog-'+Date.now(),l:label,a:reg.amount,acc:reg.account,pool:true});
     }else{
-      pushCuotaToMonths(targetMonth,1,reg.amount,label,[cuentaN,reg.tareaRule||'Solo Jofre'],{offset:0});
+      pushCuotaToMonths(targetMonth,1,reg.amount,label,[cuentaN,reg.tareaRule||'Solo Jofre',reg.category],{offset:0});
     }
     // Refrescar el mes elegido si ya está cargado en memoria, para que la
     // tarea aparezca de inmediato -- mismo criterio de reconciliación que
@@ -3794,8 +3826,8 @@ function saveReg(){
     // mesId:ACTIVE_ID, sin preguntar.
     regMov(reg.account,label,reg.amount,false,reg.category,reg.group);
   }
-  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre'],{offset:0,tdcRelease:esCaixaTDC});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
-  else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre'];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
+  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category],{offset:0,tdcRelease:esCaixaTDC});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
+  else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
   // v28 — Al terminar de registrar, devolver al usuario a DONDE ESTABA:
   // · Si vino desde el overlay de una cuenta (aov) — que es como Massiel y Jofre
