@@ -1150,13 +1150,24 @@ function fondoMutuoConsumido(monthId){
 function fondoMutuoMesFinanciado(monthId){
   return MONTH_ORDER.indexOf(monthId)<=MONTH_ORDER.indexOf(ACTIVE_ID);
 }
-// v93 -- FIX (Jofre 5-sep-2026): "el fondo mutuo tambien es acumulativo, solo
-// que mes a mes gastamos todo lo asignado, pero cuando no sea asi, debe
-// acumularse". El calculo anterior de fondoMutuoDisponible/EnCuenta SOLO
-// miraba la asignacion y el consumo del MES ACTIVO, perdiendo cualquier
-// sobrante (o deficit) de meses anteriores en cuanto cambiaba el mes. Ahora es
-// una cuenta corriente real: se acumulan entradas y consumos desde
-// FONDO_MUTUO_INICIO_ACUMULADO hasta el mes consultado, inclusive.
+// v94-fix-fondomutuo -- FIX (Jofre 9-sep-2026): v93 (abajo queda el rastro
+// historico en git) implemento "acumulativo" mal. Jofre aclaro la regla real:
+// "cuando hay deficit o gastos de mas, yo los cubro desde mi cuenta personal,
+// hablaba de acumulativo SOLO cuando queda saldo positivo. Si el fondo se
+// consume por completo, todo el adicional que se gaste en esa categoria, sale
+// de mi cuenta personal BBVA." Osea: el fondo acumula SOLO hacia arriba -- un
+// mes con sobrante pasa ese sobrante al mes siguiente; un mes con deficit NO
+// resta de meses futuros, simplemente el fondo llega a €0 y el excedente lo
+// cubre Jofre aparte (nunca queda "en negativo" arrastrable).
+// v93 sumaba TODAS las entradas y TODO el consumo de todos los meses
+// acumulables y aplicaba Math.max(0,...) una sola vez al final sobre la resta
+// total -- eso deja que el deficit real de un mes (ej. -202.27 en agosto, viaje
+// a Mallorca) le coma saldo a un mes con sobrante (sep), justo lo que Jofre no
+// quiere. La regla correcta aplica el piso en 0 MES A MES, no una sola vez al
+// final:
+//   running = 0
+//   por cada mes desde FONDO_MUTUO_INICIO_ACUMULADO hasta el mes consultado:
+//     running = max(0, running + entradaDelMes - consumidoDelMes)
 // Por que arranca en 'ago' y no desde jun/jul: el fondo vivia en TR Jofre
 // antes de esa fecha (redirigido a BBVA, confirmado por Jofre 22-ago-2026) y
 // su consumo real de esos meses esta en MOVS.TRJ, que fondoMutuoConsumido()
@@ -1170,18 +1181,25 @@ function fondoMutuoMesesAcumulables(monthId){
   if(desde<0||hasta<0||hasta<desde)return [];
   return MONTH_ORDER.slice(desde,hasta+1).filter(mid=>fondoMutuoMesFinanciado(mid));
 }
-function fondoMutuoAsignacionAcumulada(monthId){
-  const total=fondoMutuoMesesAcumulables(monthId).reduce((s,mid)=>s+fondoMutuoEntradas(mid).reduce((s2,x)=>s2+x.a,0),0);
-  return Math.round(total*100)/100;
-}
-function fondoMutuoConsumidoAcumulado(monthId){
-  const total=fondoMutuoMesesAcumulables(monthId).reduce((s,mid)=>s+fondoMutuoConsumido(mid),0);
-  return Math.round(total*100)/100;
+// fondoMutuoAsignacionAcumulada/fondoMutuoConsumidoAcumulado (v93) se
+// eliminan: el bug estaba en sumar TODO antes de aplicar el piso, asi que no
+// se podia arreglar sumando totales distinto -- hacia falta el recorrido mes
+// a mes de abajo. consumidoPorMesFn parametriza que "consumo" restar en cada
+// mes: fondoMutuoDisponible resta TODO el consumo (incluye compromisos
+// pendientes, ej. Hotel de Massiel); fondoMutuoEnCuenta resta solo lo YA
+// ejecutado (ver comentario ahi abajo, misma distincion que ya existia desde
+// v80).
+function fondoMutuoAcumuladoConPiso(monthId,consumidoPorMesFn){
+  let running=0;
+  fondoMutuoMesesAcumulables(monthId).forEach(mid=>{
+    const entrada=fondoMutuoEntradas(mid).reduce((s,x)=>s+x.a,0);
+    running=Math.max(0,Math.round((running+entrada-consumidoPorMesFn(mid))*100)/100);
+  });
+  return running;
 }
 function fondoMutuoDisponible(monthId){
   if(!fondoMutuoMesFinanciado(monthId))return 0;
-  const disp=Math.round((fondoMutuoAsignacionAcumulada(monthId)-fondoMutuoConsumidoAcumulado(monthId))*100)/100;
-  return disp<0?0:disp;
+  return fondoMutuoAcumuladoConPiso(monthId,fondoMutuoConsumido);
 }
 // Saldo REAL del Fondo Mutuo (lo que ve Massiel): aportes acumulados de todos
 // los meses trackeados − consumos reales del fondo (salidas familiares
@@ -1220,7 +1238,7 @@ function fondoMutuoTareaLabels(monthId){
 // v93 -- ahora recorre TODOS los meses acumulables (no solo el mes activo),
 // asi una tarea pendiente que quedo sin pagar en un mes anterior sigue
 // apareciendo aca mientras siga pendiente, consistente con que su monto ya
-// esta descontado del acumulado (ver fondoMutuoConsumidoAcumulado arriba).
+// esta descontado del acumulado (ver fondoMutuoAcumuladoConPiso arriba).
 function fondoMutuoPendientes(monthId){
   if(!fondoMutuoMesFinanciado(monthId))return [];
   const out=[];
@@ -1241,20 +1259,25 @@ function fondoMutuoPendientes(monthId){
 // esta funcion como fuente unica de verdad (antes vivia solo inline en
 // renderFondoMutuoMassiel) para que disponibleCuenta y el modal del Fondo
 // Mutuo SIEMPRE muestren numeros consistentes entre si.
-// v93 -- asignacion y consumidoEjecutado ahora son ACUMULADOS (ver arriba),
-// no solo del mes activo -- si un mes anterior gasto de mas (ej. ago 2026,
-// viaje real a Mallorca), ese deficit resta del disponible de hoy en vez de
-// desaparecer al cambiar de mes.
+// v94-fix-fondomutuo -- igual que fondoMutuoDisponible (ver
+// fondoMutuoAcumuladoConPiso arriba), el recorrido ahora es mes a mes con
+// piso en 0, restando en cada mes SOLO el consumo YA ejecutado de ESE mes
+// (su consumido menos su propio pendiente) -- asi el deficit real de un mes
+// (ago, viaje a Mallorca) no le come saldo fisico a un mes con sobrante
+// (sep), igual que en fondoMutuoDisponible. Antes (v93) restaba pendienteTotal
+// (de TODOS los meses acumulables) del consumidoAcumulado TOTAL en un solo
+// paso -- funcionalmente equivalente al mismo bug de floor-unico-al-final.
+function fondoMutuoPendienteDelMes(monthId){
+  return (MONTH_PAGOS[monthId]||[]).filter(p=>p.cat==='gasto'&&p.vacacion&&p.amt>0&&tareaPendiente(p)).reduce((s,p)=>s+p.amt,0);
+}
 function fondoMutuoEnCuenta(monthId){
   if(!fondoMutuoMesFinanciado(monthId))return 0;
-  const pendienteTotal=fondoMutuoPendientes(monthId).reduce((s,x)=>s+x.a,0);
-  const consumidoEjecutado=fondoMutuoConsumidoAcumulado(monthId)-pendienteTotal;
-  return Math.max(0,Math.round((fondoMutuoAsignacionAcumulada(monthId)-consumidoEjecutado)*100)/100);
+  return fondoMutuoAcumuladoConPiso(monthId,mid=>fondoMutuoConsumido(mid)-fondoMutuoPendienteDelMes(mid));
 }
 // ── FONDO EMERGENCIA (v92) ────────────────────────────────────────────────
-// Igual que el Fondo Mutuo (v93: también es ACUMULATIVO -- ver
-// fondoMutuoAsignacionAcumulada/fondoMutuoConsumidoAcumulado arriba, fix del
-// 5-sep-2026), el Fondo Emergencia se arma mes a mes con su parte del reparto
+// Igual que el Fondo Mutuo (también es ACUMULATIVO -- ver
+// fondoMutuoAcumuladoConPiso arriba, fix del 9-sep-2026), el Fondo Emergencia
+// se arma mes a mes con su parte del reparto
 // de Ahorro y solo baja cuando se registra un gasto real contra él -- lo
 // aportado nunca se "resetea" al pasar de mes. Vive en BBVA (reservado dentro
 // de su saldo, mismo patrón que fondoMutuoEnCuenta/fmReservado en
