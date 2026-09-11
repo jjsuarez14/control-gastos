@@ -787,7 +787,7 @@ function regMov(acc,label,amt,plus,cat,group,mesIdOverride){
   // (ACTIVE_ID), no a qué mes calendario real fue registrado. Necesario
   // porque se suele trabajar "adelantado" (ej. mes activo=septiembre
   // mientras la fecha real todavía es agosto) -- ver fix en movBelongsToMonth.
-  const __rec={dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID};if(__movDateOverride){const __key=s=>{const q=s.split('/');return(+q[1])*31+(+q[0])};const __nk=__key(ds);let __i=MOVS[acc].findIndex(mv=>__key(mv.dt)<=__nk);if(__i===-1)__i=MOVS[acc].length;MOVS[acc].splice(__i,0,__rec)}else{MOVS[acc].unshift(__rec)}
+  const __rec={dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID};MOVS[acc].unshift(__rec);
   updTile();
 }
 function regCaixaCard(label,amt){
