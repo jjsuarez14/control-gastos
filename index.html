@@ -47,6 +47,8 @@ html,body{height:100%;background:var(--bg)}
 .ovbot{position:absolute;top:0;left:0;right:0;bottom:0;padding-top:env(safe-area-inset-top,0px);background:rgba(0,0,0,1);border-radius:28px 28px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:31;display:none;flex-direction:column;overflow-y:auto;box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
 #capsheet-bd{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:60;display:none}
 #capsheet-card{position:fixed;left:0;right:0;bottom:0;max-height:64vh;background:#1A2026;border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:61;display:none;flex-direction:column;padding:14px 18px calc(18px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
+#regstep-bd{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:60;display:none}
+#regstep-card{position:fixed;left:0;right:0;bottom:0;max-height:64vh;background:#1A2026;border-radius:24px 24px 0 0;border:1px solid var(--bd);border-bottom:none;z-index:61;display:none;flex-direction:column;padding:14px 18px calc(18px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 32px -10px rgba(0,0,0,.6)}
 .btng{background:var(--cta-bg);color:var(--cta-text);border:none;border-radius:9999px;padding:13px;min-height:50px;font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:var(--sh-glow);transition:transform .1s,opacity .1s}
 .btng:active{transform:scale(.97);opacity:.6}
 .tbx{flex:1;padding:8px 4px;border-radius:9999px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;border:1px solid var(--bd);color:var(--t3);transition:all .15s}
@@ -225,6 +227,8 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <div style="padding:14px 18px 22px;display:flex;gap:8px" id="reg-nav"></div>
   <div id="capsheet-bd" onclick="toggleCapGrid()"></div>
   <div id="capsheet-card"></div>
+  <div id="regstep-bd" onclick="regBack()"></div>
+  <div id="regstep-card"></div>
 </div>
 <div class="pg on" id="p-i">
   <div style="padding:12px 18px 0;display:flex;justify-content:space-between;align-items:center">
@@ -2624,7 +2628,7 @@ function histCardHTML(id,label,accent){
 let histSelIdx=null,histData=[];
 function histMoneySplit(n){
   const s=fmtE(n);const parts=s.split(',');
-  return `€${parts[0]}<span style="font-size:16px;font-weight:600;color:var(--t2)">,${parts[1]}</span>`;
+  return `${parts[0]}<span style="font-size:16px;font-weight:600;color:var(--t2)">,${parts[1]}</span>`;
 }
 function histBreakdownHTML(){
   if(!histData.length)return '';
@@ -3426,7 +3430,7 @@ function categoriasVisibles(){
 }
 function catMoneySplit(n,decSize,decColor){
   const s=fmtE(n);const parts=s.split(',');
-  return `€${parts[0]}<span style="font-size:${decSize||16}px;font-weight:600;color:${decColor||'var(--t2)'}">,${parts[1]}</span>`;
+  return `${parts[0]}<span style="font-size:${decSize||16}px;font-weight:600;color:${decColor||'var(--t2)'}">,${parts[1]}</span>`;
 }
 function categoriaNivel1HTML(id){
   const totals=categoriasVisibles().map(c=>({c,total:categoriaGroupTotal(c,id)})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
@@ -3847,7 +3851,18 @@ function renderReg(){
   // en adelante, que es lo unico que tiene sentido conceptualmente.
   else if(reg.step==='mesInicio'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const aiSkip=(ai<0?0:ai)+(reg.amount>0?1:0);const meses=MONTH_ORDER.filter((k,i)=>i>=aiSkip);h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿EN QUÉ MES INICIAN LAS CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('mesInicio','${m}','mesInicio')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else{h='<div style="flex:1;display:flex;flex-direction:column;justify-content:center">'+renderRegSummary()+'</div>';nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="saveReg()">Guardar movimiento</button>`;}
-  body.innerHTML=h;
+  const _bsCard=document.getElementById('regstep-card'),_bsBd=document.getElementById('regstep-bd');
+  if(reg.step==='cuotas'||reg.step==='confirm'){
+    body.innerHTML='';
+    _bsCard.innerHTML=`<div style="overflow-y:auto">${h}</div><div style="display:flex;gap:8px;margin-top:14px;flex:0 0 auto">${nav.innerHTML}</div>`;
+    nav.innerHTML='';
+    _bsCard.style.display='flex';
+    _bsBd.style.display='block';
+  }else{
+    if(_bsCard)_bsCard.style.display='none';
+    if(_bsBd)_bsBd.style.display='none';
+    body.innerHTML=h;
+  }
 }
 function regDateISO(d){d=d||reg.customDate||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}function pickRegDate(val){if(!val)return;const p=val.split('-');reg.customDate=new Date(+p[0],+p[1]-1,+p[2]);renderReg()}function saveReg(){__movDateOverride=reg.customDate||null;
   const label=reg.desc||reg.category;
