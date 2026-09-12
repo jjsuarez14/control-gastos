@@ -275,6 +275,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 <div class="pg" id="p-h">
   <div style="padding:20px 18px 0"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.1em;margin-bottom:3px">ARCHIVO</div><div style="font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-.02em">Historial</div></div>
+  <div id="hist-stats"></div>
   <div style="padding:10px 18px 0" id="hist-body"></div>
 </div>
 <div class="pg pgm" id="p-m">
@@ -2620,8 +2621,44 @@ function histCardHTML(id,label,accent){
 // v24 la función se había perdido y #hist-body quedaba vacío, además de que las
 // 3 llamadas a renderHist() en boot/advanceMonth tiraban ReferenceError y
 // abortaban el resto del render.
+let histSelIdx=null,histData=[];
+function histMoneySplit(n){
+  const s=fmtE(n);const parts=s.split(',');
+  return `€${parts[0]}<span style="font-size:16px;font-weight:600;color:var(--t2)">,${parts[1]}</span>`;
+}
+function histBreakdownHTML(){
+  if(!histData.length)return '';
+  const x=histData[histSelIdx];if(!x)return '';
+  const fijoPct=x.total?Math.round((x.fijo/x.total)*100):0;
+  const varPct=100-fijoPct;
+  return `<div style="flex:1;background:rgba(255,255,255,.05);border-radius:16px;padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--t2);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--gd)"></span>Fijos · ${x.name}</div><div style="font-family:var(--fd);font-size:18px;font-weight:800;color:var(--t1)">${fmtE(x.fijo)}</div><div style="font-size:11px;color:var(--t2);margin-top:2px">${fijoPct}% del mes</div></div><div style="flex:1;background:rgba(255,255,255,.05);border-radius:16px;padding:12px 14px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--t2);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--pu)"></span>Variable · ${x.name}</div><div style="font-family:var(--fd);font-size:18px;font-weight:800;color:var(--t1)">${fmtE(x.variable)}</div><div style="font-size:11px;color:var(--t2);margin-top:2px">${varPct}% del mes</div></div>`;
+}
+function histSelectMonth(i){histSelIdx=i;const bd=document.getElementById('hist-breakdown');if(bd)bd.innerHTML=histBreakdownHTML();const bars=document.getElementById('hist-bars');if(bars)bars.innerHTML=histBarsHTML();}
+function histBarsHTML(){
+  const max=Math.max(...histData.map(x=>x.total),1);
+  return histData.map((x,i)=>{
+    const h=Math.round((x.total/max)*120)+14;
+    const fijoPct=x.total?Math.max(0,Math.min(100,Math.round((x.fijo/x.total)*100))):0;
+    const varH=Math.round(h*(100-fijoPct)/100),fijoH=h-varH;
+    const sel=i===histSelIdx;
+    return `<div onclick="histSelectMonth(${i})" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer"><div style="font-family:var(--fd);font-size:10px;font-weight:700;color:${sel?'var(--t1)':'var(--t2)'}">${Math.round(x.total)}</div><div style="width:100%;max-width:56px;display:flex;flex-direction:column;justify-content:flex-end;height:134px"><div style="width:100%;height:${varH}px;border-radius:${varH?'8px 8px 0 0':'0'};background:${sel?'var(--pu)':'rgba(191,90,242,.3)'}"></div><div style="width:100%;height:${fijoH}px;border-radius:${varH?'0 0 4px 4px':'8px'};background:${sel?'var(--accent-teal-gradient)':'rgba(45,212,167,.3)'}"></div></div><div style="font-size:10.5px;font-weight:600;color:${sel?'var(--tl)':'var(--t3)'}">${x.name.split(' ')[0].slice(0,3)}</div></div>`;
+  }).join('');
+}
+function histAvgStatsHTML(meses){
+  histData=meses.map(id=>{
+    const total=mesGastoTotalReal(id);
+    const variable=Math.round(variablesNoCuotaTotal(id)*100)/100;
+    const fijo=Math.max(0,Math.round((total-variable)*100)/100);
+    return {id,name:MONTHS[id]?MONTHS[id].name:id,total,fijo,variable};
+  });
+  if(histSelIdx===null||histSelIdx>=histData.length)histSelIdx=histData.length-1;
+  const avg=histData.reduce((s,x)=>s+x.total,0)/histData.length;
+  const rango=histData.length>1?(histData[0].name.split(' ')[0]+'–'+histData[histData.length-1].name):histData[0].name;
+  return `<div style="padding:18px 18px 4px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Promedio mensual</div><div style="font-family:var(--fd);font-size:32px;font-weight:800;color:var(--t1);letter-spacing:-.01em;line-height:1;margin-top:4px">${histMoneySplit(avg)}</div><div style="font-size:11px;color:var(--t3);margin-top:6px">Promedio de ${histData.length} ${histData.length===1?'mes cerrado':'meses cerrados'} · ${rango}</div></div><div id="hist-bars" style="padding:18px 12px 4px;display:flex;align-items:flex-end;gap:12px">${histBarsHTML()}</div><div id="hist-breakdown" style="padding:14px 18px 0;display:flex;gap:10px">${histBreakdownHTML()}</div><div style="margin:8px 18px 0;font-size:10.5px;color:var(--t3);display:flex;gap:6px;align-items:flex-start"><i class="ti ti-hand-click" style="font-size:13px;margin-top:1px"></i> Tocá una barra para ver el desglose fijo/variable de ese mes.</div><div style="padding:16px 18px 4px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--t2);text-transform:uppercase">Meses cerrados</div>`;
+}
 function renderHist(){
   const el=document.getElementById('hist-body');if(!el)return;
+  const statsEl=document.getElementById('hist-stats');
   const ai=MONTH_ORDER.indexOf(ACTIVE_ID);
   // v49 — Historial = SOLO meses cerrados (pasados). El mes ACTUAL (activo) ya
   // no duplica acá: su detalle real en vivo vive en el tile "Categorías" del
@@ -2629,6 +2666,7 @@ function renderHist(){
   // actualizado en tiempo real. Antes esto repetía Previsión sin aportar nada
   // nuevo -- ver auditoría CDG(9).
   const meses=ai>=0?MONTH_ORDER.slice(0,ai):[];
+  if(statsEl)statsEl.innerHTML=meses.length?histAvgStatsHTML(meses):'';
   if(!meses.length){el.innerHTML='<div style="padding:24px 4px;text-align:center;color:var(--t3);font-size:12px">Aún no hay meses en el historial. Se irá llenando al registrar cada nómina.</div>';return;}
   const accents=['var(--tl)','var(--gd)','var(--or)','var(--pu)','var(--bl)','var(--pk)'];
   // Orden: más reciente arriba -> el activo primero, luego los cerrados.
@@ -3386,15 +3424,52 @@ function categoriasVisibles(){
   // categoriaGroupTotal) es >0 para ella ese mes, automático, sin preguntar.
   return maovEsVistaMassiel?CATS.filter(c=>CATS_MASSIEL_VISIBLE.includes(c)||MIXED_OWNERSHIP_CATS.includes(c)):CATS;
 }
+function catMoneySplit(n,decSize,decColor){
+  const s=fmtE(n);const parts=s.split(',');
+  return `€${parts[0]}<span style="font-size:${decSize||16}px;font-weight:600;color:${decColor||'var(--t2)'}">,${parts[1]}</span>`;
+}
 function categoriaNivel1HTML(id){
   const totals=categoriasVisibles().map(c=>({c,total:categoriaGroupTotal(c,id)})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
-  if(!totals.length)return '<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">Sin gasto registrado este mes</div>';
-  const max=Math.max(...totals.map(x=>x.total));
-  return totals.map(x=>{
-    const pct=Math.max(6,Math.round((x.total/max)*100));
-    const color=CATS_COLORS[x.c]||'#6B85A8';
-    return `<div onclick="showCategoriaNivel2('${id}','${x.c.replace(/'/g,"\\'")}')" style="margin-bottom:18px;cursor:pointer"><div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="font-size:13px;color:#fff;font-weight:600">${x.c}</span><span style="font-size:14px;font-weight:700;color:#fff">${fmtE(x.total)}</span></div><div class="btr" style="background:rgba(255,255,255,.08);height:6px;border-radius:3px"><div class="bfl" style="width:${pct}%;background:${color};border-radius:3px"></div></div></div>`;
+  const totalMes=totals.reduce((s,x)=>s+x.total,0);
+  const presupuesto=totalGastoMes(id);
+  const pct=presupuesto>0?Math.min(100,Math.round((totalMes/presupuesto)*100)):(totalMes>0?100:0);
+  const r=104,circ=2*Math.PI*r,len=(pct/100)*circ;
+  const ai=MONTH_ORDER.indexOf(id);
+  const prevId=ai>0?MONTH_ORDER[ai-1]:null;
+  let trendHTML='';
+  if(prevId){
+    const prevTotal=categoriasVisibles().reduce((s,c)=>s+categoriaGroupTotal(c,prevId),0);
+    if(prevTotal>0){
+      const diffPct=Math.round(((totalMes-prevTotal)/prevTotal)*100);
+      if(diffPct!==0){
+        const down=diffPct<0;
+        trendHTML=`<div style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:9999px;margin-top:8px;background:${down?'rgba(52,211,153,.14)':'rgba(251,113,133,.14)'};color:${down?'var(--gn)':'var(--rd)'}"><i class="ti ti-arrow-${down?'down':'up'}" style="font-size:11px"></i> ${Math.abs(diffPct)}% vs. ${MONTHS[prevId]?MONTHS[prevId].name.split(' ')[0]:''}</div>`;
+      }
+    }
+  }
+  const ringHTML=`<div style="display:flex;flex-direction:column;align-items:center;padding:4px 0 6px">
+    <div style="position:relative;width:${2*r+16}px;height:${2*r+16}px">
+      <svg width="${2*r+16}" height="${2*r+16}" viewBox="0 0 ${2*r+16} ${2*r+16}">
+        <circle cx="${r+8}" cy="${r+8}" r="${r}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="14"/>
+        <circle cx="${r+8}" cy="${r+8}" r="${r}" fill="none" stroke="url(#catRingGrad)" stroke-width="14" stroke-dasharray="${len.toFixed(1)} ${(circ-len).toFixed(1)}" transform="rotate(-90 ${r+8} ${r+8})"/>
+        <defs><linearGradient id="catRingGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#34E4B8"/><stop offset="100%" stop-color="#0D9488"/></linearGradient></defs>
+      </svg>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--t2);text-transform:uppercase;margin-bottom:6px">${esMesFuturo(id)?'ESTIMADO ESTE MES':'GASTADO ESTE MES'}</div>
+        <div style="font-family:var(--fd);font-size:30px;font-weight:800;color:var(--t1);letter-spacing:-.01em;line-height:1">${catMoneySplit(totalMes,15,'var(--t2)')}</div>
+        ${trendHTML}
+      </div>
+    </div>
+  </div>`;
+  if(!totals.length)return ringHTML+'<div style="text-align:center;padding:20px;color:rgba(255,255,255,.3);font-size:12px">Sin gasto registrado este mes</div>';
+  const gridCards=totals.map(x=>{
+    const pct2=totalMes?Math.round((x.total/totalMes)*100):0;
+    const color=CAT_DONUT_PALETTE[x.c]||CATS_COLORS[x.c]||'#9CA3AF';
+    const emoji=CATS_EMOJI[x.c]||'•';
+    const rM=18,circM=2*Math.PI*rM,lenM=(pct2/100)*circM;
+    return `<div onclick="showCategoriaNivel2('${id}','${x.c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer"><div style="width:40px;height:40px;position:relative;display:flex;align-items:center;justify-content:center"><svg width="40" height="40" viewBox="0 0 40 40" style="position:absolute;inset:0"><circle cx="20" cy="20" r="${rM}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="20" cy="20" r="${rM}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${lenM.toFixed(1)} ${(circM-lenM).toFixed(1)}" transform="rotate(-90 20 20)"/></svg><span style="font-size:14px;position:relative">${emoji}</span></div><div style="font-size:9.5px;font-weight:700;color:#fff;text-align:center;line-height:1.15">${x.c}</div><div style="font-family:var(--fd);font-size:10.5px;font-weight:800;color:${color}">${fmtE(x.total)}</div></div>`;
   }).join('');
+  return ringHTML+`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px">${gridCards}</div>`;
 }
 function categoriaNivel2Rows(cat,id){
   if(esMesFuturo(id)){
