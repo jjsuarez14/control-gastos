@@ -694,11 +694,18 @@ function toggleSaldosOcultos(){
   if(typeof renderPrevision==='function')renderPrevision();
   if(typeof renderHist==='function')renderHist();
   if(typeof currentOverlayAcc!=='undefined'&&currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
+  if(typeof renderMaTile==='function')renderMaTile();
+  if(typeof renderAhorroTileMassiel==='function')renderAhorroTileMassiel();
   const maovEl=document.getElementById('maov');
   if(maovEl&&maovEl.style.display==='block'){
     if(maovMode==='monthDetail'&&maovCurrentMonthId)showMaMonthDetail(maovCurrentMonthId,maovBackTo);
     else if(maovMode==='tasks')renderMaTasksInto();
     else if(maovMode==='forecast')showMaForecast();
+  }
+  const fmovEl=document.getElementById('fmov');
+  if(fmovEl&&fmovEl.style.display==='block'){
+    if(fmovLastFn==='mutuo')renderFondoMutuoMassiel();
+    else if(fmovLastFn==='emergencia')renderFondoEmergenciaDetail();
   }
 }
 function updEyeIcons(){
@@ -977,7 +984,7 @@ function pendTareasRowsHTML(pend,monthId){
   pend.forEach(p=>{
     const canDel=p.cat==='gasto'&&!p.sistema;
     const delIcon=canDel?`<i class="ti ti-trash" onclick="event.stopPropagation();deleteTareaPendiente('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt},'${monthId}')" style="font-size:13px;color:var(--rd);padding:4px 2px 4px 6px;cursor:pointer"></i>`:'';
-    html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i>${delIcon}</div>`;
+    html+=`<div onclick="markPago('${p.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd);cursor:pointer"><div style="width:22px;height:22px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;color:var(--t1)">${p.l}</div></div><div style="font-size:13px;font-weight:700;color:var(--or)">−${SALDOS_OCULTOS?'••••':fmtE(p.amt)}</div><i class="ti ti-pencil" onclick="event.stopPropagation();openEdit('${p.id}','${p.l.replace(/'/g,"\\'")}',${p.amt})" style="font-size:13px;color:var(--t3);padding:4px 2px 4px 8px;cursor:pointer"></i>${delIcon}</div>`;
   });
   html+='</div>';
   return html;
@@ -1051,6 +1058,7 @@ function ahorroBreakdown(id){
   });
 }
 let ahorroTileSelected=null;
+let fmovLastFn=null;
 function selectAhorroMes(id){ahorroTileSelected=id;renderAhorroTileMassiel();}
 function renderAhorroDetailInto(id){
   const el=document.getElementById('pm-ahorro-detail');if(!el)return;
@@ -1067,7 +1075,7 @@ function renderAhorroDetailInto(id){
       return{l:x.l,a:x.a,color:dest?dest.color:'#6B85A8',especial:x.tipo==='especial'};
     });
   }
-  el.innerHTML=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #F1F5F9"><div style="font-size:9px;color:#94A3B8;font-weight:700;margin-bottom:6px">${nombreMesAhorro(id).toUpperCase()}</div>${rows.length?rows.map(x=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0"><div style="width:7px;height:7px;border-radius:2px;background:${x.especial?COLOR_ESPECIAL:x.color};flex-shrink:0;${x.especial?'box-shadow:0 0 0 2px rgba(255,214,10,.25)':''}"></div><div style="flex:1;font-size:11px;color:#475569">${x.l}${x.especial?' <span style="color:#B8860B;font-weight:700">· especial</span>':''}</div><div style="font-size:11px;font-weight:700;color:#0F172A">${fmtE(x.a)}</div></div>`).join(''):'<div style="font-size:10px;color:#94A3B8;text-align:center;padding:8px 0">Sin datos este mes</div>'}</div>`;
+  el.innerHTML=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #F1F5F9"><div style="font-size:9px;color:#94A3B8;font-weight:700;margin-bottom:6px">${nombreMesAhorro(id).toUpperCase()}</div>${rows.length?rows.map(x=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0"><div style="width:7px;height:7px;border-radius:2px;background:${x.especial?COLOR_ESPECIAL:x.color};flex-shrink:0;${x.especial?'box-shadow:0 0 0 2px rgba(255,214,10,.25)':''}"></div><div style="flex:1;font-size:11px;color:#475569">${x.l}${x.especial?' <span style="color:#B8860B;font-weight:700">· especial</span>':''}</div><div style="font-size:11px;font-weight:700;color:#0F172A">${SALDOS_OCULTOS?'••••':fmtE(x.a)}</div></div>`).join(''):'<div style="font-size:10px;color:#94A3B8;text-align:center;padding:8px 0">Sin datos este mes</div>'}</div>`;
 }
 function renderAhorroTileMassiel(){
   const wrap=document.getElementById('pm-ahorro-bars');if(!wrap)return;
@@ -1371,7 +1379,7 @@ function renderFondoMutuoMassiel(){
   // no hay nada pendiente los 3 numeros coinciden, así que se sigue mostrando
   // el numero simple de siempre (son el mismo dato, sin desglosar).
   if(pendienteTotal>0){
-    html+=`<div style="padding:14px 16px 8px"><div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.06em">EN LA CUENTA</div><div style="font-size:15px;font-weight:700;color:var(--t1)">${fmtE(montoEnCuenta)}</div></div><div style="background:rgba(48,209,88,.08);border:1px solid rgba(48,209,88,.2);border-radius:10px;padding:9px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--tl);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:22px;font-weight:800;color:var(--tl)">${fmtE(saldo)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. DE COBRO</div><div style="font-size:15px;font-weight:700;color:#BF5AF2">${fmtE(pendienteTotal)}</div></div></div></div></div>`;
+    html+=`<div style="padding:14px 16px 8px"><div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.06em">EN LA CUENTA</div><div style="font-size:15px;font-weight:700;color:var(--t1)">${SALDOS_OCULTOS?'••••':fmtE(montoEnCuenta)}</div></div><div style="background:rgba(48,209,88,.08);border:1px solid rgba(48,209,88,.2);border-radius:10px;padding:9px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--tl);font-weight:700;letter-spacing:.06em;margin-bottom:3px">DISPONIBLE REAL</div><div style="font-size:22px;font-weight:800;color:var(--tl)">${SALDOS_OCULTOS?'••••':fmtE(saldo)}</div></div><div style="text-align:right"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">PDTE. DE COBRO</div><div style="font-size:15px;font-weight:700;color:#BF5AF2">${SALDOS_OCULTOS?'••••':fmtE(pendienteTotal)}</div></div></div></div></div>`;
     html+=`<div style="padding:4px 16px 12px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">PENDIENTES DEL FONDO</div>`;
     pendientes.forEach(p=>{
       // v78 -- Jofre: las tareas pendientes del fondo las puede VER Massiel,
@@ -1379,17 +1387,17 @@ function renderFondoMutuoMassiel(){
       // permisos que ya usa el boton "+ Registrar movimiento" de esta vista).
       const clickAttr=massielView?'':`onclick="markPago('${p.id}')" `;
       const cursor=massielView?'default':'pointer';
-      html+=`<div ${clickAttr}style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd);cursor:${cursor}"><div style="width:20px;height:20px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1;font-size:12px;color:var(--t1)">${p.l}</div><div style="font-size:13px;font-weight:700;color:#BF5AF2">-${fmtE(p.a)}</div></div>`;
+      html+=`<div ${clickAttr}style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd);cursor:${cursor}"><div style="width:20px;height:20px;border-radius:6px;border:2px solid var(--bd2);flex-shrink:0"></div><div style="flex:1;font-size:12px;color:var(--t1)">${p.l}</div><div style="font-size:13px;font-weight:700;color:#BF5AF2">-${SALDOS_OCULTOS?'••••':fmtE(p.a)}</div></div>`;
     });
     html+='</div>';
   }else{
-    html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#BF5AF2">${fmtE(saldo)}</div></div>`;
+    html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#BF5AF2">${SALDOS_OCULTOS?'••••':fmtE(saldo)}</div></div>`;
   }
   const desdeJul=MONTH_ORDER.indexOf(id)>=MONTH_ORDER.indexOf('jul');
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DE ${m.name.toUpperCase()}</div>`;
   if(!desdeJul){html+=`<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin trazabilidad para este mes</div></div>`;document.getElementById('fmov-c').innerHTML=html;return;}
   const envioDone=fondoMutuoMesFinanciado(id); // v67 -- ver fondoMutuoDisponible
-  const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${aStr}</div></div>`;
+  const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${SALDOS_OCULTOS?'••••':aStr}</div></div>`;
   let rows='';
   // Aporte mensual: solo aparece cuando "Enviar a TR Jofre" ya está done
   // (antes de eso el fondo disponible es 0). Monto = asignación del mes.
@@ -1419,7 +1427,7 @@ function renderFondoMutuoMassiel(){
   if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA')">+ Registrar movimiento</button></div>`;
   document.getElementById('fmov-c').innerHTML=html;
 }
-function showFondoMutuoMassiel(){renderFondoMutuoMassiel();document.getElementById('fmov').style.display='block';}
+function showFondoMutuoMassiel(){fmovLastFn='mutuo';renderFondoMutuoMassiel();document.getElementById('fmov').style.display='block';}
 // v94 -- Detalle del Fondo Emergencia (reusa el mismo shell #fmov/#fmov-c que
 // Fondo Mutuo). A diferencia de Fondo Mutuo, es CUMULATIVO (no hay concepto
 // de "mes activo" para su saldo -- ver fondoEmergenciaEnCuenta) y no tiene
@@ -1434,10 +1442,10 @@ function renderFondoEmergenciaDetail(){
   const aportado=fondoEmergenciaAportadoTotal();
   const consumido=fondoEmergenciaConsumidoTotal();
   let html=`<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#30D15822;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-shield-check" style="font-size:17px;color:#30D158"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Fondo Emergencia</div><div style="font-size:11px;color:var(--t2)">${massielView?'Fondo de reserva · solo lectura':'Fondo de reserva · dentro de BBVA'}</div></div><button onclick="document.getElementById('fmov').style.display='none'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>`;
-  html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#30D158">${fmtE(saldo)}</div></div>`;
-  html+=`<div style="padding:0 16px 14px;display:flex;gap:10px"><div style="flex:1;background:var(--s1);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">APORTADO</div><div style="font-size:14px;font-weight:700;color:var(--t1)">${fmtE(aportado)}</div></div><div style="flex:1;background:var(--s1);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">CONSUMIDO</div><div style="font-size:14px;font-weight:700;color:var(--rd)">${fmtE(consumido)}</div></div></div>`;
+  html+=`<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DISPONIBLE</div><div style="font-size:36px;font-weight:800;color:#30D158">${SALDOS_OCULTOS?'••••':fmtE(saldo)}</div></div>`;
+  html+=`<div style="padding:0 16px 14px;display:flex;gap:10px"><div style="flex:1;background:var(--s1);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">APORTADO</div><div style="font-size:14px;font-weight:700;color:var(--t1)">${SALDOS_OCULTOS?'••••':fmtE(aportado)}</div></div><div style="flex:1;background:var(--s1);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">CONSUMIDO</div><div style="font-size:14px;font-weight:700;color:var(--rd)">${SALDOS_OCULTOS?'••••':fmtE(consumido)}</div></div></div>`;
   html+=`<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS</div>`;
-  const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${aStr}</div></div>`;
+  const rowHTML=(dt,l,aStr,positive)=>`<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">${dt}</div><div style="flex:1;font-size:12px;color:var(--t1)">${l}</div><div style="font-size:13px;font-weight:700;color:${positive?'var(--tl)':'var(--rd)'}">${SALDOS_OCULTOS?'••••':aStr}</div></div>`;
   let rows='';
   const idx=MONTH_ORDER.indexOf(ACTIVE_ID);
   MONTH_ORDER.forEach((mid,i)=>{
@@ -1455,7 +1463,7 @@ function renderFondoEmergenciaDetail(){
   if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA')">+ Registrar movimiento</button></div>`;
   document.getElementById('fmov-c').innerHTML=html;
 }
-function showFondoEmergenciaDetail(){renderFondoEmergenciaDetail();document.getElementById('fmov').style.display='block';}
+function showFondoEmergenciaDetail(){fmovLastFn='emergencia';renderFondoEmergenciaDetail();document.getElementById('fmov').style.display='block';}
 function gT(id){['i','p','h','m'].forEach(p=>{document.getElementById('p-'+p).classList.remove('on');document.getElementById('nb-'+p).classList.remove('on');});document.getElementById('p-'+id).classList.add('on');document.getElementById('nb-'+id).classList.add('on');document.getElementById('p-'+id).scrollTop=0;document.getElementById('fov').style.display='none';document.getElementById('maov').style.display='none';document.getElementById('aov').style.display='none';document.getElementById('fxov').style.display='none';
   // Al ENTRAR al home de Massiel, recalcular todo su resumen EN VIVO contra el
   // estado actual (repartoMes/BAL), para que al moverse entre sesiones (Jofre
@@ -2632,7 +2640,7 @@ function mesGastoTotalReal(id){
 }
 function histCardHTML(id,label,accent){
   const total=mesGastoTotalReal(id);  const m=MONTHS[id];if(!m)return '';
-  return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">Gasto total del mes · toca para el detalle</div></div>`;
+  return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${SALDOS_OCULTOS?'••••':fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">Gasto total del mes · toca para el detalle</div></div>`;
 }
 // renderHist: llena #hist-body con los meses ya cerrados (anteriores al mes en
 // curso dentro de MONTH_ORDER), del más reciente al más antiguo. Cada tarjeta
@@ -2836,7 +2844,7 @@ function renderMaTile(){
   const doneCount=MASSIEL_TASKS.filter(t=>massielDone[t.id]).length+(massielDone['m-biz']?1:0);
   const allDone=doneCount===5;
   const nm=MONTHS[ACTIVE_ID].name.toUpperCase();
-  card.innerHTML=`<div style="font-size:9px;color:rgba(255,255,255,.5);font-weight:700;letter-spacing:.1em;margin-bottom:8px">${nm} — ${allDone?'COMPLETADO':'EN CURSO'}</div><div style="display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;letter-spacing:.06em;margin-bottom:4px">TU APORTE DE ${MONTHS[ACTIVE_ID].name.split(' ')[0].toUpperCase()}</div><div style="font-size:30px;font-weight:800;color:#fff;line-height:1">${fmtE(massielTotal())}</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:6px">${allDone?'✓ Todas las tareas completadas':doneCount+'/5 tareas · toca para ver'}</div></div><div style="width:40px;height:40px;border-radius:50%;background:rgba(100,210,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-check" style="font-size:18px;color:#64D2FF"></i></div></div>`;
+  card.innerHTML=`<div style="font-size:9px;color:rgba(255,255,255,.5);font-weight:700;letter-spacing:.1em;margin-bottom:8px">${nm} — ${allDone?'COMPLETADO':'EN CURSO'}</div><div style="display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:10px;color:rgba(255,255,255,.5);font-weight:700;letter-spacing:.06em;margin-bottom:4px">TU APORTE DE ${MONTHS[ACTIVE_ID].name.split(' ')[0].toUpperCase()}</div><div style="font-size:30px;font-weight:800;color:#fff;line-height:1">${SALDOS_OCULTOS?'••••':fmtE(massielTotal())}</div><div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:6px">${allDone?'✓ Todas las tareas completadas':doneCount+'/5 tareas · toca para ver'}</div></div><div style="width:40px;height:40px;border-radius:50%;background:rgba(100,210,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-check" style="font-size:18px;color:#64D2FF"></i></div></div>`;
 }
 function showMaTasks(){maovMode='tasks';renderMaTasksInto();document.getElementById('maov').style.display='block';}
 function renderMaTasksInto(){
