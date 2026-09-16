@@ -292,7 +292,7 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#BF5AF2;letter-spacing:.04em;margin-bottom:6px">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-fmutuo">€0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">TR Jofre · lectura</div></div>
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showA('IBKR')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#0A84FF;letter-spacing:.04em;margin-bottom:6px">IBKR · BOLSA</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-ibkr">$0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">≈ €0 · cerrada</div></div>
   
-    <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showFondoEmergenciaDetail()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">FONDO EMERGENCIA</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-femerg">€0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">BBVA · lectura</div></div></div>
+    <div class="ts" style="margin-bottom:0;cursor:pointer;grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px" onclick="showFondoEmergenciaDetail()"><div><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">FONDO EMERGENCIA</div><div style="font-size:9px;color:var(--t2)">BBVA · lectura</div></div><div style="display:flex;align-items:center;gap:10px"><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1;text-align:right" id="pm-femerg">€0,00</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div></div></div>
   <div style="padding:8px 18px 0"><div class="ts" style="margin-bottom:0;cursor:default"><div style="font-size:9px;font-weight:700;color:var(--t2);letter-spacing:.05em;margin-bottom:10px">HISTORIAL DE AHORRO</div><div id="pm-ahorro-bars" style="display:flex;align-items:flex-end;gap:8px;height:76px"></div><div id="pm-ahorro-detail"></div></div></div>
   <div style="height:18px"></div>
 </div>
@@ -1016,7 +1016,7 @@ const AHORRO_DESTINOS=[
   {key:'emergencia',match:/Emergencia/i,label:'BBVA · Fondo Emergencia',color:'#30D158'},
   {key:'trj',match:/Fondo Mutuo/i,label:'Fondo Mutuo',color:'#BF5AF2'},
   {key:'ibkr',match:/Inversi[oó]n/i,label:'IBKR · Inversión',color:'#0A84FF'},
-  {key:'vacaciones',match:/Vacaciones|Boda de Jeff/i,label:'TR J.A. · Vacaciones',color:'#EC4899'}
+  {key:'vacaciones',match:/Vacaciones|Boda de Jeff/i,label:'TR J.A. · Vacaciones',color:'var(--gy)'}
 ];
 function ahorroMatchesDestino(x,d){return x.key?x.key===d.key:d.match.test(x.l);}
 // T3 fix: un item de ahorro debe pertenecer a UN SOLO destino (el primero que
