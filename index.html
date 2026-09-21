@@ -4441,20 +4441,41 @@ async function saveState(){
       const stateJson=JSON.stringify(buildPersistableState({MOVS:mMovs,MONTH_PAGOS:mPagos,DET_MONTH_OVERRIDES:mDetOv,DET_EXTRA:mDetExtra,BAL:mBal,CAIXA_TDC:mCaixaTdc}));
       tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
     });
-    // Transacción confirmada por Firestore -- recién ahora se aplica el
-    // resultado fusionado a las globales en vivo, una sola vez.
-    Object.assign(MOVS,mergedOut.movs);
-    Object.assign(MONTH_PAGOS,mergedOut.pagos);
-    Object.assign(DET_MONTH_OVERRIDES,mergedOut.detOv);
-    Object.assign(DET_EXTRA,mergedOut.detExtra);
-    Object.assign(BAL,mergedOut.bal);
-    Object.assign(CAIXA_TDC,mergedOut.caixaTdc);
+    // Transacción confirmada por Firestore. v129 -- FIX RAIZ (mismo día que
+    // v128, incidente "movimientos no se guardan en móvil"): un
+    // Object.assign directo acá pisaba en silencio cualquier cambio hecho en
+    // memoria DURANTE el vuelo de este guardado (ej. el guardado de
+    // seguimiento que v128 encola, u otro regMov/markPago mientras tanto),
+    // porque sobreescribía con el resultado calculado a partir de
+    // pendingSnap (foto de ANTES de que ese cambio existiera). Fix: en vez
+    // de asignar directo, se aplica el MISMO merge-por-delta ya usado contra
+    // el servidor, pero ahora comparando el estado EN VIVO (que puede haber
+    // avanzado mientras el guardado viajaba) contra el baseline de ESTE
+    // guardado -- así el cambio concurrente se conserva en vez de perderse.
+    Object.keys(mergedOut.movs).forEach(k=>{
+      MOVS[k]=mergeMovsConDelta(mergedOut.movs[k],pendingSnap.baselineMovs[k],MOVS[k]);
+    });
+    Object.keys(mergedOut.pagos).forEach(k=>{
+      MONTH_PAGOS[k]=mergePagosConDelta(mergedOut.pagos[k],pendingSnap.baselinePagos[k],MONTH_PAGOS[k]);
+    });
+    Object.assign(DET_MONTH_OVERRIDES,mergeDetObjConDelta(mergedOut.detOv,pendingSnap.baselineDetOv,DET_MONTH_OVERRIDES));
+    Object.assign(DET_EXTRA,mergeDetObjConDelta(mergedOut.detExtra,pendingSnap.baselineDetExtra,DET_EXTRA));
+    Object.assign(BAL,mergeScalarDelta(mergedOut.bal,pendingSnap.baselineBal,BAL));
+    Object.assign(CAIXA_TDC,mergeScalarDelta(mergedOut.caixaTdc,pendingSnap.baselineCaixaTdc,CAIXA_TDC));
     if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildPersistableState()));}catch(e){}
-    snapshotMovsBaseline();
-    snapshotDetBaseline();
-    snapshotPagosBaseline();
-    snapshotBalBaseline();
+    // v129 -- el baseline post-guardado debe reflejar SOLO lo que quedó
+    // realmente persistido en Firestore (mergedOut), no el MOVS en vivo ya
+    // fusionado con cambios concurrentes (arriba): si el baseline tomara ese
+    // MOVS en vivo, un guardado en cola (v128) dejaría de ver esos cambios
+    // concurrentes como "nuevos" -- ya estarían en su propio baseline -- y
+    // nunca los reenviaría a Firestore. Verificado con simulación (sim2.js).
+    MOVS_BASELINE=JSON.parse(JSON.stringify(mergedOut.movs));
+    MONTH_PAGOS_BASELINE=JSON.parse(JSON.stringify(mergedOut.pagos));
+    DET_OV_BASELINE=JSON.parse(JSON.stringify(mergedOut.detOv));
+    DET_EXTRA_BASELINE=JSON.parse(JSON.stringify(mergedOut.detExtra));
+    BAL_BASELINE=JSON.parse(JSON.stringify(mergedOut.bal));
+    CAIXA_TDC_BASELINE=JSON.parse(JSON.stringify(mergedOut.caixaTdc));
     clearPendingSync(); // guardado en la nube confirmado -- ya no hay nada pendiente
   }catch(e){
     // v-sync-fix: antes esto se tragaba en silencio, sin aviso ni respaldo.
