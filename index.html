@@ -24,11 +24,12 @@ html,body{height:100%;background:var(--bg)}
 .pg.on{display:block}
 .pgm{background:transparent}
 .nb{position:absolute;bottom:calc(14px + env(safe-area-inset-bottom,0px));left:12px;right:12px;height:64px;background:rgba(10,20,32,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--bd);border-radius:32px;display:flex;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
-.nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;transition:all .18s cubic-bezier(.2,.8,.2,1)}
+.nbb{flex:1;height:100%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.nb-cap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 16px;border-radius:16px;transition:background .18s cubic-bezier(.2,.8,.2,1),transform .18s cubic-bezier(.2,.8,.2,1)}
+.nbi{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center}
 .nbi i{font-size:20px;color:var(--t3);transition:color .15s}
 .nbb span{font-size:9px;color:var(--t3);font-weight:600;letter-spacing:.3px;transition:color .15s}
-.nbb.on .nbi{background:var(--gd2);transform:translateY(-1px)}.nbb.on .nbi i{color:var(--gd)}.nbb.on span{color:var(--gd)}
+.nbb.on .nb-cap{background:var(--gd2);transform:translateY(-1px)}.nbb.on .nbi i{color:var(--gd)}.nbb.on span{color:var(--gd)}
 .fabw{flex:0 0 68px;display:flex;align-items:center;justify-content:center}
 .fab{width:52px;height:52px;border-radius:50%;background:var(--accent-teal-gradient);border:3px solid var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:-22px;box-shadow:0 6px 20px -2px rgba(45,212,167,.5),0 2px 6px rgba(0,0,0,.35);transition:transform .1s,opacity .1s}
 .fab:active{transform:scale(.94);opacity:.85}
@@ -298,11 +299,11 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
 </div>
 
 <nav class="nb">
-  <button class="nbb on" id="nb-i" onclick="gT('i')"><div class="nbi"><i class="ti ti-home"></i></div><span>Inicio</span></button>
-  <button class="nbb" id="nb-p" onclick="gT('p')"><div class="nbi"><i class="ti ti-calendar-stats"></i></div><span>Previsión</span></button>
+  <button class="nbb on" id="nb-i" onclick="gT('i')"><div class="nb-cap"><div class="nbi"><i class="ti ti-home"></i></div><span>Inicio</span></div></button>
+  <button class="nbb" id="nb-p" onclick="gT('p')"><div class="nb-cap"><div class="nbi"><i class="ti ti-calendar-stats"></i></div><span>Previsión</span></div></button>
   <div class="fabw"><button class="fab" onclick="openReg()"><i class="ti ti-plus"></i></button></div>
-  <button class="nbb" id="nb-h" onclick="gT('h')"><div class="nbi"><i class="ti ti-clock-hour-3"></i></div><span>Historial</span></button>
-  <button class="nbb" id="nb-m" onclick="gT('m')"><div class="nbi"><i class="ti ti-user-heart"></i></div><span>Massiel</span></button>
+  <button class="nbb" id="nb-h" onclick="gT('h')"><div class="nb-cap"><div class="nbi"><i class="ti ti-clock-hour-3"></i></div><span>Historial</span></div></button>
+  <button class="nbb" id="nb-m" onclick="gT('m')"><div class="nb-cap"><div class="nbi"><i class="ti ti-user-heart"></i></div><span>Massiel</span></div></button>
 </nav>
 </div>
 </div>
