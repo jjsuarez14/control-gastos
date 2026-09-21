@@ -4016,6 +4016,23 @@ const STORAGE_KEY='cgv6-state';
 // el propio baseline (ver replayPendingDelta más abajo).
 const PENDING_SYNC_KEY='cgv6-pendingSync';
 let _saveInFlight=false;
+// v128 -- FIX RAIZ (auditoria 21-sep-2026): saveState() descartaba en
+// silencio cualquier guardado que llegara mientras otro ya estaba en vuelo
+// (linea de abajo, if(_saveInFlight)return -- no tomaba snapshot, no
+// marcaba pendiente, no reintentaba nada). En movil, con latencia de red
+// mas alta, es facil registrar 2 movimientos seguidos dentro de la ventana
+// en que el primer guardado todavia esta viajando a Firestore -- el
+// segundo regMov() SI modifica MOVS/MONTH_PAGOS en memoria, pero su
+// llamada a saveState() se descartaba entera, y cuando el primer guardado
+// terminaba, Object.assign(MOVS,mergedOut.movs) pisaba la memoria con la
+// foto (pendingSnap) tomada ANTES del segundo movimiento -- borrandolo sin
+// dejar rastro, sin toast de error, sin badge de pendiente. Reproducido de
+// forma aislada (sin tocar Firestore real) antes de este fix: 2 regMov()
+// separados por 800ms, con el guardado simulado a 2.5s de latencia, perdian
+// el segundo el 100% de las veces. Fix: en vez de descartar, se encola un
+// guardado de seguimiento (ver el finally de saveState) que corre apenas
+// termina el actual, esta vez con una foto fresca que ya incluye lo nuevo.
+let _saveQueued=false;
 let _pendingSyncTimer=null;
 let _syncRetryDelay=8000;
 function hasPendingSync(){try{return !!localStorage.getItem(PENDING_SYNC_KEY);}catch(e){return false;}}
@@ -4314,7 +4331,7 @@ function buildPersistableState(overrides){
   return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:BAL_,CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS};
 }
 async function saveState(){
-  if(_saveInFlight)return; // ya hay un guardado en curso -- el reintento programado lo cubre
+  if(_saveInFlight){_saveQueued=true;return;} // v128: no se descarta -- se encola un guardado de seguimiento (ver finally) en vez de perder este cambio
   _saveInFlight=true;
   // v-sync-fix: capturar ANTES de tocar la red (y antes del merge interno de
   // más abajo, que muta MOVS/MONTH_PAGOS/DET_* en el sitio) una foto de "lo
@@ -4448,6 +4465,10 @@ async function saveState(){
     markPendingSync(pendingSnap);
   }finally{
     _saveInFlight=false;
+    // v128: si llegaron cambios mientras este guardado estaba en vuelo,
+    // corre un guardado de seguimiento ahora, con una foto fresca (ver
+    // arriba) -- en vez de perderlos silenciosamente.
+    if(_saveQueued){_saveQueued=false;saveState();}
   }
 }
 function mergeItemArrays(freshArr,savedArr){
