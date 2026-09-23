@@ -2427,7 +2427,7 @@ function execDelete(mode){
     // el resto respeta lo que ya había.
     const prevById={};(MONTH_PAGOS[monthId]||[]).forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
     const fresh=buildMonthPagos(monthId);
-    fresh.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
+    fresh.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.cat==='retiro'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
     MONTH_PAGOS[monthId]=fresh;
     updBbvaBadge();updPrevCard();updTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);renderPrevision();
     toast('✓ "'+label+'" eliminada'+(mode==='desde'?' desde '+MONTHS[monthId].name+' en adelante':' de '+MONTHS[monthId].name),'var(--tl)');
@@ -3835,7 +3835,7 @@ function refreshMonthPagosPreservingState(monthId){
   if(!MONTH_PAGOS[monthId])return;
   const prevById={};MONTH_PAGOS[monthId].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
   const freshP=buildMonthPagos(monthId);
-  freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
+  freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.cat==='retiro'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
   MONTH_PAGOS[monthId]=freshP;
   if(monthId===ACTIVE_ID)PAGOS=MONTH_PAGOS[monthId];
 }
@@ -3991,7 +3991,7 @@ function regDateISO(d){d=d||reg.customDate||new Date();return d.getFullYear()+'-
     if(MONTH_PAGOS[targetMonth]){
       const prevById={};MONTH_PAGOS[targetMonth].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
       const freshP=buildMonthPagos(targetMonth);
-      freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
+      freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.cat==='retiro'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
       MONTH_PAGOS[targetMonth]=freshP;
     }
     updBbvaBadge();
@@ -4652,7 +4652,7 @@ function applyState(s){
       // respeta el monto guardado (fue lo que realmente se transfirió). Para el
       // resto de tareas se mantiene el comportamiento normal (respeta lo guardado).
       const fresh=freshById[sp.id];
-      const esFondeo=(p.cat==='enviar')||(fresh&&fresh.cat==='enviar')||p.sistema||(fresh&&fresh.sistema);
+      const esFondeo=(p.cat==='enviar')||(fresh&&fresh.cat==='enviar')||(p.cat==='retiro')||(fresh&&fresh.cat==='retiro')||p.sistema||(fresh&&fresh.sistema);
       if(esFondeo&&!sp.done&&fresh&&fresh.amt!=null){
         p.amt=fresh.amt;                 // no-done: recalcular fresco
       }else if(sp.amt!=null){
