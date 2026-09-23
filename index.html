@@ -288,12 +288,11 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
   <div style="padding:20px 18px 0;display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:9px;color:var(--t2);font-weight:700;letter-spacing:.1em;margin-bottom:3px" id="hdr-massiel-month">JUNIO 2026</div><div style="font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-.02em">Tu resumen</div></div><button id="eye-m" onclick="toggleSaldosOcultos()" title="Ocultar saldos" style="background:var(--s2);border:1px solid var(--bd2);border-radius:12px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--sh1)"><i class="ti ti-eye" style="font-size:17px;color:var(--t1)"></i></button></div>
   <div style="padding:12px 18px 0"><div style="background:var(--s2);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--bd2);border-radius:18px;padding:16px;cursor:pointer;box-shadow:var(--sh1)" onclick="showMaTasks()" id="ma-status-card"></div></div>
   <div style="padding:10px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:9px">
-    <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showA('TRM')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#FF375F;letter-spacing:.04em;margin-bottom:6px">TR MASSIEL</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-trm">€0,10</div><div style="font-size:9px;color:var(--t2);margin-top:4px">Mercado</div></div>
+    <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showFondoEmergenciaDetail()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">FONDO EMERGENCIA</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-femerg">€0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">BBVA · lectura</div></div>
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showA('TRJA')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">TR J.A.</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-trja">€0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">Vacaciones</div></div>
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#BF5AF2;letter-spacing:.04em;margin-bottom:6px">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-fmutuo">€0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">TR Jofre · lectura</div></div>
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showA('IBKR')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#0A84FF;letter-spacing:.04em;margin-bottom:6px">IBKR · BOLSA</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-ibkr">$0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">≈ €0 · cerrada</div></div>
-  
-    <div class="ts" style="margin-bottom:0;cursor:pointer;grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px" onclick="showFondoEmergenciaDetail()"><div><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">FONDO EMERGENCIA</div><div style="font-size:9px;color:var(--t2)">BBVA · lectura</div></div><div style="display:flex;align-items:center;gap:10px"><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1;text-align:right" id="pm-femerg">€0,00</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div></div></div>
+    <div class="ts" style="margin-bottom:0;cursor:pointer;grid-column:1/-1;min-height:168px" onclick="showA('TRM')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#FF375F;letter-spacing:.04em;margin-bottom:6px">TR MASSIEL</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-trm">€0,10</div><div style="font-size:9px;color:var(--t2);margin-top:4px">Mercado</div></div></div>
   <div style="padding:8px 18px 0"><div class="ts" style="margin-bottom:0;cursor:default"><div style="font-size:9px;font-weight:700;color:var(--t2);letter-spacing:.05em;margin-bottom:10px">HISTORIAL DE AHORRO</div><div id="pm-ahorro-bars" style="display:flex;align-items:flex-end;gap:8px;height:76px"></div><div id="pm-ahorro-detail"></div></div></div>
   <div style="height:18px"></div>
 </div>
@@ -1643,7 +1642,18 @@ function buildMonthPagos(id){
   }
   cuotasFor(id).forEach(c=>{
     const tag=(c.tags&&c.tags.includes('Caixa'))?'CB':((c.tags&&c.tags.includes('TR Jofre'))?'TR':'BBVA');
-    handleTaggedItem(c.l+(c.prog?' · '+c.prog:''),tag,moneyFromStr(c.amt),c.tdcRelease?{tdcRelease:true}:undefined);
+    const label=c.l+(c.prog?' · '+c.prog:'');
+    if(c.autofinanciado&&tag==='CB'){
+      // v133 -- cuota Caixa autofinanciada por un reembolso propio ya
+      // identificado (ver flag autofinanciado en MONTHS[id].cuotas): no debe
+      // sumar a "Enviar a Caixa" (caixaSum) ni al reparto 50/50 del mes
+      // (repartoMes la excluye tambien), pero sigue como gasto pendiente de
+      // Caixa real -- visible, marcable, y contado en gastosPropiosPend.
+      const extra=Object.assign({autofinanciado:true},c.tdcRelease?{tdcRelease:true}:null);
+      pushDirect(label,'CAIXA',moneyFromStr(c.amt),extra);
+    }else{
+      handleTaggedItem(label,tag,moneyFromStr(c.amt),c.tdcRelease?{tdcRelease:true}:undefined);
+    }
   });
   // Tareas de Hotel (gasto BBVA, cat Vacaciones). v67 -- redirigido de TRJ a
   // BBVA (el Fondo Mutuo vivía en TR Jofre; confirmado por Jofre 22-ago-2026
@@ -1718,9 +1728,19 @@ function buildMonthPagos(id){
   efectivoItems.forEach(ei=>{
     const inc=ei.inc>0?ei.inc:ei.total;
     const nTareas=Math.max(1,Math.round(ei.total/inc));
+    // v133 -- FIX: antes cada tarea salia a monto plano `inc`, lo que dejaba
+    // un hueco cuando ei.total no era multiplo exacto de inc (ej. Limpieza ·
+    // Hogar: total=72, inc=30 -> 2 tareas x 30 = 60, faltaban 12 sin tarea).
+    // Ahora se reparte ei.total en partes iguales entre las nTareas, con la
+    // ultima absorbiendo el resto de redondeo -- la suma de las tareas
+    // individuales siempre cuadra exacto con ei.total.
+    let acumulado=0;
     for(let i=0;i<nTareas;i++){
+      const esUltima=i===nTareas-1;
+      const parte=esUltima?Math.round((ei.total-acumulado)*100)/100:Math.round((ei.total/nTareas)*100)/100;
+      acumulado+=parte;
       const nombre=nTareas>1?(ei.label+' ('+(i+1)+'/'+nTareas+')'):ei.label;
-      pushDirect(nombre,'EFECTIVO',inc);
+      pushDirect(nombre,'EFECTIVO',parte);
     }
     efectivoSum+=ei.total;
   });
@@ -1992,7 +2012,7 @@ function reconcileOverride(key,id,overrideArr,freshArr){
   freshArr.forEach(fr=>{
     const cur=byId[fr.id];
     if(cur){
-      RECONCILE_FIELDS.forEach(f=>{if(cur[f]===undefined&&fr[f]!==undefined)cur[f]=fr[f];});
+      RECONCILE_FIELDS.forEach(f=>{if(fr[f]!==undefined)cur[f]=fr[f];});
     }else if(!isRemoved(key,id,fr.id)){
       overrideArr.push(Object.assign({},fr));
     }
@@ -2407,7 +2427,7 @@ function execDelete(mode){
     // el resto respeta lo que ya había.
     const prevById={};(MONTH_PAGOS[monthId]||[]).forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
     const fresh=buildMonthPagos(monthId);
-    fresh.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!(np.cat==='enviar'&&!prev.done))np.amt=prev.amt;}});
+    fresh.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
     MONTH_PAGOS[monthId]=fresh;
     updBbvaBadge();updPrevCard();updTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);renderPrevision();
     toast('✓ "'+label+'" eliminada'+(mode==='desde'?' desde '+MONTHS[monthId].name+' en adelante':' de '+MONTHS[monthId].name),'var(--tl)');
@@ -2639,6 +2659,9 @@ function mesGastoTotalReal(id){
   finally{ maovEsVistaMassiel=prev; }
   return Math.round(t*100)/100;
 }
+// v133 -- paleta de acento compartida entre Historial (Jofre) y Previsión
+// (Massiel), para que ambas vistas usen el mismo criterio de color por mes.
+const HIST_ACCENTS=['var(--tl)','var(--gd)','var(--or)','var(--pu)','var(--bl)','var(--pk)'];
 function histCardHTML(id,label,accent){
   const total=mesGastoTotalReal(id);  const m=MONTHS[id];if(!m)return '';
   return `<div class="tp" onclick="showMaMonthDetail('${id}','close')" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:${accent};font-weight:700;letter-spacing:.08em">${m.name.toUpperCase()} · ${label}</div><i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i></div><div style="font-size:26px;font-weight:800;color:var(--t1);margin-top:6px">${SALDOS_OCULTOS?'••••':fmtE(total)}</div><div style="font-size:10px;color:var(--t3);margin-top:4px">Gasto total del mes · toca para el detalle</div></div>`;
@@ -2697,9 +2720,8 @@ function renderHist(){
   const meses=ai>=0?MONTH_ORDER.slice(0,ai):[];
   if(statsEl)statsEl.innerHTML=meses.length?histAvgStatsHTML(meses):'';
   if(!meses.length){el.innerHTML='<div style="padding:24px 4px;text-align:center;color:var(--t3);font-size:12px">Aún no hay meses en el historial. Se irá llenando al registrar cada nómina.</div>';return;}
-  const accents=['var(--tl)','var(--gd)','var(--or)','var(--pu)','var(--bl)','var(--pk)'];
   // Orden: más reciente arriba -> el activo primero, luego los cerrados.
-  el.innerHTML=meses.slice().reverse().map((id,i)=>histCardHTML(id,id===ACTIVE_ID?'EN CURSO':'CERRADO',accents[i%accents.length])).join('');
+  el.innerHTML=meses.slice().reverse().map((id,i)=>histCardHTML(id,id===ACTIVE_ID?'EN CURSO':'CERRADO',HIST_ACCENTS[i%HIST_ACCENTS.length])).join('');
 }
 // ===== T5: HISTORIAL = LO REALMENTE EJECUTADO (no la previsión) =====
 // El historial debe reflejar solo lo COMPLETADO, no el presupuesto del mes.
@@ -2756,6 +2778,7 @@ function repartoMes(id){
   });
   // Cuotas: cada una por su responsabilidad real (tags)
   cuotasFor(id).forEach(c=>{
+    if(c.autofinanciado)return; // v133: autofinanciado por reembolso propio -- no entra al reparto 50/50
     const amt=moneyFromStr(c.amt);
     const sp=splitFromCuotaTags(c.tags);
     if(sp){jofre+=amt*sp.jofre;massiel+=amt*sp.massiel;}
@@ -2873,12 +2896,13 @@ function showMaForecast(){
   ensureMonthsAhead(ACTIVE_ID,3);
   const ai=MONTH_ORDER.indexOf(ACTIVE_ID);
   const order=MONTH_ORDER.slice(ai+1,ai+4);
-  const palette=['#FF9F0A','#FFD60A','#64D2FF'];
-  const items=order.map((id,i)=>({m:MONTHS[id].name,a:fmtAporte(aporteTotales(id).massiel),id,c:palette[i]||'#64D2FF'}));
+  // v133: mismo criterio de color que el Historial de Jofre (HIST_ACCENTS),
+  // desplazado 1 posicion porque el indice 0 lo usa el mes EN CURSO (abajo).
+  const items=order.map((id,i)=>({m:MONTHS[id].name,a:fmtAporte(aporteTotales(id).massiel),id,c:HIST_ACCENTS[(i+1)%HIST_ACCENTS.length]}));
   // El mes en curso va primero y resaltado -- es el unico camino que tiene
   // Massiel hoy para llegar a su Categorias real (con datos reales, no
   // previsto). Antes de esto ella solo podia ver meses futuros.
-  const actualHTML=MONTHS[ACTIVE_ID]?`<div onclick="showMaMonthDetail('${ACTIVE_ID}','forecast')" style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;border-radius:13px;background:rgba(100,210,255,.1);border:1px solid rgba(100,210,255,.3);cursor:pointer;margin-bottom:4px"><div><div style="font-size:9px;color:#64D2FF;font-weight:700;letter-spacing:.06em;margin-bottom:2px">EN CURSO · TU CATEGORÍAS REAL</div><div style="font-size:13px;color:#fff;font-weight:600">${MONTHS[ACTIVE_ID].name}</div></div><div style="display:flex;align-items:center;gap:6px"><div style="font-size:20px;font-weight:800;color:#64D2FF">${SALDOS_OCULTOS?'••••':fmtAporte(aporteTotales(ACTIVE_ID).massiel)}</div><i class="ti ti-chevron-right" style="font-size:14px;color:rgba(255,255,255,.3)"></i></div></div>`:'';
+  const actualHTML=MONTHS[ACTIVE_ID]?`<div onclick="showMaMonthDetail('${ACTIVE_ID}','forecast')" style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;border-radius:13px;background:rgba(100,210,255,.1);border:1px solid rgba(100,210,255,.3);cursor:pointer;margin-bottom:4px"><div><div style="font-size:9px;color:var(--tl);font-weight:700;letter-spacing:.06em;margin-bottom:2px">EN CURSO · TU CATEGORÍAS REAL</div><div style="font-size:13px;color:#fff;font-weight:600">${MONTHS[ACTIVE_ID].name}</div></div><div style="display:flex;align-items:center;gap:6px"><div style="font-size:20px;font-weight:800;color:var(--tl)">${SALDOS_OCULTOS?'••••':fmtAporte(aporteTotales(ACTIVE_ID).massiel)}</div><i class="ti ti-chevron-right" style="font-size:14px;color:rgba(255,255,255,.3)"></i></div></div>`:'';
   document.getElementById('maov-c').innerHTML=`<div style="padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px;flex-shrink:0"><div style="flex:1"><div style="font-size:15px;font-weight:700;color:#fff">Tu mes y próximos meses</div><div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">Toca un mes para ver el detalle</div></div><button onclick="document.getElementById('maov').style.display='none'" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:rgba(255,255,255,.5)"></i></button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;flex:1;overflow-y:auto;min-height:0">${actualHTML}${items.map(x=>`<div onclick="showMaMonthDetail('${x.id}','forecast')" style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;border-radius:13px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);cursor:pointer"><div><div style="font-size:13px;color:#fff;font-weight:600">${x.m}</div></div><div style="display:flex;align-items:center;gap:6px"><div style="font-size:20px;font-weight:800;color:${x.c}">${SALDOS_OCULTOS?'••••':x.a}</div><i class="ti ti-chevron-right" style="font-size:14px;color:rgba(255,255,255,.3)"></i></div></div>`).join('')}</div>`;
   document.getElementById('maov').style.display='block';
 }
@@ -3811,7 +3835,7 @@ function refreshMonthPagosPreservingState(monthId){
   if(!MONTH_PAGOS[monthId])return;
   const prevById={};MONTH_PAGOS[monthId].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
   const freshP=buildMonthPagos(monthId);
-  freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!(np.cat==='enviar'&&!prev.done))np.amt=prev.amt;}});
+  freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
   MONTH_PAGOS[monthId]=freshP;
   if(monthId===ACTIVE_ID)PAGOS=MONTH_PAGOS[monthId];
 }
@@ -3967,7 +3991,7 @@ function regDateISO(d){d=d||reg.customDate||new Date();return d.getFullYear()+'-
     if(MONTH_PAGOS[targetMonth]){
       const prevById={};MONTH_PAGOS[targetMonth].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
       const freshP=buildMonthPagos(targetMonth);
-      freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!(np.cat==='enviar'&&!prev.done))np.amt=prev.amt;}});
+      freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
       MONTH_PAGOS[targetMonth]=freshP;
     }
     updBbvaBadge();
