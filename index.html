@@ -4652,7 +4652,7 @@ function applyState(s){
       // respeta el monto guardado (fue lo que realmente se transfirió). Para el
       // resto de tareas se mantiene el comportamiento normal (respeta lo guardado).
       const fresh=freshById[sp.id];
-      const esFondeo=(p.cat==='enviar')||(fresh&&fresh.cat==='enviar');
+      const esFondeo=(p.cat==='enviar')||(fresh&&fresh.cat==='enviar')||p.sistema||(fresh&&fresh.sistema);
       if(esFondeo&&!sp.done&&fresh&&fresh.amt!=null){
         p.amt=fresh.amt;                 // no-done: recalcular fresco
       }else if(sp.amt!=null){
