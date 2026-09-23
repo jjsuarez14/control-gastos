@@ -292,9 +292,9 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showA('TRJA')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#30D158;letter-spacing:.04em;margin-bottom:6px">TR J.A.</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-trja">€0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">Vacaciones</div></div>
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showFondoMutuoMassiel()"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#BF5AF2;letter-spacing:.04em;margin-bottom:6px">FONDO MUTUO</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-fmutuo">€0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">TR Jofre · lectura</div></div>
     <div class="ts" style="margin-bottom:0;cursor:pointer" onclick="showA('IBKR')"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font-size:9px;font-weight:700;color:#0A84FF;letter-spacing:.04em;margin-bottom:6px">IBKR · BOLSA</div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-size:22px;font-weight:800;color:var(--t1);line-height:1" id="pm-ibkr">$0,00</div><div style="font-size:9px;color:var(--t2);margin-top:4px">≈ €0 · cerrada</div></div>
-    <div class="ts" style="margin-bottom:0;cursor:pointer;grid-column:1/-1;min-height:168px;display:flex;flex-direction:column;justify-content:center" onclick="showA('TRM')"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:9px;background:#FF375F22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-heart-handshake" style="font-size:15px;color:#FF375F"></i></div><div style="font-size:11px;font-weight:700;color:#FF375F;letter-spacing:.04em">TR MASSIEL</div></div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3)"></i></div><div style="font-size:34px;font-weight:800;color:var(--t1);line-height:1" id="pm-trm">€0,10</div><div style="font-size:10px;color:var(--t2);margin-top:6px">Mercado</div></div></div>
+    <div class="ts" style="margin-bottom:0;cursor:pointer;grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px" onclick="showA('TRM')"><div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="width:36px;height:36px;border-radius:11px;background:#FF375F22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-heart-handshake" style="font-size:18px;color:#FF375F"></i></div><div style="min-width:0"><div style="font-size:11px;font-weight:700;color:#FF375F;letter-spacing:.04em;white-space:nowrap">TR MASSIEL</div><div style="font-size:9px;color:var(--t2);margin-top:2px">Mercado</div></div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><div style="font-size:26px;font-weight:800;color:var(--t1);line-height:1" id="pm-trm">€0,10</div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3)"></i></div></div></div>
   <div style="padding:8px 18px 0"><div class="ts" style="margin-bottom:0;cursor:default"><div style="font-size:9px;font-weight:700;color:var(--t2);letter-spacing:.05em;margin-bottom:10px">HISTORIAL DE AHORRO</div><div id="pm-ahorro-bars" style="display:flex;align-items:flex-end;gap:8px;height:76px"></div><div id="pm-ahorro-detail"></div></div></div>
-  <div style="height:130px"></div>
+  <div style="height:10px"></div>
 </div>
 
 <nav class="nb">
@@ -635,25 +635,39 @@ function tareaLabelsForMonth(monthId){
 }
 const MOVS={BBVA:[],CAIXA:[],TRM:[],TRJ:[],TRJA:[]};let __movDateOverride=null;
 let nominaReg=true;
-// ── AUDITORÍA BALANCE vs MOVIMIENTOS (v29) ───────────────────────────────────
-// Compara el saldo guardado BAL[acc] contra (saldo de apertura de julio + suma
-// neta de movimientos). El sistema arrancó en julio con saldos base cargados
-// directamente en BAL (NO como movimiento de entrada), tras un cuadre validado
-// contra banca real. Por eso la auditoría DEBE partir de ese saldo de apertura;
-// si no, marca un falso descuadre igual al saldo base.
+// ── AUDITORÍA BALANCE vs MOVIMIENTOS — CIERRE MES A MES (v137) ──────────────
+// ANTES (v29): comparaba el saldo actual contra (SALDO_APERTURA de julio +
+// TODOS los movimientos desde entonces, sin importar el mes). Jofre señaló el
+// problema de raíz (23-sep): un desfase asi no es auditable -- puede venir de
+// un movimiento de hace meses, enterrado en un acumulado de toda la vida de la
+// cuenta, sin forma de saber CUANDO se originó. Un error ya resuelto en un mes
+// viejo seguia contaminando el desfase de todos los meses futuros para siempre.
+//
+// AHORA: cada mes se audita SOLO contra su propio punto de partida: el cierre
+// verificado del mes anterior (MONTH_CIERRE), o SALDO_APERTURA si es el primer
+// mes trackeado y aún no hay ningún cierre. cerrarMes(monthId) congela el
+// saldo actual como cierre de ese mes -- llamar SOLO tras confirmarlo contra
+// el extracto bancario real (no se inventa ningún cierre: mientras no se llame
+// cerrarMes, el sistema sigue cayendo a SALDO_APERTURA, el único punto ya
+// confirmado). Con esto el desfase, si aparece, queda acotado a los
+// movimientos de ESE mes (mv.mesId===monthId) -- localiza el error en vez de
+// acumularlo indefinidamente.
 //
 // SALDO_APERTURA = saldo real de cada cuenta al iniciar julio en el sistema,
 // capturado en vivo (saldo actual − neto de movimientos registrados) el 02-ago,
-// con los saldos ya confirmados contra banca real por Jofre (Explicación A: el
-// sistema quedó cuadrado hace un mes, nada se hizo sin registrar). No inventar:
-// estos valores son los que hacen que sistema == banca.
+// con los saldos ya confirmados contra banca real por Jofre. No inventar:
+// estos valores son los que hacen que sistema == banca. Sigue siendo la base
+// del primer mes trackeado mientras no exista un cierre previo.
 const SALDO_APERTURA={BBVA:1009.33,CAIXA:104.17,TRJ:0.19,TRM:-176.07,TRJA:0,EFECTIVO:0};
+const MONTH_CIERRE={}; // {monthId:{acc:saldoVerificado,...}} -- se llena solo con cerrarMes()
 function sumaNetaMovs(acc){
   // v37 — FIX (Opción B, decidida por Jofre): clasificar entrada/salida por
   // el signo REAL de mv.a, no por el flag mv.t (que no es confiable: puede
   // quedar desalineado del signo real, como pasó con "Devolución - Reserva
   // Vacaciones" +€10,00 marcado t:false, generando un desfase fantasma de
   // 20,00€ en auditarCuenta aunque el saldo real siempre estuvo correcto).
+  // Nota v137: ya NO es la base de auditarCuenta (ver sumaNetaMovsMes abajo);
+  // se deja como utilidad general de todo el historial de la cuenta.
   const list=MOVS[acc]||[];
   let entradas=0,salidas=0;
   list.forEach(mv=>{
@@ -664,17 +678,45 @@ function sumaNetaMovs(acc){
   salidas=Math.round(salidas*100)/100;
   return {entradas,salidas,neto:Math.round((entradas-salidas)*100)/100};
 }
-function auditarCuenta(acc){
-  const {entradas,salidas,neto}=sumaNetaMovs(acc);
-  const apertura=SALDO_APERTURA[acc]||0;
-  const saldo=Math.round((BAL[acc]||0)*100)/100;
-  // Esperado = apertura + neto de movimientos. Desfase real = saldo − esperado.
+function sumaNetaMovsMes(acc,monthId){
+  // Igual que sumaNetaMovs pero acotado a los movimientos de UN mes (mesId ya
+  // se guarda en cada movimiento al registrarse) -- es la base real del cierre
+  // mes a mes.
+  const list=(MOVS[acc]||[]).filter(mv=>mv.mesId===monthId);
+  let entradas=0,salidas=0;
+  list.forEach(mv=>{
+    const val=parseEuro(mv.a);
+    if(val>=0)entradas+=val; else salidas+=Math.abs(val);
+  });
+  entradas=Math.round(entradas*100)/100;
+  salidas=Math.round(salidas*100)/100;
+  return {entradas,salidas,neto:Math.round((entradas-salidas)*100)/100};
+}
+function cerrarMes(monthId){
+  // Congela el saldo ACTUAL de cada cuenta como cierre verificado de monthId.
+  // Llamar SOLO después de confirmar ese saldo contra el extracto bancario
+  // real -- pasa a ser la apertura del mes siguiente en auditarCuenta.
+  MONTH_CIERRE[monthId]=Object.assign({},BAL);
+  console.log('Mes '+monthId+' cerrado con:',MONTH_CIERRE[monthId]);
+  return MONTH_CIERRE[monthId];
+}
+function auditarCuenta(acc,monthId){
+  monthId=monthId||ACTIVE_ID;
+  const idx=MONTH_ORDER.indexOf(monthId);
+  const mesAnterior=idx>0?MONTH_ORDER[idx-1]:null;
+  const cierrePrevio=mesAnterior&&MONTH_CIERRE[mesAnterior]?MONTH_CIERRE[mesAnterior][acc]:undefined;
+  const apertura=cierrePrevio!=null?cierrePrevio:(SALDO_APERTURA[acc]||0);
+  const {entradas,salidas,neto}=sumaNetaMovsMes(acc,monthId);
+  const cierreEsteMes=MONTH_CIERRE[monthId]?MONTH_CIERRE[monthId][acc]:undefined;
+  const saldo=cierreEsteMes!=null?Math.round(cierreEsteMes*100)/100:Math.round((BAL[acc]||0)*100)/100;
+  // Esperado = apertura (cierre del mes anterior, o SALDO_APERTURA) + neto del
+  // mes. Desfase real = saldo − esperado, acotado a este mes.
   const esperado=Math.round((apertura+neto)*100)/100;
   const desfase=Math.round((saldo-esperado)*100)/100;
-  return {acc,saldo,apertura,entradas,salidas,neto,esperado,desfase,cuadra:Math.abs(desfase)<0.02};
+  return {acc,monthId,saldo,apertura,aperturaFuente:cierrePrevio!=null?('cierre:'+mesAnterior):'SALDO_APERTURA',entradas,salidas,neto,esperado,desfase,cuadra:Math.abs(desfase)<0.02};
 }
-function auditarTodo(){
-  return Object.keys(BAL).filter(a=>MOVS[a]!==undefined||['BBVA','CAIXA','TRM','TRJ','TRJA','EFECTIVO'].includes(a)).map(auditarCuenta);
+function auditarTodo(monthId){
+  return Object.keys(BAL).filter(a=>MOVS[a]!==undefined||['BBVA','CAIXA','TRM','TRJ','TRJA','EFECTIVO'].includes(a)).map(a=>auditarCuenta(a,monthId));
 }
 function fmtE(v){const s=Math.abs(v).toFixed(2);const[i,d]=s.split('.');return(v<0?'-':'')+'€'+parseInt(i).toLocaleString('es-ES',{useGrouping:true})+','+d;}
 let SALDOS_OCULTOS=false;
@@ -1011,12 +1053,18 @@ function showPendienteAccount(accId){
 // currentPndovAcc para que markPago() deje de intentar refrescarlo una vez
 // cerrado (evita trabajo/errores silenciosos sobre un modal ya invisible).
 function closePndov(){currentPndovAcc=null;document.getElementById('pndov').style.display='none';}
+// v137 -- recoloreado a la MISMA linea del sistema (Jofre, 23-sep): antes usaba
+// 5 colores sueltos (naranja/verde/morado/azul/gris) que no hacian juego con
+// el resto de la app. Ahora usa la paleta teal/verde/gris ya establecida en
+// el grafico Fijo/Variable del Historial de Jofre (--gd bright teal, un teal
+// oscuro nuevo, y --gy gris neutro), alternada para que segmentos vecinos en
+// la barra apilada no se confundan entre si.
 const AHORRO_DESTINOS=[
-  {key:'caixa',match:/Renting/i,label:'Caixa · Renting',color:'#FF9F0A'},
-  {key:'emergencia',match:/Emergencia/i,label:'BBVA · Fondo Emergencia',color:'#30D158'},
-  {key:'trj',match:/Fondo Mutuo/i,label:'Fondo Mutuo',color:'#BF5AF2'},
-  {key:'ibkr',match:/Inversi[oó]n/i,label:'IBKR · Inversión',color:'#0A84FF'},
-  {key:'vacaciones',match:/Vacaciones|Boda de Jeff/i,label:'TR J.A. · Vacaciones',color:'var(--gy)'}
+  {key:'caixa',match:/Renting/i,label:'Caixa · Renting',color:'var(--gd)'},
+  {key:'emergencia',match:/Emergencia/i,label:'BBVA · Fondo Emergencia',color:'#0D9488'},
+  {key:'trj',match:/Fondo Mutuo/i,label:'Fondo Mutuo',color:'var(--gy)'},
+  {key:'ibkr',match:/Inversi[oó]n/i,label:'IBKR · Inversión',color:'var(--gd)'},
+  {key:'vacaciones',match:/Vacaciones|Boda de Jeff/i,label:'TR J.A. · Vacaciones',color:'#0D9488'}
 ];
 function ahorroMatchesDestino(x,d){return x.key?x.key===d.key:d.match.test(x.l);}
 // T3 fix: un item de ahorro debe pertenecer a UN SOLO destino (el primero que
@@ -1043,7 +1091,7 @@ function nombreMesAhorro(id){
   if(AHORRO_HISTORICO_PREVIO[id])return AHORRO_HISTORICO_PREVIO[id].name;
   return id;
 }
-const COLOR_ESPECIAL='#FFD60A'; // dorado -- mismo tono de acento que ya usa el resto de la app
+const COLOR_ESPECIAL='#5EEAD4'; // v137: aqua/mint clara (misma familia teal) -- antes dorado, chocaba con el sistema
 function ahorroBreakdown(id){
   if(AHORRO_HISTORICO_PREVIO[id]){
     const h=AHORRO_HISTORICO_PREVIO[id];
@@ -1075,7 +1123,7 @@ function renderAhorroDetailInto(id){
       return{l:x.l,a:x.a,color:dest?dest.color:'#6B85A8',especial:x.tipo==='especial'};
     });
   }
-  el.innerHTML=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);font-weight:700;margin-bottom:6px">${nombreMesAhorro(id).toUpperCase()}</div>${rows.length?rows.map(x=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0"><div style="width:7px;height:7px;border-radius:2px;background:${x.especial?COLOR_ESPECIAL:x.color};flex-shrink:0;${x.especial?'box-shadow:0 0 0 2px rgba(255,214,10,.25)':''}"></div><div style="flex:1;font-size:11px;color:var(--t1)">${x.l}${x.especial?' <span style="color:var(--or);font-weight:700">· especial</span>':''}</div><div style="font-size:11px;font-weight:700;color:var(--t1)">${SALDOS_OCULTOS?'••••':fmtE(x.a)}</div></div>`).join(''):'<div style="font-size:10px;color:var(--t3);text-align:center;padding:8px 0">Sin datos este mes</div>'}</div>`;
+  el.innerHTML=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);font-weight:700;margin-bottom:6px">${nombreMesAhorro(id).toUpperCase()}</div>${rows.length?rows.map(x=>`<div style="display:flex;align-items:center;gap:6px;padding:3px 0"><div style="width:7px;height:7px;border-radius:2px;background:${x.especial?COLOR_ESPECIAL:x.color};flex-shrink:0;${x.especial?'box-shadow:0 0 0 2px rgba(94,234,212,.3)':''}"></div><div style="flex:1;font-size:11px;color:var(--t1)">${x.l}${x.especial?' <span style="color:var(--or);font-weight:700">· especial</span>':''}</div><div style="font-size:11px;font-weight:700;color:var(--t1)">${SALDOS_OCULTOS?'••••':fmtE(x.a)}</div></div>`).join(''):'<div style="font-size:10px;color:var(--t3);text-align:center;padding:8px 0">Sin datos este mes</div>'}</div>`;
 }
 function renderAhorroTileMassiel(){
   const wrap=document.getElementById('pm-ahorro-bars');if(!wrap)return;
