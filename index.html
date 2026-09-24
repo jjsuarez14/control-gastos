@@ -1711,7 +1711,15 @@ function buildMonthPagos(id){
     if(!(h.a>0))return;
     const tid=p+h.id;
     if(removedSet.has(tid))return;
-    list.push({id:tid,l:h.l,acc:'BBVA',amt:Math.round(h.a*100)/100,cat:'gasto',done:false,vacacion:true});
+    // v139 -- items con acc:'EFECTIVO' (ej. Regalo de Boda) se pagan en
+    // efectivo: se enrutan por efectivoItems para que sumen a "Retirar
+    // efectivo" en vez de generar un cargo directo a BBVA (confirmado por
+    // Jofre 24-sep-2026).
+    if(h.acc==='EFECTIVO'){
+      efectivoItems.push({label:h.l,total:Math.round(h.a*100)/100,inc:h.a,extra:{vacacion:true}});
+    }else{
+      list.push({id:tid,l:h.l,acc:'BBVA',amt:Math.round(h.a*100)/100,cat:'gasto',done:false,vacacion:true});
+    }
   });
   // Aplazados TDC pagados con cargo al Fondo Mutuo: NO son cuota individual
   // (no van a la pestana Cuotas ni a repartoMes -- ya estan cubiertos por el
@@ -1788,7 +1796,7 @@ function buildMonthPagos(id){
       const parte=esUltima?Math.round((ei.total-acumulado)*100)/100:Math.round((ei.total/nTareas)*100)/100;
       acumulado+=parte;
       const nombre=nTareas>1?(ei.label+' ('+(i+1)+'/'+nTareas+')'):ei.label;
-      pushDirect(nombre,'EFECTIVO',parte);
+      pushDirect(nombre,'EFECTIVO',parte,ei.extra);
     }
     efectivoSum+=ei.total;
   });
@@ -2270,7 +2278,7 @@ function onairDelMes(id){
 // ahorro 'Fondo Mutuo · Vacaciones'; acá van sep/oct confirmados por Jofre.
 const HOTEL_TAREAS={
   sep:[{id:'hotel-cumple-massiel',l:'Hotel - Cumpleaños de Massiel',a:89.56}],
-  oct:[{id:'hotel-boda-jeff-dani',l:'Hotel - Boda Jeff & Dani',a:163.92},{id:'regalo-boda-jeff-dani',l:'Regalo de Boda - Jeff & Dani',a:150}]
+  oct:[{id:'hotel-boda-jeff-dani',l:'Hotel - Boda Jeff & Dani',a:163.92},{id:'regalo-boda-jeff-dani',l:'Regalo de Boda - Jeff & Dani',a:150,acc:'EFECTIVO'}]
 };
 // FONDO_MUTUO_CAIXA: aplazados TDC (Caixa) pagados con cargo al Fondo Mutuo.
 // No aparecen en la pestana Cuotas ni en repartoMes (ver comentario en
