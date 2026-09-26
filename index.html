@@ -1508,7 +1508,7 @@ function renderFondoEmergenciaDetail(){
   });
   html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos todavia</div>';
   html+='</div>';
-  if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA')">+ Registrar movimiento</button></div>`;
+  if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA');reg.category='Fondo Emergencia';renderReg();">+ Registrar movimiento</button></div>`;
   document.getElementById('fmov-c').innerHTML=html;
 }
 function showFondoEmergenciaDetail(){fmovLastFn='emergencia';renderFondoEmergenciaDetail();document.getElementById('fmov').style.display='block';}
