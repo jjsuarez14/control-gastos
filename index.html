@@ -4194,6 +4194,50 @@ window.addEventListener('online',()=>{
     saveState();
   }
 });
+function buildPendingSnap(){
+  try{
+    return {
+      ts:Date.now(),
+      movs:JSON.parse(JSON.stringify(MOVS)),
+      pagos:JSON.parse(JSON.stringify(MONTH_PAGOS)),
+      detOv:JSON.parse(JSON.stringify(DET_MONTH_OVERRIDES)),
+      detExtra:JSON.parse(JSON.stringify(DET_EXTRA)),
+      bal:JSON.parse(JSON.stringify(BAL)),
+      caixaTdc:JSON.parse(JSON.stringify(CAIXA_TDC)),
+      baselineMovs:JSON.parse(JSON.stringify(MOVS_BASELINE)),
+      baselinePagos:JSON.parse(JSON.stringify(MONTH_PAGOS_BASELINE)),
+      baselineDetOv:JSON.parse(JSON.stringify(DET_OV_BASELINE)),
+      baselineDetExtra:JSON.parse(JSON.stringify(DET_EXTRA_BASELINE)),
+      baselineBal:JSON.parse(JSON.stringify(BAL_BASELINE)),
+      baselineCaixaTdc:JSON.parse(JSON.stringify(CAIXA_TDC_BASELINE))
+    };
+  }catch(e){return null;}
+}
+function hasUnsavedChanges(){
+  try{
+    return JSON.stringify(MOVS)!==JSON.stringify(MOVS_BASELINE)
+      ||JSON.stringify(BAL)!==JSON.stringify(BAL_BASELINE)
+      ||JSON.stringify(MONTH_PAGOS)!==JSON.stringify(MONTH_PAGOS_BASELINE)
+      ||JSON.stringify(DET_MONTH_OVERRIDES)!==JSON.stringify(DET_OV_BASELINE)
+      ||JSON.stringify(DET_EXTRA)!==JSON.stringify(DET_EXTRA_BASELINE)
+      ||JSON.stringify(CAIXA_TDC)!==JSON.stringify(CAIXA_TDC_BASELINE);
+  }catch(e){return false;}
+}
+// v140b -- defensa contra suspension de pestana en movil: si el usuario
+// registra algo y minimiza/bloquea el telefono antes de que el guardado
+// async a Firestore termine, el navegador puede congelar la pestana sin que
+// salte ningun error (nada que el catch de saveState() pueda atrapar) -- el
+// cambio se pierde en silencio y solo se nota despues por diferencia de
+// saldos. Por eso, apenas la pestana se oculta o se abandona con cambios sin
+// confirmar, se marca preventivamente como sin sincronizar con una foto
+// completa del estado -- asi, si el guardado en curso nunca termina, el
+// aviso + reintento ya estan armados la proxima vez que se abra la app.
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&hasUnsavedChanges())markPendingSync(buildPendingSnap());
+});
+window.addEventListener('pagehide',()=>{
+  if(hasUnsavedChanges())markPendingSync(buildPendingSnap());
+});
 /* ---- Firebase (persistencia compartida Jofre/Massiel) ---- */
 let db=null,_fbDoc,_fbSetDoc,_fbGetDoc,_fbDeleteDoc,_fbOnSnapshot,_fbRunTransaction;
 const fbReady=(async()=>{
