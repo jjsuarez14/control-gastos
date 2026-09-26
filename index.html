@@ -841,7 +841,7 @@ function toNum(v){return parseFloat(String(v==null?'':v).trim().replace(',','.')
 // en vez de asumir en silencio que es de este mes (el bug real de Barbería/
 // Netflix, ver v78/v81), le pregunta a Jofre si es un pago atrasado de un
 // mes anterior y, si confirma, etiqueta el movimiento con el mes correcto.
-function regMov(acc,label,amt,plus,cat,group,mesIdOverride){
+function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag){
   BAL[acc]=Math.round((BAL[acc]+(plus?amt:-amt))*100)/100;
   const dt=__movDateOverride||new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS[acc]=MOVS[acc]||[];
@@ -849,7 +849,9 @@ function regMov(acc,label,amt,plus,cat,group,mesIdOverride){
   // (ACTIVE_ID), no a qué mes calendario real fue registrado. Necesario
   // porque se suele trabajar "adelantado" (ej. mes activo=septiembre
   // mientras la fecha real todavía es agosto) -- ver fix en movBelongsToMonth.
-  const __rec={dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID};MOVS[acc].unshift(__rec);
+  // v141 -- fondoTag: origen del dinero (ej. 'emergencia'), independiente de
+  // `cat` -- ver fondoEmergenciaConsumidoTotal.
+  const __rec={dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID,fondo:fondoTag||undefined};MOVS[acc].unshift(__rec);
   updTile();
 }
 function regCaixaCard(label,amt){
@@ -1342,7 +1344,7 @@ function fondoMutuoEnCuenta(monthId){
   if(!fondoMutuoMesFinanciado(monthId))return 0;
   return fondoMutuoAcumuladoConPiso(monthId,mid=>fondoMutuoConsumido(mid)-fondoMutuoPendienteDelMes(mid));
 }
-// ── FONDO EMERGENCIA (v92) ────────────────────────────────────────────────
+// ── FONDO EMERGENCIA (v92, retag v141) ──────────────────────────────────────
 // Igual que el Fondo Mutuo (también es ACUMULATIVO -- ver
 // fondoMutuoAcumuladoConPiso arriba, fix del 9-sep-2026), el Fondo Emergencia
 // se arma mes a mes con su parte del reparto
@@ -1352,12 +1354,21 @@ function fondoMutuoEnCuenta(monthId){
 // disponibleCuenta).
 // Deliberadamente SIN tareas pendientes programadas (a diferencia de
 // fondoMutuoPendientes/FONDO_MUTUO_CATS): no hay gastos calendarizados
-// contra este fondo, solo registros ad-hoc cuando ocurre una emergencia real
-// -- se registran con categoría 'Fondo Emergencia' desde "Registrar
-// movimiento" (mismo wizard, agregada a CATS) y quedan como movimiento
-// normal de BBVA, nunca como tarea "pendiente". Esto evita por diseño la
-// clase de bug que costó resolver en Fondo Mutuo entre v78-v81 (doble
-// conteo disponible real / pdte. de cobro / saldo bruto de BBVA).
+// contra este fondo, solo registros ad-hoc cuando ocurre una emergencia real.
+// v141 -- FIX (Jofre, 26-sep-2026): antes, "consumido" dependía de que la
+// CATEGORÍA del movimiento fuera literalmente 'Fondo Emergencia' -- pero un
+// retiro real del fondo puede ser para cualquier categoría (Carro/Moto,
+// Salud, etc.), y forzar la categoría rompía la clasificación real del
+// gasto. Ahora el origen del dinero se marca con un campo aparte
+// (mv.fondo==='emergencia', ver regMov/saveReg), independiente de la
+// categoría elegida -- se activa solo al registrar desde la pantalla de
+// detalle del Fondo Emergencia. La categoría 'Fondo Emergencia' sigue
+// existiendo como opción manual (compat + casos sin categoría mejor), así
+// que fondoEmergenciaConsumidoTotal() cuenta CUALQUIERA de las dos señales.
+// Sigue sin tareas pendientes programadas ni "aplazado" -- solo movimiento
+// normal de BBVA. Esto evita por diseño la clase de bug que costó resolver
+// en Fondo Mutuo entre v78-v81 (doble conteo disponible real / pdte. de
+// cobro / saldo bruto de BBVA).
 function fondoEmergenciaEntradas(monthId){
   // v92-fix -- excluye ítems legacy destinados a TR J.A. (ej. "Fondo
   // Emergencia (TR J.A.)" de junio, a:100, aho1 del template base DET.ahorro):
@@ -1388,7 +1399,7 @@ function fondoEmergenciaConsumidoTotal(){
   let c=0;
   (MOVS.BBVA||[]).forEach(mv=>{
     if(mv.t)return; // solo salidas
-    if(mv.cat!=='Fondo Emergencia')return;
+    if(mv.fondo!=='emergencia'&&mv.cat!=='Fondo Emergencia')return; // v141: origen por flag O por categoría manual
     c+=Math.abs(moneyFromStr(mv.a));
   });
   return Math.round(c*100)/100;
@@ -1503,12 +1514,12 @@ function renderFondoEmergenciaDetail(){
   });
   (MOVS.BBVA||[]).slice().reverse().forEach(mv=>{
     if(mv.t)return;
-    if(mv.cat!=='Fondo Emergencia')return;
+    if(mv.fondo!=='emergencia'&&mv.cat!=='Fondo Emergencia')return; // v141: misma señal que fondoEmergenciaConsumidoTotal
     rows+=rowHTML(mv.dt,mv.l,mv.a,false);
   });
   html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos todavia</div>';
   html+='</div>';
-  if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA');reg.category='Fondo Emergencia';renderReg();">+ Registrar movimiento</button></div>`;
+  if(!massielView)html+=`<div style="padding:14px 16px;border-top:1px solid var(--bd)"><button class="btng" onclick="document.getElementById('fmov').style.display='none';openReg('BBVA');reg.fondoEmergencia=true;renderReg();">+ Registrar movimiento</button></div>`;
   document.getElementById('fmov-c').innerHTML=html;
 }
 function showFondoEmergenciaDetail(){fmovLastFn='emergencia';renderFondoEmergenciaDetail();document.getElementById('fmov').style.display='block';}
@@ -3965,6 +3976,7 @@ function renderRegSummary(){
   if(reg.isCuota&&reg.cType==='frac'){const cuotasTotal=reg.cuotasIguales?reg.cNum*reg.cuotaMonto:reg.cuotaMontos.reduce((s,x)=>s+x,0);const total=(reg.amount||0)+cuotasTotal;const hasHoy=reg.amount>0;if(hasHoy)rows.push(['Cuota 1 (hoy)',fmtE(reg.amount)]);if(reg.cuotasIguales){rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+' × '+fmtE(reg.cuotaMonto)]);}else{rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+(hasHoy?' cuotas adicionales variables':' cuotas variables')]);}rows.push(['Total estimado',fmtE(total)]);}
   else{rows.push(['Monto',fmtE(reg.amount)]);}
   rows.push(['Categoría',reg.category]);rows.push(['Cuenta pago',accName]);
+  if(reg.fondoEmergencia)rows.push(['Origen del dinero','Fondo de Emergencia (se descuenta del fondo)']);
   if(reg.group){rows.push(['Responsabilidad',{jofre:'Solo Jofre',massiel:'Solo Massiel',compartida:'Compartido'}[reg.group]||reg.group]);}
   if(reg.isCuota){rows.push(['Modalidad',reg.cType==='frac'?'Fraccionado':'Aplazado fin de mes']);rows.push(['Responsabilidad',reg.shared?'Compartido · 50/50':'Solo Jofre']);if(reg.cType==='frac'){rows.push(['Cuotas cobran en',cuotaCuenta]);if(reg.mesInicio)rows.push(['Inician en',MONTHS[reg.mesInicio]?MONTHS[reg.mesInicio].name:'—']);}}
   return `<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CONFIRMAR</div>`+rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)"><div style="font-size:12px;color:var(--t2)">${r[0]}</div><div style="font-size:12px;color:var(--t1);font-weight:600;text-align:right">${r[1]}</div></div>`).join('');
@@ -4058,7 +4070,7 @@ function regDateISO(d){d=d||reg.customDate||new Date();return d.getFullYear()+'-
     // tareas atrasadas de otros meses -- cada tarea debe quedar cerrada en
     // el mes al que pertenece. Vuelve al comportamiento simple: siempre
     // mesId:ACTIVE_ID, sin preguntar.
-    regMov(reg.account,label,reg.amount,false,reg.category,reg.group);
+    regMov(reg.account,label,reg.amount,false,reg.category,reg.group,null,reg.fondoEmergencia?'emergencia':undefined);
   }
   else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category],{offset:0,tdcRelease:esCaixaTDC});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
