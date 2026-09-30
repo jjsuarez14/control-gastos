@@ -666,7 +666,22 @@ let nominaReg=true;
 // estos valores son los que hacen que sistema == banca. Sigue siendo la base
 // del primer mes trackeado mientras no exista un cierre previo.
 const SALDO_APERTURA={BBVA:1009.33,CAIXA:104.17,TRJ:0.19,TRM:-176.07,TRJA:0,EFECTIVO:0};
-const MONTH_CIERRE={}; // {monthId:{acc:saldoVerificado,...}} -- se llena solo con cerrarMes()
+const MONTH_CIERRE={}; // {monthId:{acc:saldoVerificado,...}} -- se llena con cerrarMes() (automatico en advanceMonth) y se PERSISTE (v143)
+let CIERRE_BASELINE={};
+// v143 -- cuentas reales del sistema. Toda clave de BAL fuera de esta lista es
+// basura (hubo un "[object Object]":null en el estado de produccion).
+const CUENTAS_VALIDAS=['BBVA','CAIXA','TRM','TRJ','TRJA','EFECTIVO','IBKR'];
+function limpiarSaldos(o){
+  if(!o)return o;
+  Object.keys(o).forEach(k=>{if(!CUENTAS_VALIDAS.includes(k))delete o[k];});
+  return o;
+}
+// v143 -- una fila que NO mueve caja real (la compra con tarjeta TDC y el
+// memo "(aplazado)": el dinero sale del banco recien cuando se liquida la
+// tarjeta). Se excluye de la auditoria de caja. Basado en la etiqueta (y en
+// la marca noCaja de las filas nuevas) para cubrir tambien filas historicas
+// sin migrar datos.
+function esMovNoCaja(mv){return !!(mv&&(mv.noCaja||/\((TDC|aplazado)\)$/.test(mv.l||'')));}
 function sumaNetaMovs(acc){
   // v37 — FIX (Opción B, decidida por Jofre): clasificar entrada/salida por
   // el signo REAL de mv.a, no por el flag mv.t (que no es confiable: puede
@@ -675,7 +690,7 @@ function sumaNetaMovs(acc){
   // 20,00€ en auditarCuenta aunque el saldo real siempre estuvo correcto).
   // Nota v137: ya NO es la base de auditarCuenta (ver sumaNetaMovsMes abajo);
   // se deja como utilidad general de todo el historial de la cuenta.
-  const list=MOVS[acc]||[];
+  const list=(MOVS[acc]||[]).filter(mv=>!esMovNoCaja(mv));
   let entradas=0,salidas=0;
   list.forEach(mv=>{
     const val=parseEuro(mv.a);
@@ -689,7 +704,7 @@ function sumaNetaMovsMes(acc,monthId){
   // Igual que sumaNetaMovs pero acotado a los movimientos de UN mes (mesId ya
   // se guarda en cada movimiento al registrarse) -- es la base real del cierre
   // mes a mes.
-  const list=(MOVS[acc]||[]).filter(mv=>mv.mesId===monthId);
+  const list=(MOVS[acc]||[]).filter(mv=>mv.mesId===monthId&&!esMovNoCaja(mv));
   let entradas=0,salidas=0;
   list.forEach(mv=>{
     const val=parseEuro(mv.a);
@@ -699,13 +714,31 @@ function sumaNetaMovsMes(acc,monthId){
   salidas=Math.round(salidas*100)/100;
   return {entradas,salidas,neto:Math.round((entradas-salidas)*100)/100};
 }
-function cerrarMes(monthId){
-  // Congela el saldo ACTUAL de cada cuenta como cierre verificado de monthId.
-  // Llamar SOLO después de confirmar ese saldo contra el extracto bancario
-  // real -- pasa a ser la apertura del mes siguiente en auditarCuenta.
-  MONTH_CIERRE[monthId]=Object.assign({},BAL);
-  console.log('Mes '+monthId+' cerrado con:',MONTH_CIERRE[monthId]);
+function cerrarMes(monthId,saldos,opts){
+  // v143 -- Congela el saldo de CADA cuenta como cierre de monthId; es la
+  // apertura del mes siguiente en auditarCuenta. `saldos` (opcional) son los
+  // saldos CONFIRMADOS contra el banco y tienen prioridad sobre BAL.
+  // advanceMonth lo invoca solo al avanzar de mes (antes de la nomina), y el
+  // resultado se persiste en Firestore (antes vivia solo en memoria y nunca se
+  // llenaba, por eso la auditoria comparaba contra SALDO_APERTURA de julio).
+  opts=opts||{};
+  const base={};
+  CUENTAS_VALIDAS.forEach(k=>{base[k]=Math.round((BAL[k]||0)*100)/100;});
+  if(saldos)Object.keys(saldos).forEach(k=>{
+    const v=Number(saldos[k]);
+    if(CUENTAS_VALIDAS.includes(k)&&isFinite(v))base[k]=Math.round(v*100)/100;
+  });
+  MONTH_CIERRE[monthId]=base;
+  if(!opts.noSave)saveState();
   return MONTH_CIERRE[monthId];
+}
+function auditPanelHTML(acc){
+  try{
+    const a=auditarCuenta(acc,ACTIVE_ID);
+    const f=v=>SALDOS_OCULTOS?'••••':fmtE(v);
+    const ok=a.cuadra;const col=ok?'var(--tl)':'var(--rd)';
+    return `<div style="padding:0 16px 10px"><div style="padding:9px 11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);font-size:11px;color:var(--t2);line-height:1.5"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:3px">AUDITORÍA DEL MES · ${a.aperturaFuente==='SALDO_APERTURA'?'sin cierre previo (apertura jul)':'apertura = '+a.aperturaFuente}</div>Apertura ${f(a.apertura)} + neto ${f(a.neto)} = esperado ${f(a.esperado)}<br>Saldo ${f(a.saldo)} · <b style="color:${col}">${ok?'cuadra ✓':'desfase '+f(a.desfase)}</b></div></div>`;
+  }catch(e){return '';}
 }
 function auditarCuenta(acc,monthId){
   monthId=monthId||ACTIVE_ID;
@@ -848,7 +881,8 @@ function toNum(v){return parseFloat(String(v==null?'':v).trim().replace(',','.')
 // en vez de asumir en silencio que es de este mes (el bug real de Barbería/
 // Netflix, ver v78/v81), le pregunta a Jofre si es un pago atrasado de un
 // mes anterior y, si confirma, etiqueta el movimiento con el mes correcto.
-function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag){
+function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag,extra){
+  if(!CUENTAS_VALIDAS.includes(acc)){console.error('regMov: cuenta invalida',acc,label);toast('Cuenta inválida, movimiento NO registrado','var(--rd)');return;}
   BAL[acc]=Math.round((BAL[acc]+(plus?amt:-amt))*100)/100;
   const dt=__movDateOverride||new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS[acc]=MOVS[acc]||[];
@@ -858,14 +892,14 @@ function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag){
   // mientras la fecha real todavía es agosto) -- ver fix en movBelongsToMonth.
   // v141 -- fondoTag: origen del dinero (ej. 'emergencia'), independiente de
   // `cat` -- ver fondoEmergenciaConsumidoTotal.
-  const __rec={dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID,fondo:fondoTag||undefined};MOVS[acc].unshift(__rec);
+  const __rec={dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID,fondo:fondoTag||undefined};if(extra)Object.assign(__rec,extra);MOVS[acc].unshift(__rec);
   updTile();
 }
 function regCaixaCard(label,amt){
   CAIXA_TDC.disponible=Math.max(0,Math.round((CAIXA_TDC.disponible-amt)*100)/100);
   const dt=new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS.CAIXA=MOVS.CAIXA||[];
-  MOVS.CAIXA.unshift({dt:ds,l:label+' (TDC)',a:'-'+fmtE(amt),t:false,mesId:ACTIVE_ID});
+  MOVS.CAIXA.unshift({dt:ds,l:label+' (TDC)',a:'-'+fmtE(amt),t:false,mesId:ACTIVE_ID,noCaja:true});
   updTile();
 }
 const MONTH_PAGOS={
@@ -935,7 +969,7 @@ async function markPago(id){
     regMov('BBVA',p.l,p.amt,true);renderPrevision();
   }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);}
   else if(p.cat==='retiro'){regMov('BBVA',p.l,p.amt,false);regMov('EFECTIVO',p.l,p.amt,true);}
-  else{regMov(p.acc,p.l,p.amt,false);if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}}
+  else{regMov(p.acc,p.l,p.amt,false,undefined,undefined,undefined,undefined,p.tdcRelease?{noGasto:true,pagoId:p.id}:{pagoId:p.id});if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}}
   updBbvaBadge();updPrevCard();updTile();if(typeof renderMaTile==='function')renderMaTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
   // v69 (28-ago) -- el modal "Pendiente de cobro" (pndov, ej. abierto desde
   // "Pdte. cobro" en la tarjeta BBVA) renderizaba su lista UNA vez al abrir y
@@ -988,6 +1022,7 @@ function renderAccountOverlay(accId){
   // (flex:1/overflow-y:auto), y el boton de registrar queda fijo debajo,
   // siempre visible y siempre alcanzable.
   let bodyHtml=balHTML;
+  if(!mass)bodyHtml+=auditPanelHTML(accId);
   let pend=[],waitMsg=null;
   if(mass){/* Massiel no ve tareas de gestion en ninguna cuenta */}
   else if(accId==='BBVA'){if(nominaReg)pend=tasksFor('BBVA');}
@@ -1905,6 +1940,10 @@ function ensureMonthsAhead(fromId,n){
 let HISTORIAL=[];
 async function advanceMonth(newId,nominaAmt){
   const oldId=ACTIVE_ID;
+  // v143 -- cierre automatico por cuenta del mes que termina, ANTES de registrar la nomina
+  // del mes nuevo (asi el cierre es el saldo real previo a la nomina). No pisa un cierre
+  // ya confirmado a mano.
+  if(!MONTH_CIERRE[oldId])cerrarMes(oldId,null,{noSave:true});
   HISTORIAL.unshift({id:oldId,name:MONTHS[oldId].name,jofre:MONTHS[oldId].jofre,massiel:MONTHS[oldId].massiel});
   ensureMonthDefined(newId);
   // TC del mes (v56): se busca y congela ACÁ, al registrar la nómina / iniciar
@@ -2783,8 +2822,9 @@ function histBarsHTML(){
 function histAvgStatsHTML(meses){
   histData=meses.map(id=>{
     const total=mesGastoTotalReal(id);
-    const variable=Math.round(variablesNoCuotaTotal(id)*100)/100;
-    const fijo=Math.max(0,Math.round((total-variable)*100)/100);
+    const fv=gastoFijoVariable(id);
+    const variable=fv.variable;
+    const fijo=fv.fijo;
     return {id,name:MONTHS[id]?MONTHS[id].name:id,total,fijo,variable};
   });
   if(histSelIdx===null||histSelIdx>=histData.length)histSelIdx=histData.length-1;
@@ -3127,9 +3167,9 @@ function serviciosEjecutadosDelMes(id){
   }
   return out;
 }
-function categoriaFijosDetalle(cat,id){
+function categoriaFijosDetalle(cat,id,forzarPlan){
   const cs=catsBySuffix(id);const out=[];
-  const futuro=esMesFuturo(id);
+  const futuro=!!forzarPlan||esMesFuturo(id); // v143 -- forzarPlan: monto PREVISTO (Previsión) aunque el mes ya esté en curso
   if(esJunioHistorico(id)){
     // Junio pre-sistema: total histórico por categoría (una línea de resumen).
     // v59 -- en categorías ITEM_FILTERED (Personales/Deporte), Massiel ve
@@ -3228,7 +3268,8 @@ function categoriaFijosDetalle(cat,id){
     // Cuotas de esta categoría que YA se pagaron (su tarea done). Si la cuota
     // es 100% de Jofre ('Solo Jofre'), no se muestra en la vista de Massiel --
     // mismo criterio que ya aplicaba la rama de mes futuro más abajo.
-    cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
+    // v143 -- la liquidacion de una compra aplazada (tdcRelease/autofinanciado) NO es gasto del mes: se conto en la compra.
+    cuotasFor(id).filter(c=>!(c.tdcRelease||c.liquidacion)).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
       if(tareaGastoDoneExacta(id,new RegExp(c.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i')))out.push({l:c.l,a:moneyFromStr(c.amt),drill:null});
     });
     return out.filter(x=>x.a>0);
@@ -3281,7 +3322,7 @@ function categoriaFijosDetalle(cat,id){
   }else if(cat==='Personales'){
     itemsForKey('personales',id).filter(x=>x.id!=='per1'&&x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }
-  cuotasFor(id).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
+  cuotasFor(id).filter(c=>!(c.tdcRelease||c.liquidacion)).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
     out.push({l:c.l,a:moneyFromStr(c.amt),drill:null});
   });
   return out.filter(x=>x.a>0);
@@ -3376,14 +3417,33 @@ function esDevolucion(mv){
   const l=mv.l||'';
   return DEVOLUCION_LABEL_RE.test(l)&&!NO_ES_DEVOLUCION_RE.test(l);
 }
+// v143 -- REGLA DE ORO "un gasto se cuenta UNA sola vez" (Jofre 30-sep-2026).
+// Una compra APLAZADA con la TDC de Caixa genera 3 movimientos: (1) "(TDC)"
+// baja el disponible de la tarjeta, (2) "(aplazado)" = la COMPRA, con su
+// categoria real, y (3) al liquidarla, la fila "<desc> · 1/1 · ÚLTIMA" (y su
+// tarea del mes siguiente). El gasto se cuenta SOLO en (2), en el mes de la
+// compra; (1) y (3) mueven caja pero no son gasto. Antes los tres sumaban
+// (sep sobrestimado 512,64 EUR; oct 256,32 EUR de "gasto real" ya descontado).
+function liquidacionTDCLabels(){
+  const set=new Set();
+  MONTH_ORDER.forEach(mid=>{try{cuotasFor(mid).forEach(c=>{if(c.tdcRelease||c.liquidacion)set.add(c.l+' · '+c.prog);});}catch(e){}});
+  return set;
+}
+function esMovNoGasto(mv,liqSet){
+  if(mv.noGasto)return true;
+  const l=mv.l||'';
+  if(/\(TDC\)$/.test(l)&&mv.mesId)return true; // filas nuevas; las historicas sin mesId conservan su tratamiento
+  return !!(liqSet&&liqSet.has(l));
+}
 function movimientosVariablesDelMes(id){
-  const tareas=tareaLabelsForMonth(id);const out=[];
+  const tareas=tareaLabelsForMonth(id);const out=[];const liqSet=liquidacionTDCLabels();
   Object.keys(MOVS).forEach(acc=>{
     (MOVS[acc]||[]).forEach(mv=>{
       const devol=esDevolucion(mv);
       // Transferencias internas (t:true) se ignoran, SALVO que sean devoluciones.
       if(mv.t&&!devol)return;
       if(tareas.has(mv.l))return;
+      if(esMovNoGasto(mv,liqSet))return;
       if(esMovimientoRevertido(mv))return;
       if(!movBelongsToMonth(mv,id))return;
       const cat=resolverCategoriaMovimiento(mv,acc);
@@ -3568,7 +3628,8 @@ function catMoneySplit(n,decSize,decColor){
 function categoriaRingHTML(id){
   const totals=categoriasVisibles().map(c=>({c,total:categoriaGroupTotal(c,id)})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
   const totalMes=totals.reduce((s,x)=>s+x.total,0);
-  const variable=Math.min(totalMes,Math.max(0,variablesNoCuotaTotal(id)));
+  const fv=gastoFijoVariable(id,totals.map(x=>x.c));
+  const variable=Math.max(0,Math.min(totalMes,fv.variable));
   const fijo=Math.max(0,Math.round((totalMes-variable)*100)/100);
   const fijoPct=totalMes>0?Math.max(0,Math.min(100,Math.round((fijo/totalMes)*100))):0;
   const varPct=totalMes>0?100-fijoPct:0;
@@ -3607,6 +3668,48 @@ function categoriaRingHTML(id){
     ${legendHTML}
   </div>`;
 }
+// ── v143 -- FIJO / VARIABLE y SEMÁFORO de categorías (Jofre 30-sep-2026) ─────
+// FIJO = lo que está en PREVISIÓN (el plan del mes por categoría); VARIABLE =
+// lo registrado de más / adicional. Por categoría: fijo = min(gasto real,
+// previsto), variable = real − fijo, así fijo + variable = gasto real exacto
+// (antes variable era "registros sueltos" y fijo el residuo: los depósitos de
+// Mercado/Compartir Familiar contaban como variable).
+function categoriaPrevistoMes(cat,id){
+  try{return Math.round(categoriaFijosDetalle(cat,id,true).reduce((s,x)=>s+x.a,0)*100)/100;}catch(e){return 0;}
+}
+function gastoFijoVariable(id,cats){
+  cats=cats||CATS;let fijo=0,variable=0,total=0;
+  cats.forEach(c=>{
+    const t=categoriaGroupTotal(c,id);if(!t)return;
+    const prev=esMesFuturo(id)?t:categoriaPrevistoMes(c,id);
+    const f=t>0?Math.min(t,Math.max(0,prev)):0;
+    fijo+=f;variable+=t-f;total+=t;
+  });
+  fijo=Math.round(fijo*100)/100;variable=Math.round(variable*100)/100;total=Math.round(total*100)/100;
+  return {fijo,variable,total};
+}
+// Asignación mensual por categoría para el semáforo. Prioridad: (1) asignación
+// fijada por Jofre (CAT_ASIGNACION), (2) lo previsto en Previsión, (3) promedio
+// de los meses anteriores con registro en esa categoría.
+const CAT_ASIGNACION={'Carro/Moto':400};
+function asignacionCategoria(cat,id){
+  if(cat==='Ahorro'||cat==='Fondo Emergencia')return null; // ahorrar de más no es sobregasto: sin semáforo
+  if(CAT_ASIGNACION[cat]>0)return CAT_ASIGNACION[cat];
+  const prev=categoriaPrevistoMes(cat,id);
+  if(prev>0)return prev;
+  const idx=MONTH_ORDER.indexOf(id);
+  const vals=MONTH_ORDER.slice(0,Math.max(0,idx)).map(m=>categoriaGroupTotal(cat,m)).filter(v=>v>0);
+  return vals.length?Math.round(vals.reduce((s,v)=>s+v,0)/vals.length*100)/100:null;
+}
+// ≤80% verde · 80–100% ámbar · >100% rojo · >125% súper rojo
+function semaforoCategoria(total,asig){
+  if(!(asig>0))return null;
+  const r=total/asig;
+  if(r>1.25)return {lvl:'super',color:'#FF1744',label:'SÚPER ROJO',r};
+  if(r>1)return {lvl:'rojo',color:'#EF4444',label:'ROJO',r};
+  if(r>0.8)return {lvl:'ambar',color:'#F5A623',label:'ÁMBAR',r};
+  return {lvl:'verde',color:'#30D158',label:'VERDE',r};
+}
 function categoriaGridHTML(id){
   const totals=categoriasVisibles().map(c=>({c,total:categoriaGroupTotal(c,id)})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
   const totalMes=totals.reduce((s,x)=>s+x.total,0);
@@ -3615,8 +3718,15 @@ function categoriaGridHTML(id){
     const pct2=totalMes?Math.round((x.total/totalMes)*100):0;
     const color=CAT_DONUT_PALETTE[x.c]||CATS_COLORS[x.c]||'#9CA3AF';
     const emoji=CATS_EMOJI[x.c]||'•';
-    const rM=18,circM=2*Math.PI*rM,lenM=(pct2/100)*circM;
-    return `<div onclick="showCategoriaNivel2('${id}','${x.c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer"><div style="width:40px;height:40px;position:relative;display:flex;align-items:center;justify-content:center"><svg width="40" height="40" viewBox="0 0 40 40" style="position:absolute;inset:0"><circle cx="20" cy="20" r="${rM}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="20" cy="20" r="${rM}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${lenM.toFixed(1)} ${(circM-lenM).toFixed(1)}" transform="rotate(-90 20 20)"/></svg><span style="font-size:14px;position:relative">${emoji}</span></div><div style="font-size:9.5px;font-weight:700;color:#fff;text-align:center;line-height:1.15">${x.c}</div><div style="font-family:var(--fd);font-size:10.5px;font-weight:800;color:${color}">${SALDOS_OCULTOS?'••••':fmtE(x.total)}</div></div>`;
+    // v143 -- anillo = gasto / asignación (no % del total del mes) y color por semáforo.
+    const asig=esMesFuturo(id)?null:asignacionCategoria(x.c,id);
+    const sem=semaforoCategoria(x.total,asig);
+    const ringPct=sem?Math.min(100,Math.round(sem.r*100)):pct2;
+    const ringColor=sem?sem.color:color;
+    const rM=18,circM=2*Math.PI*rM,lenM=(ringPct/100)*circM;
+    const subHTML=sem?`<div style="font-size:8.5px;font-weight:700;color:${sem.color};line-height:1.1">${Math.round(sem.r*100)}% de ${SALDOS_OCULTOS?'••••':fmtE(asig)}${sem.lvl==='super'?' ‼':''}</div>`:'';
+    const glow=sem&&sem.lvl==='super'?`filter:drop-shadow(0 0 4px ${sem.color})`:'';
+    return `<div onclick="showCategoriaNivel2('${id}','${x.c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer"><div style="width:40px;height:40px;position:relative;display:flex;align-items:center;justify-content:center"><svg width="40" height="40" viewBox="0 0 40 40" style="position:absolute;inset:0"><circle cx="20" cy="20" r="${rM}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="20" cy="20" r="${rM}" fill="none" stroke="${ringColor}" stroke-width="${sem&&sem.lvl==='super'?5:4}" stroke-linecap="round" stroke-dasharray="${lenM.toFixed(1)} ${(circM-lenM).toFixed(1)}" transform="rotate(-90 20 20)" style="${glow}"/></svg><span style="font-size:14px;position:relative">${emoji}</span></div><div style="font-size:9.5px;font-weight:700;color:#fff;text-align:center;line-height:1.15">${x.c}</div><div style="font-family:var(--fd);font-size:10.5px;font-weight:800;color:${sem?sem.color:color}">${SALDOS_OCULTOS?'••••':fmtE(x.total)}</div>${subHTML}</div>`;
   }).join('');
   return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px">${gridCards}</div>`;
 }
@@ -3964,7 +4074,7 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
     const numCuota=n+offset;              // 2,3,... si hubo pago hoy; 1,2,... si no
     const esUltima=numCuota===totalCuotas;
     MONTHS[mid].cuotas=MONTHS[mid].cuotas||[];
-    MONTHS[mid].cuotas.push({l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false,tdcRelease:!!(opts&&opts.tdcRelease)});
+    MONTHS[mid].cuotas.push({l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false,tdcRelease:!!(opts&&opts.tdcRelease),liquidacion:!!(opts&&opts.aplazado)});
     touched.push(mid);
   }
   touched.forEach(refreshMonthPagosPreservingState);
@@ -4089,7 +4199,7 @@ function regDateISO(d){d=d||reg.customDate||new Date();return d.getFullYear()+'-
     // mesId:ACTIVE_ID, sin preguntar.
     regMov(reg.account,label,reg.amount,false,reg.category,reg.group,null,reg.fondoEmergencia?'emergencia':undefined);
   }
-  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category],{offset:0,tdcRelease:esCaixaTDC});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
+  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID,noCaja:true});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category],{offset:0,tdcRelease:esCaixaTDC,aplazado:true});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
   else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
   // v28 — Al terminar de registrar, devolver al usuario a DONDE ESTABA:
@@ -4203,6 +4313,7 @@ function replayPendingDelta(){
       const merged=mergeDetObjConDelta(DET_MONTH_OVERRIDES,pd.baselineDetOv,pd.detOv);
       Object.keys(merged).forEach(k=>{DET_MONTH_OVERRIDES[k]=merged[k];});
     }
+    if(pd.cierre)Object.keys(pd.cierre).forEach(mid=>{if(!MONTH_CIERRE[mid])MONTH_CIERRE[mid]=pd.cierre[mid];});
     if(pd.detExtra){
       const mergedEx=mergeDetObjConDelta(DET_EXTRA,pd.baselineDetExtra,pd.detExtra);
       Object.keys(mergedEx).forEach(k=>{DET_EXTRA[k]=mergedEx[k];});
@@ -4233,6 +4344,8 @@ function buildPendingSnap(){
       detExtra:JSON.parse(JSON.stringify(DET_EXTRA)),
       bal:JSON.parse(JSON.stringify(BAL)),
       caixaTdc:JSON.parse(JSON.stringify(CAIXA_TDC)),
+      cierre:JSON.parse(JSON.stringify(MONTH_CIERRE)),
+      baselineCierre:JSON.parse(JSON.stringify(CIERRE_BASELINE)),
       baselineMovs:JSON.parse(JSON.stringify(MOVS_BASELINE)),
       baselinePagos:JSON.parse(JSON.stringify(MONTH_PAGOS_BASELINE)),
       baselineDetOv:JSON.parse(JSON.stringify(DET_OV_BASELINE)),
@@ -4249,7 +4362,8 @@ function hasUnsavedChanges(){
       ||JSON.stringify(MONTH_PAGOS)!==JSON.stringify(MONTH_PAGOS_BASELINE)
       ||JSON.stringify(DET_MONTH_OVERRIDES)!==JSON.stringify(DET_OV_BASELINE)
       ||JSON.stringify(DET_EXTRA)!==JSON.stringify(DET_EXTRA_BASELINE)
-      ||JSON.stringify(CAIXA_TDC)!==JSON.stringify(CAIXA_TDC_BASELINE);
+      ||JSON.stringify(CAIXA_TDC)!==JSON.stringify(CAIXA_TDC_BASELINE)
+      ||JSON.stringify(MONTH_CIERRE)!==JSON.stringify(CIERRE_BASELINE);
   }catch(e){return false;}
 }
 // v140b -- defensa contra suspension de pestana en movil: si el usuario
@@ -4306,7 +4420,7 @@ function snapshotMovsBaseline(){MOVS_BASELINE=JSON.parse(JSON.stringify(MOVS));}
 // (reportado 2-sep-2026, persistía tras el fix de v-sync-fix). Mismo patrón de
 // baseline+delta que ya usa MOVS, aplicado a estos dos objetos escalares planos.
 let BAL_BASELINE={},CAIXA_TDC_BASELINE={};
-function snapshotBalBaseline(){BAL_BASELINE=JSON.parse(JSON.stringify(BAL));CAIXA_TDC_BASELINE=JSON.parse(JSON.stringify(CAIXA_TDC));}
+function snapshotBalBaseline(){CIERRE_BASELINE=JSON.parse(JSON.stringify(MONTH_CIERRE));BAL_BASELINE=JSON.parse(JSON.stringify(BAL));CAIXA_TDC_BASELINE=JSON.parse(JSON.stringify(CAIXA_TDC));}
 function mergeScalarDelta(freshObj,baseObj,actualObj){
   const out=Object.assign({},freshObj);
   Object.keys(actualObj||{}).forEach(k=>{
@@ -4482,7 +4596,7 @@ function buildPersistableState(overrides){
         :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
     );
   });
-  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:BAL_,CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS};
+  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS};
 }
 async function saveState(){
   if(_saveInFlight){_saveQueued=true;return;} // v128: no se descarta -- se encola un guardado de seguimiento (ver finally) en vez de perder este cambio
@@ -4504,6 +4618,8 @@ async function saveState(){
       detExtra:JSON.parse(JSON.stringify(DET_EXTRA)),
       bal:JSON.parse(JSON.stringify(BAL)),
       caixaTdc:JSON.parse(JSON.stringify(CAIXA_TDC)),
+      cierre:JSON.parse(JSON.stringify(MONTH_CIERRE)),
+      baselineCierre:JSON.parse(JSON.stringify(CIERRE_BASELINE)),
       baselineMovs:JSON.parse(JSON.stringify(MOVS_BASELINE)),
       baselinePagos:JSON.parse(JSON.stringify(MONTH_PAGOS_BASELINE)),
       baselineDetOv:JSON.parse(JSON.stringify(DET_OV_BASELINE)),
@@ -4540,6 +4656,7 @@ async function saveState(){
       let mDetExtra=JSON.parse(JSON.stringify(pendingSnap.detExtra));
       const mBal=JSON.parse(JSON.stringify(pendingSnap.bal));
       const mCaixaTdc=JSON.parse(JSON.stringify(pendingSnap.caixaTdc));
+      const mCierre=JSON.parse(JSON.stringify(pendingSnap.cierre||{}));
       if(freshSnap.exists()){
         const freshData=freshSnap.data();
         if(freshData&&freshData.json){
@@ -4554,6 +4671,13 @@ async function saveState(){
           // lo que otra sesión (ej. el teléfono) ya haya sumado/restado.
           if(freshState.BAL)Object.assign(mBal,mergeScalarDelta(freshState.BAL,pendingSnap.baselineBal,pendingSnap.bal));
           if(freshState.CAIXA_TDC)Object.assign(mCaixaTdc,mergeScalarDelta(freshState.CAIXA_TDC,pendingSnap.baselineCaixaTdc,pendingSnap.caixaTdc));
+          if(freshState.MONTH_CIERRE){
+            // v143 -- cierres: gana el del servidor salvo que ESTA sesion lo haya cambiado/creado.
+            Object.keys(freshState.MONTH_CIERRE).forEach(mid=>{
+              const cambioLocal=JSON.stringify((pendingSnap.cierre||{})[mid])!==JSON.stringify((pendingSnap.baselineCierre||{})[mid]);
+              if(!cambioLocal||!mCierre[mid])mCierre[mid]=freshState.MONTH_CIERRE[mid];
+            });
+          }
           if(freshState.DET_MONTH_OVERRIDES){
             mDetOv=mergeDetObjConDelta(freshState.DET_MONTH_OVERRIDES,pendingSnap.baselineDetOv,pendingSnap.detOv);
           }
@@ -4591,8 +4715,9 @@ async function saveState(){
           }
         }
       }
-      mergedOut={movs:mMovs,pagos:mPagos,detOv:mDetOv,detExtra:mDetExtra,bal:mBal,caixaTdc:mCaixaTdc};
-      const stateJson=JSON.stringify(buildPersistableState({MOVS:mMovs,MONTH_PAGOS:mPagos,DET_MONTH_OVERRIDES:mDetOv,DET_EXTRA:mDetExtra,BAL:mBal,CAIXA_TDC:mCaixaTdc}));
+      limpiarSaldos(mBal);
+      mergedOut={movs:mMovs,pagos:mPagos,detOv:mDetOv,detExtra:mDetExtra,bal:mBal,caixaTdc:mCaixaTdc,cierre:mCierre};
+      const stateJson=JSON.stringify(buildPersistableState({MOVS:mMovs,MONTH_PAGOS:mPagos,DET_MONTH_OVERRIDES:mDetOv,DET_EXTRA:mDetExtra,BAL:mBal,CAIXA_TDC:mCaixaTdc,MONTH_CIERRE:mCierre}));
       tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
     });
     // Transacción confirmada por Firestore. v129 -- FIX RAIZ (mismo día que
@@ -4629,6 +4754,8 @@ async function saveState(){
     // Mantenimiento 10) sin eco de tiempo real dejaban 2.592,49 en vez de 2.636,45.
     Object.assign(BAL,mergeScalarDelta(mergedOut.bal,pendingSnap.bal,BAL));
     Object.assign(CAIXA_TDC,mergeScalarDelta(mergedOut.caixaTdc,pendingSnap.caixaTdc,CAIXA_TDC));
+    limpiarSaldos(BAL);
+    Object.keys(mergedOut.cierre||{}).forEach(mid=>{MONTH_CIERRE[mid]=mergedOut.cierre[mid];});
     if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildPersistableState()));}catch(e){}
     // v129 -- el baseline post-guardado debe reflejar SOLO lo que quedó
@@ -4641,6 +4768,7 @@ async function saveState(){
     MONTH_PAGOS_BASELINE=JSON.parse(JSON.stringify(mergedOut.pagos));
     DET_OV_BASELINE=JSON.parse(JSON.stringify(mergedOut.detOv));
     DET_EXTRA_BASELINE=JSON.parse(JSON.stringify(mergedOut.detExtra));
+    CIERRE_BASELINE=JSON.parse(JSON.stringify(mergedOut.cierre||{}));
     BAL_BASELINE=JSON.parse(JSON.stringify(mergedOut.bal));
     CAIXA_TDC_BASELINE=JSON.parse(JSON.stringify(mergedOut.caixaTdc));
     clearPendingSync(); // guardado en la nube confirmado -- ya no hay nada pendiente
@@ -4680,7 +4808,8 @@ function applyState(s){
   if(s.MONTH_ORDER){MONTH_ORDER.length=0;s.MONTH_ORDER.forEach(id=>MONTH_ORDER.push(id));}
   if(s.MONTHS)Object.keys(s.MONTHS).forEach(k=>{MONTHS[k]=s.MONTHS[k];});
   if(typeof s.ACTIVE_ID==='string')ACTIVE_ID=s.ACTIVE_ID;
-  if(s.BAL)Object.assign(BAL,s.BAL);
+  if(s.BAL){Object.assign(BAL,s.BAL);limpiarSaldos(BAL);}
+  if(s.MONTH_CIERRE)Object.keys(s.MONTH_CIERRE).forEach(mid=>{MONTH_CIERRE[mid]=s.MONTH_CIERRE[mid];});
   if(s.CAIXA_TDC)Object.assign(CAIXA_TDC,s.CAIXA_TDC);
   if(s.ytTCMes)Object.assign(ytTCMes,s.ytTCMes);
   if(typeof s.nominaReg==='boolean')nominaReg=s.nominaReg;
