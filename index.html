@@ -3724,7 +3724,7 @@ function categoriaGridHTML(id){
     const ringPct=sem?Math.min(100,Math.round(sem.r*100)):pct2;
     const ringColor=sem?sem.color:color;
     const rM=18,circM=2*Math.PI*rM,lenM=(ringPct/100)*circM;
-    const subHTML=sem?`<div style="font-size:8.5px;font-weight:700;color:${sem.color};line-height:1.1">${Math.round(sem.r*100)}% de ${SALDOS_OCULTOS?'••••':fmtE(asig)}${sem.lvl==='super'?' ‼':''}</div>`:'';
+    const subHTML=''; // v144 — sin texto de % en el cuadrado; el anillo y el color ya comunican el estado
     const glow=sem&&sem.lvl==='super'?`filter:drop-shadow(0 0 4px ${sem.color})`:'';
     return `<div onclick="showCategoriaNivel2('${id}','${x.c.replace(/'/g,"\\'")}')" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer"><div style="width:40px;height:40px;position:relative;display:flex;align-items:center;justify-content:center"><svg width="40" height="40" viewBox="0 0 40 40" style="position:absolute;inset:0"><circle cx="20" cy="20" r="${rM}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="20" cy="20" r="${rM}" fill="none" stroke="${ringColor}" stroke-width="${sem&&sem.lvl==='super'?5:4}" stroke-linecap="round" stroke-dasharray="${lenM.toFixed(1)} ${(circM-lenM).toFixed(1)}" transform="rotate(-90 20 20)" style="${glow}"/></svg><span style="font-size:14px;position:relative">${emoji}</span></div><div style="font-size:9.5px;font-weight:700;color:#fff;text-align:center;line-height:1.15">${x.c}</div><div style="font-family:var(--fd);font-size:10.5px;font-weight:800;color:${sem?sem.color:color}">${SALDOS_OCULTOS?'••••':fmtE(x.total)}</div>${subHTML}</div>`;
   }).join('');
