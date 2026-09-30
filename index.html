@@ -3079,7 +3079,7 @@ function tareaEstaHecha(monthId,pattern){
   return !!t.done;
 }
 function patronServicio(itemId){
-  const m={svc2:/iCloud/i,svc3:/Amazon Prime/i,svc4:/Disney/i,svc5:/Netflix/i,svc6:/DIGI/i,svc7:/^Awa$/i,svc8:/^Luz$/i,'svc-ti':/^T\.I\./i,svc9:/^Agua$/i};
+  const m={svc2:/iCloud/i,svc3:/Amazon Prime/i,svc4:/Disney/i,svc5:/Netflix/i,svc6:/DIGI/i,'svc-orange':/^Orange/i,svc7:/^Awa$/i,svc8:/^Luz$/i,'svc-ti':/^T\.I\./i,svc9:/^Agua$/i};
   return m[itemId]||null;
 }
 function patronColegio(itemId){
@@ -3125,7 +3125,7 @@ function fijoCasaEjecutado(id,pattern){
 // Adicionales solo si llegaran sueltas. "Enviar a Ma. Lara" agrupa Arriendo+Luz
 // (Casa) — se trata en el desglose de ejecución, no acá.
 const TAREA_CAT_RULES=[
-  {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Limpieza|^YouTube/i,cat:'Casa'},
+  {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^Orange|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Limpieza|^YouTube/i,cat:'Casa'},
   {re:/^Colegio/i,cat:'Baby J.A.'},
   {re:/On Air|^Sweat|^Odontolog/i,cat:'Salud'},
   {re:/^GENUA|CB Xirivella|^Deporte|^Fisiosalud/i,cat:'Deporte'},
