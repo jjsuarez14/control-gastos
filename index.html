@@ -1995,23 +1995,38 @@ function updHeaders(){
 }
 function cuotaState(startN,total,off){if(off==null)return null;const n=startN+off;if(n>total||n<1)return null;return{n,total,last:n===total};}
 function progTxt(st){return st.n+'/'+st.total+(st.last?' · ÚLTIMA':'');}
+// v146 -- REGLAS "DESDE ESTE MES" (raiz, 30-sep-2026). Antes, eliminar / editar /
+// agregar "desde este mes en adelante" solo tocaba los meses que YA existian y
+// la plantilla en memoria (DET.serviciosBase); al recargar, la plantilla del
+// codigo la volvia a imponer (Netflix/DIGI reaparecian, un precio nuevo se
+// perdia) y los meses futuros nacian mal. Ahora cada decision "desde" se guarda
+// como una regla permanente {k:clave,op:'del'|'add'|'set',id,m:mesDesde,...} que
+// se aplica sobre la plantilla de CUALQUIER mes >= m (existente o futuro).
+// 'del'/'add' tambien se aplican a los overrides ya guardados; 'set' NO (no
+// pisa un ajuste manual de un mes puntual). Se persiste como DET_MONTH_REMOVED.
+const DET_REGLAS_DESDE=[];
+function reglaDesdeKey(r){return r.k+'|'+r.op+'|'+r.id+'|'+r.m;}
+function registrarReglaDesde(r){
+  const i=DET_REGLAS_DESDE.findIndex(x=>reglaDesdeKey(x)===reglaDesdeKey(r));
+  if(i>-1)DET_REGLAS_DESDE[i]=r;else DET_REGLAS_DESDE.push(r);
+}
+function aplicarReglasDesde(key,monthId,list,soloEstructura){
+  const iM=MONTH_ORDER.indexOf(monthId);
+  if(iM<0||!Array.isArray(list))return list;
+  DET_REGLAS_DESDE.forEach(r=>{
+    if(r.k!==key)return;
+    const iR=MONTH_ORDER.indexOf(r.m);
+    if(iR<0||iM<iR)return;
+    const j=list.findIndex(x=>x.id===r.id);
+    if(r.op==='del'){if(j>-1)list.splice(j,1);}
+    else if(r.op==='add'){if(j<0&&!isRemoved(key,monthId,r.id))list.push(Object.assign({},r.item));}
+    else if(r.op==='set'&&!soloEstructura){if(j>-1){if(r.a!=null)list[j].a=r.a;if(r.l)list[j].l=r.l;}}
+  });
+  return list;
+}
 function serviciosBaseFresh(id){
   const off=monthOffsetFromBase(id);
   const list=DET.serviciosBase.map(x=>Object.assign({},x));
-  // v146 (30-sep-2026) -- cambio de operador (portabilidad 30/09): Netflix queda
-  // incluido en Orange (sale desde noviembre), DIGI se da de baja (ultimo cobro
-  // parcial en noviembre, sale desde diciembre) y Orange (45 EUR, Caixa) entra
-  // desde noviembre. Regla DETERMINISTA por mes (mismo patron que Agua/Limpieza):
-  // los meses futuros que se generen ya nacen bien, sin depender de borrados
-  // manuales que no persistian. Los meses jun-oct NO se tocan (ya ejecutados).
-  {
-    const iM=MONTH_ORDER.indexOf(id),iNov=MONTH_ORDER.indexOf('nov'),iDic=MONTH_ORDER.indexOf('dic');
-    const desdeNov=iNov>=0&&iM>=iNov,desdeDic=iDic>=0&&iM>=iDic;
-    for(let i=list.length-1;i>=0;i--){
-      if((desdeNov&&list[i].id==='svc5')||(desdeDic&&list[i].id==='svc6'))list.splice(i,1);
-    }
-    if(desdeNov)list.push({id:'svc-orange',l:'Orange',a:45,d:'CB',tag:'CB'});
-  }
   const ti=cuotaState(10,12,off);if(ti)list.push({id:'svc-ti',l:'T.I.',a:129.44,d:progTxt(ti)+' · Solo Jofre · TR Jofre',tag:'TR'});
   // Agua es bimestral: confirmado Julio SÍ (off 1) · Agosto NO (off 2) ·
   // Septiembre SÍ (off 3) — se factura cada 2 meses, offsets impares desde
@@ -2026,7 +2041,7 @@ function serviciosBaseFresh(id){
     // salir como 2 pagos independientes de €30 — solo afecta buildMonthPagos.
     list.push({id:'svc-limp',l:'Limpieza · Hogar',a:30,d:'Variable · Efectivo',tag:'EFECTIVO',efInc:30});
   }
-  return list;
+  return aplicarReglasDesde('servicios',id,list);
 }
 function migrateLegacyLimpieza(ov){
   // Versión anterior guardaba Limpieza·Hogar como 2 líneas (svc-limp1/2) en
@@ -2078,6 +2093,7 @@ function serviciosFor(id){
     migrateLegacyServiciosIds(ov);
     migrateLegacyLimpieza(ov);
     reconcileOverride('servicios',id,ov,fresh);
+    aplicarReglasDesde('servicios',id,ov,true);
     return ov.concat((DET_EXTRA.servicios&&DET_EXTRA.servicios[id])||[]);
   }
   return fresh.concat((DET_EXTRA.servicios&&DET_EXTRA.servicios[id])||[]);
@@ -2257,9 +2273,10 @@ function itemsForKey(key,id){
       ];
     }
   }
-  const fresh=(DET[key]||[]).map(x=>Object.assign({},x));
+  const fresh=aplicarReglasDesde(key,id,(DET[key]||[]).map(x=>Object.assign({},x)));
   if(ov){
     reconcileOverride(key,id,ov,fresh);
+    aplicarReglasDesde(key,id,ov,true);
     return ov;
   }
   const extra=DET_EXTRA[key];
@@ -2594,6 +2611,7 @@ function execDelete(mode){
     DET_MONTH_OVERRIDES[key]=DET_MONTH_OVERRIDES[key]||{};
     if(!DET_MONTH_OVERRIDES[key][mid])DET_MONTH_OVERRIDES[key][mid]=itemsForKey(key,mid).map(x=>Object.assign({},x));
   }
+  registrarReglaDesde({k:key,op:'del',id:itemId,m:currentMonth});
   const base=baseArrayFor(key);
   if(Array.isArray(base)){const i=base.findIndex(x=>x.id===itemId);if(i>-1)base.splice(i,1);}
   if(DET_MONTH_OVERRIDES[key]){
@@ -2644,6 +2662,7 @@ function applyItemEdit(key,itemId,val,label){
       DET_MONTH_OVERRIDES[key]=DET_MONTH_OVERRIDES[key]||{};
       if(!DET_MONTH_OVERRIDES[key][mid])DET_MONTH_OVERRIDES[key][mid]=itemsForKey(key,mid).map(x=>Object.assign({},x));
     }
+    registrarReglaDesde({k:key,op:'set',id:itemId,m:currentMonth,a:val,l:label||undefined});
     const base=baseArrayFor(key);
     if(Array.isArray(base)){const it=base.find(x=>x.id===itemId);if(it){it.a=val;if(label)it.l=label;hit=true;}}
     for(let i=idx;i<MONTH_ORDER.length;i++){
@@ -2724,6 +2743,7 @@ function saveAddItem(){
     // se eligió 'desde', se agrega la MISMA copia (mismo id) a cada mes
     // posterior en MONTH_ORDER, creando su override si aún no existe.
     if(applyMode==='desde'&&currentMonth){
+      registrarReglaDesde({k:currentFxKey,op:'add',id:item.id,m:currentMonth,item:Object.assign({},item)});
       let idx=MONTH_ORDER.indexOf(currentMonth);if(idx<0)idx=0;
       for(let i=idx+1;i<MONTH_ORDER.length;i++){
         const mid=MONTH_ORDER[i];
@@ -4610,7 +4630,7 @@ function buildPersistableState(overrides){
         :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
     );
   });
-  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS};
+  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS};
 }
 async function saveState(){
   if(_saveInFlight){_saveQueued=true;return;} // v128: no se descarta -- se encola un guardado de seguimiento (ver finally) en vez de perder este cambio
@@ -4862,6 +4882,8 @@ function applyState(s){
       DET_MONTH_REMOVED[k][mid]=[...ids];
     });
   });
+  // v146 -- reglas desde: union por clave (k|op|id|m); la version persistida pisa.
+  if(Array.isArray(s.DET_REGLAS_DESDE))s.DET_REGLAS_DESDE.forEach(r=>{if(r&&r.k&&r.op&&r.id&&r.m)registrarReglaDesde(r);});
   // MONTH_PAGOS_REMOVED: union por mes, igual criterio que DET_MONTH_REMOVED --
   // solo crece, nunca se pisa una eliminación ya hecha.
   if(s.MONTH_PAGOS_REMOVED)Object.keys(s.MONTH_PAGOS_REMOVED).forEach(mid=>{
