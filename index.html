@@ -601,7 +601,14 @@ function disponibleCuenta(acc){
   // pero el Disponible mostrado era 454,37 (diferencia de 89,56, el Hotel
   // fantasma). Ahora se resta fondoMutuoEnCuenta -- el total reservado en la
   // cuenta, este ya ejecutado o todavia pendiente.
-  const fmReservado=(acc==='BBVA')?fondoMutuoEnCuenta(ACTIVE_ID):0;
+  // v142 -- FIX DE RAIZ (Jofre 30-sep-2026, 150 EUR Regalo de Boda): un gasto del
+  // Fondo Mutuo que se paga en EFECTIVO (tarea vacacion:true en cuenta EFECTIVO)
+  // sale de BBVA por la tarea "Retirar efectivo" (fondeoSalientePend mientras
+  // esta pendiente; saldo real cuando ya se retiro). Como fondoMutuoEnCuenta
+  // sigue reservandolo entero hasta que se gaste, el mismo dinero se restaba
+  // DOS veces. Regla: la parte del fondo que vive en efectivo ya no esta
+  // reservada en BBVA (fondoMutuoEfectivoPend), ni antes ni despues del retiro.
+  const fmReservado=(acc==='BBVA')?Math.max(0,Math.round((fondoMutuoEnCuenta(ACTIVE_ID)-fondoMutuoEfectivoPend(ACTIVE_ID))*100)/100):0;
   const feReservado=(acc==='BBVA')?fondoEmergenciaEnCuenta():0; // v92 -- reservado del Fondo Emergencia, mismo patrón que fmReservado
   const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc)-fmReservado-feReservado;
   return Math.round(d*100)/100;
@@ -1339,6 +1346,16 @@ function fondoMutuoPendientes(monthId){
 // paso -- funcionalmente equivalente al mismo bug de floor-unico-al-final.
 function fondoMutuoPendienteDelMes(monthId){
   return (MONTH_PAGOS[monthId]||[]).filter(p=>p.cat==='gasto'&&p.vacacion&&p.amt>0&&tareaPendiente(p)).reduce((s,p)=>s+p.amt,0);
+}
+// v142 -- gastos pendientes del Fondo Mutuo que se pagan en EFECTIVO (acc
+// EFECTIVO, vacacion:true). Ese dinero sale de BBVA via "Retirar efectivo".
+function fondoMutuoEfectivoPend(monthId){
+  if(!fondoMutuoMesFinanciado(monthId))return 0;
+  let c=0;
+  fondoMutuoMesesAcumulables(monthId).forEach(mid=>{
+    (MONTH_PAGOS[mid]||[]).forEach(p=>{if(p.cat==='gasto'&&p.vacacion&&p.acc==='EFECTIVO'&&p.amt>0&&tareaPendiente(p))c+=p.amt;});
+  });
+  return Math.round(c*100)/100;
 }
 function fondoMutuoEnCuenta(monthId){
   if(!fondoMutuoMesFinanciado(monthId))return 0;
@@ -4597,8 +4614,21 @@ async function saveState(){
     });
     Object.assign(DET_MONTH_OVERRIDES,mergeDetObjConDelta(mergedOut.detOv,pendingSnap.baselineDetOv,DET_MONTH_OVERRIDES));
     Object.assign(DET_EXTRA,mergeDetObjConDelta(mergedOut.detExtra,pendingSnap.baselineDetExtra,DET_EXTRA));
-    Object.assign(BAL,mergeScalarDelta(mergedOut.bal,pendingSnap.baselineBal,BAL));
-    Object.assign(CAIXA_TDC,mergeScalarDelta(mergedOut.caixaTdc,pendingSnap.baselineCaixaTdc,CAIXA_TDC));
+    // v142 -- FIX DE RAIZ (Jofre, 30-sep-2026, BBVA con 43,96 EUR de mas). Estos
+    // dos merges usaban pendingSnap.baselineBal/baselineCaixaTdc (la base
+    // ANTERIOR al guardado) como referencia de "lo que cambio en memoria
+    // mientras el guardado viajaba". Pero esa base no incluye el cambio propio
+    // de ESTE guardado, que ya esta dentro de mergedOut: el delta propio se
+    // sumaba una segunda vez al saldo en memoria, y el siguiente guardado (otra
+    // accion o el reintento de visibilitychange, v140b) lo persistia. MOVS y
+    // MONTH_PAGOS no lo sufren porque se fusionan por clave/id (idempotentes);
+    // un saldo es un escalar ADITIVO y no lo es. La referencia correcta es la
+    // foto tomada al INICIO de este guardado (pendingSnap.bal / .caixaTdc):
+    // BAL en vivo menos esa foto = solo lo que cambio durante el vuelo.
+    // Reproducido con el codigo real: dos acciones seguidas (On Air 43,96 +
+    // Mantenimiento 10) sin eco de tiempo real dejaban 2.592,49 en vez de 2.636,45.
+    Object.assign(BAL,mergeScalarDelta(mergedOut.bal,pendingSnap.bal,BAL));
+    Object.assign(CAIXA_TDC,mergeScalarDelta(mergedOut.caixaTdc,pendingSnap.caixaTdc,CAIXA_TDC));
     if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildPersistableState()));}catch(e){}
     // v129 -- el baseline post-guardado debe reflejar SOLO lo que quedó
