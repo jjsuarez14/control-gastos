@@ -881,6 +881,13 @@ function toNum(v){return parseFloat(String(v==null?'':v).trim().replace(',','.')
 // en vez de asumir en silencio que es de este mes (el bug real de Barbería/
 // Netflix, ver v78/v81), le pregunta a Jofre si es un pago atrasado de un
 // mes anterior y, si confirma, etiqueta el movimiento con el mes correcto.
+// v147 -- FIX DE RAIZ (TR Massiel, 2-oct-2026): la identidad de un movimiento era solo
+// `fecha|texto|monto|tipo|cat|mes`, y el merge entre sesiones usa un Set de esas claves, asi que
+// dos movimientos IDENTICOS el mismo dia (marcar, desmarcar, marcar "Mercado - aporte Massiel":
+// +750,-750,+750) colapsaban en uno: la lista perdia una fila (desfase +750 en la auditoria) aunque
+// el saldo, que se fusiona por delta numerico, quedaba bien. Ahora toda fila NUEVA nace con un id
+// unico; las filas historicas (sin id) se distinguen por orden de aparicion (ver movKeysUnicas).
+function nuevoMovId(){return 'm'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag,extra){
   if(!CUENTAS_VALIDAS.includes(acc)){console.error('regMov: cuenta invalida',acc,label);toast('Cuenta inválida, movimiento NO registrado','var(--rd)');return;}
   BAL[acc]=Math.round((BAL[acc]+(plus?amt:-amt))*100)/100;
@@ -892,14 +899,14 @@ function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag,extra){
   // mientras la fecha real todavía es agosto) -- ver fix en movBelongsToMonth.
   // v141 -- fondoTag: origen del dinero (ej. 'emergencia'), independiente de
   // `cat` -- ver fondoEmergenciaConsumidoTotal.
-  const __rec={dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID,fondo:fondoTag||undefined};if(extra)Object.assign(__rec,extra);MOVS[acc].unshift(__rec);
+  const __rec={id:nuevoMovId(),dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID,fondo:fondoTag||undefined};if(extra)Object.assign(__rec,extra);MOVS[acc].unshift(__rec);
   updTile();
 }
 function regCaixaCard(label,amt){
   CAIXA_TDC.disponible=Math.max(0,Math.round((CAIXA_TDC.disponible-amt)*100)/100);
   const dt=new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS.CAIXA=MOVS.CAIXA||[];
-  MOVS.CAIXA.unshift({dt:ds,l:label+' (TDC)',a:'-'+fmtE(amt),t:false,mesId:ACTIVE_ID,noCaja:true});
+  MOVS.CAIXA.unshift({id:nuevoMovId(),dt:ds,l:label+' (TDC)',a:'-'+fmtE(amt),t:false,mesId:ACTIVE_ID,noCaja:true});
   updTile();
 }
 const MONTH_PAGOS={
@@ -969,7 +976,8 @@ async function markPago(id){
     regMov('BBVA',p.l,p.amt,true);renderPrevision();
   }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);}
   else if(p.cat==='retiro'){regMov('BBVA',p.l,p.amt,false);regMov('EFECTIVO',p.l,p.amt,true);}
-  else{regMov(p.acc,p.l,p.amt,false,undefined,undefined,undefined,undefined,p.tdcRelease?{noGasto:true,pagoId:p.id}:{pagoId:p.id});if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}}
+  else{regMov(p.acc,p.l,p.amt,false,undefined,undefined,undefined,undefined,p.tdcRelease?{noGasto:true,pagoId:p.id}:{pagoId:p.id});if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}
+    if(p.tdcLibera>0){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.tdcLibera)*100)/100);}}
   updBbvaBadge();updPrevCard();updTile();if(typeof renderMaTile==='function')renderMaTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
   // v69 (28-ago) -- el modal "Pendiente de cobro" (pndov, ej. abierto desde
   // "Pdte. cobro" en la tarjeta BBVA) renderizaba su lista UNA vez al abrir y
@@ -1593,6 +1601,14 @@ const BASE_ID='jun';
 const MONTH_CAL=[{id:'ene',name:'Enero'},{id:'feb',name:'Febrero'},{id:'mar',name:'Marzo'},{id:'abr',name:'Abril'},{id:'may',name:'Mayo'},{id:'jun',name:'Junio'},{id:'jul',name:'Julio'},{id:'ago',name:'Agosto'},{id:'sep',name:'Septiembre'},{id:'oct',name:'Octubre'},{id:'nov',name:'Noviembre'},{id:'dic',name:'Diciembre'}];
 function monthMeta(id){return MONTH_CAL.find(m=>m.id===id);}
 function nextMonthId(id){const i=MONTH_CAL.findIndex(m=>m.id===id);return MONTH_CAL[(i+1)%12].id;}
+// v147 -- anio de un ID de mes dentro de la ventana de 12 meses (MONTH_ORDER[0]='jun' = jun-2026).
+const MONTH_WINDOW_START_YEAR=2026;
+function monthYear(id){const f=MONTH_CAL.findIndex(m=>m.id===MONTH_ORDER[0]);const i=MONTH_CAL.findIndex(m=>m.id===id);return MONTH_WINDOW_START_YEAR+((f<0||i<0||i>=f)?0:1);}
+function ymMasMeses(id,k){const i=MONTH_CAL.findIndex(m=>m.id===id);if(i<0)return null;const t=i+k;const y=monthYear(id)+Math.floor(t/12);return y+'-'+String(((t%12)+12)%12+1).padStart(2,'0');}
+// cuantas de `cNum` cuotas que arrancan en startId NO caben en la ventana de 12 meses
+function cuotasFueraDeVentana(startId,cNum){const f=MONTH_CAL.findIndex(m=>m.id===MONTH_ORDER[0]);const i=MONTH_CAL.findIndex(m=>m.id===startId);if(f<0||i<0)return 0;return Math.max(0,cNum-(12-((i-f+12)%12)));}
+// union idempotente por clave (ym|texto|progreso): nunca duplica ni pierde entradas entre sesiones
+function uneCuotasFuturas(arr){const ks=new Set(CUOTAS_FUTURAS.map(c=>c.ym+'|'+c.l+'|'+c.prog));(arr||[]).forEach(c=>{if(!c||!c.ym)return;const k=c.ym+'|'+c.l+'|'+c.prog;if(!ks.has(k)){CUOTAS_FUTURAS.push(c);ks.add(k);}});}
 // v69 (28-ago) -- mes ANTERIOR dentro de la secuencia real de trabajo de la
 // app (MONTH_ORDER: jun,jul,ago,sep,...), no el mes calendario anterior --
 // para mostrar "mes activo + mes anterior" en Movimientos de cuenta.
@@ -1763,7 +1779,7 @@ function buildMonthPagos(id){
       const extra=Object.assign({autofinanciado:true},c.tdcRelease?{tdcRelease:true}:null);
       pushDirect(label,'CAIXA',moneyFromStr(c.amt),extra);
     }else{
-      handleTaggedItem(label,tag,moneyFromStr(c.amt),c.tdcRelease?{tdcRelease:true}:undefined);
+      handleTaggedItem(label,tag,moneyFromStr(c.amt),(c.tdcRelease||c.tdcLibera>0)?Object.assign({},c.tdcRelease?{tdcRelease:true}:null,c.tdcLibera>0?{tdcLibera:c.tdcLibera}:null):undefined);
     }
   });
   // Tareas de Hotel (gasto BBVA, cat Vacaciones). v67 -- redirigido de TRJ a
@@ -1931,10 +1947,13 @@ function ensureMonthDefined(id){
   ensureBridgeTask(id);
 }
 function ensureMonthsAhead(fromId,n){
-  let last=MONTH_ORDER[MONTH_ORDER.length-1];
+  // v147 -- antes: `while` sin salida. Con IDs de mes sin anio (ventana de 12) ensureMonthDefined
+  // retorna sin crear nada cuando el ID ya existe, y el bucle giraba para siempre (congelaba
+  // la pestana). Ahora corta apenas un intento no agrega ningun mes.
   while(MONTH_ORDER.length-1-MONTH_ORDER.indexOf(fromId)<n){
-    ensureMonthDefined(nextMonthId(last));
-    last=MONTH_ORDER[MONTH_ORDER.length-1];
+    const antes=MONTH_ORDER.length;
+    ensureMonthDefined(nextMonthId(MONTH_ORDER[MONTH_ORDER.length-1]));
+    if(MONTH_ORDER.length===antes)break; // ventana agotada
   }
 }
 let HISTORIAL=[];
@@ -3944,6 +3963,7 @@ function marcarCategoriaMassiel(idSuffix,label,done,amt){
   p.done=done;
   if(done&&amt!=null)p.amt=amt;
 }
+const __maUltimoToque={};
 async function toggleMassiel(id){
   if(id==='m-biz'){const ready=MASSIEL_TASKS.every(t=>massielDone[t.id]);if(!ready&&!massielDone['m-biz']){toast('Primero marca las otras 4 tareas','var(--gd)');return;}}
   if(id==='m-yt'&&!massielDone[id]&&!ytTCMes[ACTIVE_ID]){
@@ -3957,6 +3977,9 @@ async function toggleMassiel(id){
     if(tcClean===''||isNaN(tcNum)||tcNum<=0){toast('TC inválido: "'+tcRaw+'" no es un número válido','var(--rd)');return;}
     ytTCMes[ACTIVE_ID]=tcNum;
   }
+  // v147 -- antirrebote: un toque doble en movil disparaba marcar+desmarcar (par +/- en la cuenta).
+  // Se ignora un segundo toque sobre la MISMA tarea dentro de 800 ms.
+  const __ahora=Date.now();if(__maUltimoToque[id]&&__ahora-__maUltimoToque[id]<800)return;__maUltimoToque[id]=__ahora;
   syncMassielTaskAmounts(ACTIVE_ID);
   const turningOn=!massielDone[id];
   massielDone[id]=turningOn;
@@ -4011,12 +4034,20 @@ function renderPrevision(){
 }
 const CATS=['Mercado','Baby J.A.','Deporte','Salud','Casa','Trabajo','Carro/Moto','Remesas','Compartir Familiar','Vacaciones','Personales','Ahorro','Adicionales','Fondo Emergencia'];const CATS_EMOJI={'Mercado':'🛒','Baby J.A.':'👶','Deporte':'🏀','Salud':'🏥','Casa':'🏠','Trabajo':'💼','Carro/Moto':'🚗','Remesas':'💸','Compartir Familiar':'👪','Vacaciones':'🏖️','Personales':'🙋','Ahorro':'🏦','Adicionales':'➕','Fondo Emergencia':'🚨'};const CATS_INGRESO=['Trabajo','Ahorro','Adicionales'];function catRgba(hex,a){const h=hex.replace('#','');const r=parseInt(h.substring(0,2),16),g=parseInt(h.substring(2,4),16),b=parseInt(h.substring(4,6),16);return 'rgba('+r+','+g+','+b+','+a+')';}
 const ACCOUNTS_LIST=[{id:'BBVA',n:'BBVA'},{id:'CAIXA',n:'Caixa'},{id:'TRJ',n:'TR Jofre'},{id:'TRJA',n:'TR J.A.'},{id:'TRM',n:'TR Massiel'},{id:'IBKR',n:'IBKR'}];
-const CUOTAS_NUEVAS=[];let reg={},regPath=[];
+const CUOTAS_NUEVAS=[];const CUOTAS_FUTURAS=[];let reg={},regPath=[];
 function openReg(presetAcc){reg={type:'g',customDate:null,desc:'',amount:null,category:null,account:presetAcc||null,isCuota:null,cNum:null,cType:null,shared:null,caixaCard:null,mesInicio:null,cuotaMonto:null,cuotaMontos:[],cuotasIguales:null,cuotaCuentaDeduccion:null,tareaMes:null,tareaRule:null,_amtStr:'',_capGridOpen:false,_capDescOpen:false,step:'capture'};regPath=[];renderReg();document.getElementById('fov').style.display='flex';fovDragInit();}
 function closeReg(){const fov=document.getElementById('fov');fov.style.display='none';fov.style.zIndex='';}
 function fovDragInit(){const h=document.getElementById('fov-handle');const fov=document.getElementById('fov');if(!h||!fov||h._dragInit)return;h._dragInit=true;let startY=0,curY=0,dragging=false;const onStart=(y)=>{dragging=true;startY=y;curY=y;fov.style.transition='none';};const onMove=(y)=>{if(!dragging)return;curY=y;const dy=Math.max(0,curY-startY);fov.style.transform='translateY('+dy+'px)';};const onEnd=()=>{if(!dragging)return;dragging=false;fov.style.transition='transform .25s ease';const dy=Math.max(0,curY-startY);if(dy>120){fov.style.transform='translateY(100%)';setTimeout(()=>{fov.style.transition='none';fov.style.transform='';closeReg();},220);}else{fov.style.transform='';}};h.addEventListener('touchstart',e=>onStart(e.touches[0].clientY),{passive:true});h.addEventListener('touchmove',e=>onMove(e.touches[0].clientY),{passive:true});h.addEventListener('touchend',onEnd);h.addEventListener('mousedown',e=>{onStart(e.clientY);const mm=ev=>onMove(ev.clientY);const mu=()=>{onEnd();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);});}
 function regBack(){if(!regPath.length){closeReg();return;}reg.step=regPath.pop();renderReg();}
 function regGoto(nextId){regPath.push(reg.step);reg.step=nextId;renderReg();}
+// v147 -- FIX DE RAIZ (Jofre 2-oct-2026, Televisor SALA). Una compra a cuotas tiene 3
+// comportamientos: (1) fraccionado en TDC Caixa -- SIN pago hoy, 1a cuota en la proxima
+// facturacion; (2) Klarna/otros -- cuota 1 hoy + mensuales; (3) aplazado a fin de mes.
+// Antes el wizard solo distinguia frac/aplazado y deducia "hay pago hoy" de `reg.amount>0`,
+// pero el teclado exige monto>0 (capNext), asi que "sin pago hoy" era IMPOSIBLE de expresar
+// y el comportamiento 1 solo podia registrarse mal (cargo falso hoy + cuota 1/N mal fechada).
+// Ahora la modalidad es explicita (cType) y "pago hoy" se deriva de ella, nunca del monto.
+function regHasHoy(){return reg.cType==='frac'&&reg.amount>0;}
 function nextAfter(id){
   switch(id){
     case 'type':return reg.type==='t'?'amount':'capture';case 'amount':return 'category';case 'category':return 'account';
@@ -4102,15 +4133,32 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
   // un rebuild -- exactamente la "impresion de que no esta sumando"
   // reportada por Jofre. Fix: refrescar cada mes tocado al momento.
   const touched=[];
+  // v147 -- tdcPrincipal: capital financiado en TDC. Cada cuota libera su parte proporcional
+  // del limite al pagarse (la ultima absorbe el redondeo: la suma es EXACTAMENTE el capital).
+  const tdcP=(opts&&opts.tdcPrincipal)>0?opts.tdcPrincipal:0;let tdcSum=0,tdcAcc=0;
+  if(tdcP>0)for(let k=0;k<cNum;k++)tdcSum+=(isArr?cuotaAmts[k]:cuotaAmts);
+  // v147 -- FIX DE RAIZ (ventana de 12 meses). Los IDs de mes NO llevan anio (jun=jun-2026 ...
+  // may=may-2027), asi que MONTH_ORDER nunca pasa de 12 y una compra con cuotas mas alla de
+  // may-2027 (ej. Televisor SALA: dic-2026..nov-2027) hacia que ensureMonthsAhead girara para
+  // siempre y CONGELARA la app, ademas de que el `break` de aqui descartaba las cuotas
+  // sobrantes en silencio. Ahora: lo que cabe en la ventana se materializa; el resto se guarda
+  // en CUOTAS_FUTURAS (persistida, con anio-mes explicito `ym`) para no perder ni una cuota.
+  // Pendiente (Arquitectura, antes de mar-2027): IDs de mes con anio, que es lo que las vuelve
+  // visibles en Prevision -- hasta entonces la cola solo las conserva.
+  const mid0=MONTH_ORDER[idx];let nCola=0;
   for(let n=1;n<=cNum;n++){
-    const mid=MONTH_ORDER[idx+n-1];if(!mid)break;
+    const mid=MONTH_ORDER[idx+n-1];            // undefined => fuera de la ventana
     const perCuota=isArr?cuotaAmts[n-1]:cuotaAmts;
     const numCuota=n+offset;              // 2,3,... si hubo pago hoy; 1,2,... si no
     const esUltima=numCuota===totalCuotas;
+    const cu={l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false,tdcRelease:!!(opts&&opts.tdcRelease),liquidacion:!!(opts&&opts.aplazado)};
+    if(tdcP>0&&tdcSum>0){const lib=(n===cNum)?Math.round((tdcP-tdcAcc)*100)/100:Math.round(tdcP*perCuota/tdcSum*100)/100;tdcAcc+=lib;if(lib>0)cu.tdcLibera=lib;}
+    if(!mid){CUOTAS_FUTURAS.push(Object.assign({ym:ymMasMeses(mid0,n-1)},cu));nCola++;continue;}
     MONTHS[mid].cuotas=MONTHS[mid].cuotas||[];
-    MONTHS[mid].cuotas.push({l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false,tdcRelease:!!(opts&&opts.tdcRelease),liquidacion:!!(opts&&opts.aplazado)});
+    MONTHS[mid].cuotas.push(cu);
     touched.push(mid);
   }
+  if(nCola>0)setTimeout(()=>{try{toast('⚠ '+nCola+' cuota'+(nCola>1?'s':'')+' fuera de la ventana de meses quedaron en cola (no visibles en Previsión aún)','var(--gd)');}catch(e){}},1800);
   touched.forEach(refreshMonthPagosPreservingState);
   return touched;
 }
@@ -4134,12 +4182,13 @@ function renderRegSummary(){
   }
   let rows=[['Tipo',reg.type==='g'?'Gasto':'Ingreso']];
   if(reg.desc)rows.push(['Descripción',reg.desc]);
-  if(reg.isCuota&&reg.cType==='frac'){const cuotasTotal=reg.cuotasIguales?reg.cNum*reg.cuotaMonto:reg.cuotaMontos.reduce((s,x)=>s+x,0);const total=(reg.amount||0)+cuotasTotal;const hasHoy=reg.amount>0;if(hasHoy)rows.push(['Cuota 1 (hoy)',fmtE(reg.amount)]);if(reg.cuotasIguales){rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+' × '+fmtE(reg.cuotaMonto)]);}else{rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+(hasHoy?' cuotas adicionales variables':' cuotas variables')]);}rows.push(['Total estimado',fmtE(total)]);}
+  if(reg.isCuota&&reg.cType==='frac'){const cuotasTotal=reg.cuotasIguales?reg.cNum*reg.cuotaMonto:reg.cuotaMontos.reduce((s,x)=>s+x,0);const total=(reg.amount||0)+cuotasTotal;const hasHoy=regHasHoy();if(hasHoy)rows.push(['Cuota 1 (hoy)',fmtE(reg.amount)]);if(reg.cuotasIguales){rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+' × '+fmtE(reg.cuotaMonto)]);}else{rows.push([hasHoy?'Cuotas adicionales':'Cuotas',reg.cNum+(hasHoy?' cuotas adicionales variables':' cuotas variables')]);}rows.push(['Total estimado',fmtE(total)]);}
+  else if(reg.isCuota&&reg.cType==='tdcFrac'){const cuotasTotal=reg.cuotasIguales?reg.cNum*reg.cuotaMonto:reg.cuotaMontos.reduce((s,x)=>s+x,0);const costo=Math.round((cuotasTotal-(reg.amount||0))*100)/100;rows.push(['Importe de la compra',fmtE(reg.amount)]);rows.push(['Pago hoy','Ninguno']);rows.push(['Cuotas',reg.cuotasIguales?reg.cNum+' × '+fmtE(reg.cuotaMonto):reg.cNum+' cuotas variables']);rows.push(['Total a pagar',fmtE(cuotasTotal)]);rows.push([costo<0?'⚠ Revisar':'Costo financiero',costo<0?'Las cuotas suman menos que la compra':fmtE(costo)+(reg.amount>0?' ('+(costo/reg.amount*100).toFixed(1).replace('.',',')+' %)':'')]);}
   else{rows.push(['Monto',fmtE(reg.amount)]);}
   rows.push(['Categoría',reg.category]);rows.push(['Cuenta pago',accName]);
   if(reg.fondoEmergencia)rows.push(['Origen del dinero','Fondo de Emergencia (se descuenta del fondo)']);
   if(reg.group){rows.push(['Responsabilidad',{jofre:'Solo Jofre',massiel:'Solo Massiel',compartida:'Compartido'}[reg.group]||reg.group]);}
-  if(reg.isCuota){rows.push(['Modalidad',reg.cType==='frac'?'Fraccionado':'Aplazado fin de mes']);rows.push(['Responsabilidad',reg.shared?'Compartido · 50/50':'Solo Jofre']);if(reg.cType==='frac'){rows.push(['Cuotas cobran en',cuotaCuenta]);if(reg.mesInicio)rows.push(['Inician en',MONTHS[reg.mesInicio]?MONTHS[reg.mesInicio].name:'—']);}}
+  if(reg.isCuota){rows.push(['Modalidad',reg.cType==='tdcFrac'?'Fraccionado en TDC Caixa':(reg.cType==='frac'?'Fraccionado con pago hoy':'Aplazado fin de mes')]);rows.push(['Responsabilidad',reg.shared?'Compartido · 50/50':'Solo Jofre']);if(reg.cType!=='aplazado'){rows.push(['Cuotas cobran en',cuotaCuenta]);if(reg.mesInicio)rows.push(['Inician en',MONTHS[reg.mesInicio]?MONTHS[reg.mesInicio].name:'—']);const __fv=cuotasFueraDeVentana(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum||0);if(__fv>0)rows.push(['⚠ Fuera de ventana',__fv+' cuota'+(__fv>1?'s':'')+' en cola (aún no visibles en Previsión)']);}}
   return `<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CONFIRMAR</div>`+rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)"><div style="font-size:12px;color:var(--t2)">${r[0]}</div><div style="font-size:12px;color:var(--t1);font-weight:600;text-align:right">${r[1]}</div></div>`).join('');
 }
 function renderReg(){
@@ -4155,14 +4204,14 @@ function renderReg(){
   else if(reg.step==='tareaMes'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const meses=MONTH_ORDER.filter((k,i)=>i>=(ai<0?0:ai));h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿PARA QUÉ MES ES ESTA TAREA?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('tareaMes','${m}','tareaMes')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='tareaReparto'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿CÓMO SE REPARTE?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">"${reg.category}" no tiene un reparto fijo conocido -- indícalo para que se sume bien al mes de ${reg.tareaMes&&MONTHS[reg.tareaMes]?MONTHS[reg.tareaMes].name:'destino'}.</div><div style="display:flex;flex-direction:column;gap:8px">${['55/45','50/50','Solo Jofre','Solo Massiel'].map(r=>`<button onclick="reg.tareaRule='${r}';regGoto(nextAfter('tareaReparto'))" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${r}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else if(reg.step==='cuotas'){h=`<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:12px"><div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;text-align:center">¿COMPRA A CUOTAS?</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('isCuota',true,'cuotas')" style="padding:18px 10px;border-radius:9999px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:center">Sí</button><button onclick="pick('isCuota',false,'cuotas')" style="padding:18px 10px;border-radius:9999px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:center">No</button></div></div>`;nav.innerHTML=backBtn;}
-  else if(reg.step==='cType'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿FRACCIONADO O APLAZADO?</div><div style="display:flex;flex-direction:column;gap:8px"><button onclick="pick('cType','frac','cType')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Fraccionado<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Cuota 1 hoy + cuotas mensuales adicionales</div></button><button onclick="pick('cType','aplazado','cType')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Aplazado fin de mes<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Pago único a fin de mes · sin cuotas</div></button></div>`;nav.innerHTML=backBtn;}
-  else if(reg.step==='cNum'){const hasHoy=reg.amount>0;const cNumHelp=hasHoy?`Hoy pagas ${fmtE(reg.amount)} (Cuota 1). Indica cuántas cuotas MÁS quedan, sin contar la de hoy.`:'No hay pago hoy — indica cuántas cuotas en total (la primera cae el mes de inicio que elijas).';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿CUÁNTAS CUOTAS ${hasHoy?'ADICIONALES':''}?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${cNumHelp}</div><input type="number" inputmode="numeric" placeholder="Ej. 12" id="reg-cnum" value="${reg.cNum??''}" style="width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:13px;padding:12px 14px;font-size:18px;font-weight:700;color:var(--t1);outline:none">`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmCNum()">Siguiente</button>`;}
-  else if(reg.step==='cuotasIguales'){const hasHoy=reg.amount>0;h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿LAS ${reg.cNum} CUOTAS${hasHoy?' ADICIONALES':''} SON DEL MISMO MONTO?</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="reg.cuotasIguales=true;regGoto('cuotaMonto')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí, igual</button><button onclick="reg.cuotasIguales=false;startCuotaVar()" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No, varían</button></div>`;nav.innerHTML=backBtn;}
-  else if(reg.step==='cuotaMonto'){const hasHoy=reg.amount>0;h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">MONTO POR CUOTA</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">Aplica a las ${reg.cNum} cuotas${hasHoy?' adicionales (sin contar el pago de hoy)':''} por igual.</div><div style="background:var(--bg-tertiary);border-radius:10px;padding:9px 14px;border:1px solid var(--bd);display:flex;align-items:center;gap:5px"><span style="font-size:18px;font-weight:300;color:var(--t3)">€</span><input type="text" inputmode="decimal" placeholder="Monto por cuota" id="reg-cmonto" value="${reg.cuotaMonto??''}" style="flex:1;background:transparent;border:none;outline:none;font-size:18px;font-weight:700;color:var(--t1)"></div>`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmCuotaMonto()">Siguiente</button>`;}
-  else if(reg.step==='cuotaVar'){const hasHoy=reg.amount>0;const off=hasHoy?1:0;const n=cuotaVarCurrent+1;const nDisp=n+off;const totalDisp=reg.cNum+off;const prev=reg.cuotaMontos.length>0?`<div style="font-size:10px;color:var(--t3);margin-bottom:10px">${(hasHoy?`Cuota 1 (hoy): ${fmtE(reg.amount)} `:'')}${reg.cuotaMontos.map((v,i)=>`Cuota ${i+1+off}: ${fmtE(v)} `).join('')}</div>`:(hasHoy?`<div style="font-size:10px;color:var(--t3);margin-bottom:10px">Cuota 1 (hoy): ${fmtE(reg.amount)}</div>`:'');h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">CUOTA ${nDisp} DE ${totalDisp}</div>${prev}<div style="background:var(--bg-tertiary);border-radius:10px;padding:9px 14px;border:1px solid var(--bd);display:flex;align-items:center;gap:5px"><span style="font-size:18px;font-weight:300;color:var(--t3)">€</span><input type="text" inputmode="decimal" placeholder="Monto cuota ${nDisp}" id="reg-cvar" style="flex:1;background:transparent;border:none;outline:none;font-size:18px;font-weight:700;color:var(--t1)"></div>`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmCuotaVar()">Siguiente</button>`;}
-  else if(reg.step==='cuotaVarDone'){const hasHoy=reg.amount>0;const off=hasHoy?1:0;const hoyRow=hasHoy?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="font-size:12px;color:var(--t2)">Cuota 1 (hoy)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">${fmtE(reg.amount)}</span></div>`:'';const totalTodo=(reg.amount||0)+reg.cuotaMontos.reduce((s,x)=>s+x,0);h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CUOTAS INGRESADAS</div><div style="background:var(--s2);border-radius:12px;padding:12px">${hoyRow}${reg.cuotaMontos.map((v,i)=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="font-size:12px;color:var(--t2)">Cuota ${i+1+off}</span><span style="font-size:13px;font-weight:700;color:var(--t1)">${fmtE(v)}</span></div>`).join('')}<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:12px;font-weight:700;color:var(--t2)">Total ${hasHoy?'de la compra':'cuotas'}</span><span style="font-size:13px;font-weight:800;color:var(--tl)">${fmtE(totalTodo)}</span></div></div>`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="regGoto(nextAfter('cuotaVarDone'))">Confirmar</button>`;}
-  else if(reg.step==='shared'){const lbl=reg.cType==='frac'?'¿CUOTAS COMPARTIDAS?':'¿GASTO COMPARTIDO?';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">${lbl}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('shared',true,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí · 50/50</button><button onclick="pick('shared',false,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No · solo Jofre</button></div>`;nav.innerHTML=backBtn;}
-  else if(reg.step==='cuotasCuenta'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DESDE QUÉ CUENTA SE DESCUENTAN LAS CUOTAS?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${reg.amount>0?`Cuota 1 (hoy) descontada de ${ACC_META[reg.account].n}.`:`Sin pago hoy — cuotas cargan a partir del mes de inicio.`}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${ACCOUNTS_LIST.filter(a=>a.id!=='IBKR'&&a.id!=='TRM').map(a=>`<button onclick="reg.cuotaCuentaDeduccion='${a.id}';regGoto(nextAfter('cuotasCuenta'))" class="acc-c${(reg.cuotaCuentaDeduccion||reg.account)===a.id?' on':''}">${a.n}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='cType'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿CÓMO SE PAGA LA COMPRA A CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${reg.account==='CAIXA'?`<button onclick="pick('cType','tdcFrac','cType')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Fraccionado en TDC Caixa<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Sin pago hoy · la 1ª cuota cae en la próxima facturación</div></button>`:''}<button onclick="pick('cType','frac','cType')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Fraccionado con pago hoy<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Klarna u otros · cuota 1 hoy + cuotas mensuales adicionales</div></button><button onclick="pick('cType','aplazado','cType')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">Aplazado fin de mes<div style="font-size:10px;color:var(--t3);font-weight:400;margin-top:3px">Pago único a fin de mes · sin cuotas</div></button></div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='cNum'){const hasHoy=regHasHoy();const cNumHelp=hasHoy?`Hoy pagas ${fmtE(reg.amount)} (Cuota 1). Indica cuántas cuotas MÁS quedan, sin contar la de hoy.`:'No hay pago hoy — indica cuántas cuotas en total (la primera cae el mes de inicio que elijas).';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿CUÁNTAS CUOTAS ${hasHoy?'ADICIONALES':''}?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${cNumHelp}</div><input type="number" inputmode="numeric" placeholder="Ej. 12" id="reg-cnum" value="${reg.cNum??''}" style="width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:13px;padding:12px 14px;font-size:18px;font-weight:700;color:var(--t1);outline:none">`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmCNum()">Siguiente</button>`;}
+  else if(reg.step==='cuotasIguales'){const hasHoy=regHasHoy();h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿LAS ${reg.cNum} CUOTAS${hasHoy?' ADICIONALES':''} SON DEL MISMO MONTO?</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="reg.cuotasIguales=true;regGoto('cuotaMonto')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí, igual</button><button onclick="reg.cuotasIguales=false;startCuotaVar()" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No, varían</button></div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='cuotaMonto'){const hasHoy=regHasHoy();h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">MONTO POR CUOTA</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">Aplica a las ${reg.cNum} cuotas${hasHoy?' adicionales (sin contar el pago de hoy)':''} por igual.</div><div style="background:var(--bg-tertiary);border-radius:10px;padding:9px 14px;border:1px solid var(--bd);display:flex;align-items:center;gap:5px"><span style="font-size:18px;font-weight:300;color:var(--t3)">€</span><input type="text" inputmode="decimal" placeholder="Monto por cuota" id="reg-cmonto" value="${reg.cuotaMonto??''}" style="flex:1;background:transparent;border:none;outline:none;font-size:18px;font-weight:700;color:var(--t1)"></div>`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmCuotaMonto()">Siguiente</button>`;}
+  else if(reg.step==='cuotaVar'){const hasHoy=regHasHoy();const off=hasHoy?1:0;const n=cuotaVarCurrent+1;const nDisp=n+off;const totalDisp=reg.cNum+off;const prev=reg.cuotaMontos.length>0?`<div style="font-size:10px;color:var(--t3);margin-bottom:10px">${(hasHoy?`Cuota 1 (hoy): ${fmtE(reg.amount)} `:'')}${reg.cuotaMontos.map((v,i)=>`Cuota ${i+1+off}: ${fmtE(v)} `).join('')}</div>`:(hasHoy?`<div style="font-size:10px;color:var(--t3);margin-bottom:10px">Cuota 1 (hoy): ${fmtE(reg.amount)}</div>`:'');h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">CUOTA ${nDisp} DE ${totalDisp}</div>${prev}<div style="background:var(--bg-tertiary);border-radius:10px;padding:9px 14px;border:1px solid var(--bd);display:flex;align-items:center;gap:5px"><span style="font-size:18px;font-weight:300;color:var(--t3)">€</span><input type="text" inputmode="decimal" placeholder="Monto cuota ${nDisp}" id="reg-cvar" style="flex:1;background:transparent;border:none;outline:none;font-size:18px;font-weight:700;color:var(--t1)"></div>`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="confirmCuotaVar()">Siguiente</button>`;}
+  else if(reg.step==='cuotaVarDone'){const hasHoy=regHasHoy();const off=hasHoy?1:0;const hoyRow=hasHoy?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="font-size:12px;color:var(--t2)">Cuota 1 (hoy)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">${fmtE(reg.amount)}</span></div>`:'';const totalTodo=(reg.amount||0)+reg.cuotaMontos.reduce((s,x)=>s+x,0);h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CUOTAS INGRESADAS</div><div style="background:var(--s2);border-radius:12px;padding:12px">${hoyRow}${reg.cuotaMontos.map((v,i)=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="font-size:12px;color:var(--t2)">Cuota ${i+1+off}</span><span style="font-size:13px;font-weight:700;color:var(--t1)">${fmtE(v)}</span></div>`).join('')}<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-size:12px;font-weight:700;color:var(--t2)">Total ${hasHoy?'de la compra':'cuotas'}</span><span style="font-size:13px;font-weight:800;color:var(--tl)">${fmtE(totalTodo)}</span></div></div>`;nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="regGoto(nextAfter('cuotaVarDone'))">Confirmar</button>`;}
+  else if(reg.step==='shared'){const lbl=reg.cType!=='aplazado'?'¿CUOTAS COMPARTIDAS?':'¿GASTO COMPARTIDO?';h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">${lbl}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button onclick="pick('shared',true,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">Sí · 50/50</button><button onclick="pick('shared',false,'shared')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600">No · solo Jofre</button></div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='cuotasCuenta'){h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">¿DESDE QUÉ CUENTA SE DESCUENTAN LAS CUOTAS?</div><div style="font-size:11px;color:var(--t3);margin-bottom:10px">${regHasHoy()?`Cuota 1 (hoy) descontada de ${ACC_META[reg.account].n}.`:`Sin pago hoy — cuotas cargan a partir del mes de inicio.`}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${ACCOUNTS_LIST.filter(a=>a.id!=='IBKR'&&a.id!=='TRM').map(a=>`<button onclick="reg.cuotaCuentaDeduccion='${a.id}';regGoto(nextAfter('cuotasCuenta'))" class="acc-c${(reg.cuotaCuentaDeduccion||reg.account)===a.id?' on':''}">${a.n}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   // v89 -- BUG REAL (HSN, 4-sep-2026): este paso ofrecia el mes activo como
   // opcion de inicio de las cuotas ADICIONALES aunque ya hubiera "cuota 1
   // hoy" pagada ese mismo mes -- Jofre eligio el mes activo (sep) para HSN y
@@ -4171,7 +4220,7 @@ function renderReg(){
   // (ver fix arriba). Si ya hay pago hoy, se oculta el mes activo de las
   // opciones -- las cuotas adicionales solo pueden empezar el mes siguiente
   // en adelante, que es lo unico que tiene sentido conceptualmente.
-  else if(reg.step==='mesInicio'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const aiSkip=(ai<0?0:ai)+(reg.amount>0?1:0);const meses=MONTH_ORDER.filter((k,i)=>i>=aiSkip);h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿EN QUÉ MES INICIAN LAS CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('mesInicio','${m}','mesInicio')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
+  else if(reg.step==='mesInicio'){const ai=MONTH_ORDER.indexOf(ACTIVE_ID);const aiSkip=(ai<0?0:ai)+(regHasHoy()?1:0);const meses=MONTH_ORDER.filter((k,i)=>i>=aiSkip);h=`<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">¿EN QUÉ MES INICIAN LAS CUOTAS?</div><div style="display:flex;flex-direction:column;gap:8px">${meses.map(m=>`<button onclick="pick('mesInicio','${m}','mesInicio')" style="padding:14px;border-radius:13px;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:13px;font-weight:600;text-align:left">${MONTHS[m].name}${m===ACTIVE_ID?' · en curso':''}</button>`).join('')}</div>`;nav.innerHTML=backBtn;}
   else{h='<div style="flex:1;display:flex;flex-direction:column;justify-content:center">'+renderRegSummary()+'</div>';nav.innerHTML=backBtn+`<button class="btng" style="flex:1" onclick="saveReg()">Guardar movimiento</button>`;}
   const _bsCard=document.getElementById('regstep-card'),_bsBd=document.getElementById('regstep-bd');
   if(reg.step!=='capture'){
@@ -4233,8 +4282,19 @@ function regDateISO(d){d=d||reg.customDate||new Date();return d.getFullYear()+'-
     // mesId:ACTIVE_ID, sin preguntar.
     regMov(reg.account,label,reg.amount,false,reg.category,reg.group,null,reg.fondoEmergencia?'emergencia':undefined);
   }
-  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID,noCaja:true});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category],{offset:0,tdcRelease:esCaixaTDC,aplazado:true});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
-  else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=reg.amount>0;if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
+  else if(reg.cType==='tdcFrac'){
+    // v147 -- comportamiento 1. La compra NO mueve caja ni cuenta como gasto hoy: solo bloquea
+    // el limite de la TDC (fila "(TDC)", noCaja -> v143). El gasto se cuenta POR CUOTA, en el
+    // mes de cada cuota (decision de Jofre 2-oct-2026, igual que Emma Colchon), y cada cuota
+    // libera su parte del limite al pagarse (tdcLibera, ver pushCuotaToMonths / markPago).
+    if(reg.account!=='CAIXA'){__movDateOverride=null;toast('El fraccionado en TDC solo aplica a la cuenta Caixa','var(--rd)');return;}
+    const tagsT=[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category];
+    const amtsT=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;
+    regCaixaCard(label,reg.amount);
+    pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amtsT,label,tagsT,{offset:0,tdcPrincipal:reg.amount});
+  }
+  else if(reg.cType==='aplazado'){MOVS[reg.account]=MOVS[reg.account]||[];MOVS[reg.account].unshift({id:nuevoMovId(),dt:'—',l:label+' (aplazado)',a:'-'+fmtE(reg.amount),t:false,cat:reg.category||undefined,mesId:ACTIVE_ID,noCaja:true});const esCaixaTDC=reg.account==='CAIXA';if(esCaixaTDC)regCaixaCard(label,reg.amount);pushCuotaToMonths(nextMonthId(ACTIVE_ID),1,reg.amount,label,[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category],{offset:0,tdcRelease:esCaixaTDC,aplazado:true});/* v89: pushCuotaToMonths ya refresca MONTH_PAGOS del mes siguiente internamente */}
+  else{const tags=[cuentaN,reg.shared?'50/50':'Solo Jofre',reg.category];const amts=reg.cuotasIguales?reg.cuotaMonto:reg.cuotaMontos;const hayPagoHoy=regHasHoy();if(hayPagoHoy)regMov(reg.account,label+' · cuota 1/'+((reg.cNum||0)+1),reg.amount,false,reg.category);pushCuotaToMonths(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum,amts,label,tags,{offset:hayPagoHoy?1:0});CUOTAS_NUEVAS.push(Object.assign({},reg));}
   updPrevCard();closeReg();
   // v28 — Al terminar de registrar, devolver al usuario a DONDE ESTABA:
   // · Si vino desde el overlay de una cuenta (aov) — que es como Massiel y Jofre
@@ -4514,17 +4574,18 @@ function mergePagosConDelta(freshArr,baseArr,actualArr){
 // directo a Firestore (_fbSetDoc) para persistir. Ahora un cambio de mesId
 // se detecta como "quito la key vieja, agrego la key nueva" y persiste con
 // saveState() normal, igual que agregar o quitar un movimiento.
-function movKey(m){return [m.dt,m.l,m.a,m.t,m.cat||'',m.mesId||''].join('||');}
+function movKey(m){return (m.id?'#'+m.id+'|':'')+[m.dt,m.l,m.a,m.t,m.cat||'',m.mesId||''].join('||');}
+// claves UNICAS por posicion: con id, el id + contenido (editar mesId sigue detectandose, v89); sin id
+// (historicas), el contenido + n-esima aparicion identica. Dos filas iguales nunca comparten clave.
+function movKeysUnicas(arr){const vistas={};return (arr||[]).map(m=>{const k=movKey(m);if(m.id)return k;vistas[k]=(vistas[k]||0)+1;return k+'##'+vistas[k];});}
 function mergeMovsConDelta(freshArr,baseArr,actualArr){
   freshArr=freshArr||[];baseArr=baseArr||[];actualArr=actualArr||[];
-  const baseKeys=new Set(baseArr.map(movKey));
-  const actualKeys=new Set(actualArr.map(movKey));
-  const removidosPorMi=baseArr.filter(m=>!actualKeys.has(movKey(m)));
-  const agregadosPorMi=actualArr.filter(m=>!baseKeys.has(movKey(m)));
-  const removidosKeys=new Set(removidosPorMi.map(movKey));
-  const resultado=freshArr.filter(m=>!removidosKeys.has(movKey(m)));
-  const resultadoKeys=new Set(resultado.map(movKey));
-  agregadosPorMi.forEach(m=>{if(!resultadoKeys.has(movKey(m))){resultado.push(m);resultadoKeys.add(movKey(m));}});
+  const fK=movKeysUnicas(freshArr),bK=movKeysUnicas(baseArr),aK=movKeysUnicas(actualArr);
+  const baseSet=new Set(bK),actualSet=new Set(aK);
+  const removidosKeys=new Set(bK.filter(k=>!actualSet.has(k)));         // los que YO quite
+  const resultado=[],resultadoKeys=new Set();
+  freshArr.forEach((m,i)=>{if(!removidosKeys.has(fK[i])){resultado.push(m);resultadoKeys.add(fK[i]);}});
+  actualArr.forEach((m,i)=>{if(!baseSet.has(aK[i])&&!resultadoKeys.has(aK[i])){resultado.push(m);resultadoKeys.add(aK[i]);}}); // los que YO agregue
   return resultado;
 }
 // v26 — Utilidad de mantenimiento: eliminar movimientos concretos de MOVS de
@@ -4630,7 +4691,7 @@ function buildPersistableState(overrides){
         :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
     );
   });
-  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS};
+  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS};
 }
 async function saveState(){
   if(_saveInFlight){_saveQueued=true;return;} // v128: no se descarta -- se encola un guardado de seguimiento (ver finally) en vez de perder este cambio
@@ -4695,6 +4756,7 @@ async function saveState(){
         const freshData=freshSnap.data();
         if(freshData&&freshData.json){
           const freshState=JSON.parse(freshData.json);
+          if(Array.isArray(freshState.CUOTAS_FUTURAS))uneCuotasFuturas(freshState.CUOTAS_FUTURAS);
           if(freshState.MOVS){
             Object.keys(mMovs).forEach(k=>{
               mMovs[k]=mergeMovsConDelta(freshState.MOVS[k],pendingSnap.baselineMovs[k],pendingSnap.movs[k]);
@@ -4903,6 +4965,7 @@ function applyState(s){
   snapshotDetBaseline();
   snapshotBalBaseline();
   if(s.CUOTAS_NUEVAS){CUOTAS_NUEVAS.length=0;CUOTAS_NUEVAS.push(...s.CUOTAS_NUEVAS);}
+  if(Array.isArray(s.CUOTAS_FUTURAS))uneCuotasFuturas(s.CUOTAS_FUTURAS);
   // v14 (jul-30): bloque pagosByMonth movido hasta ACÁ. buildMonthPagos() depende de
   // DET / DET_MONTH_OVERRIDES / DET_EXTRA / DET_MONTH_REMOVED, mCats/mCuotas y CUOTAS_NUEVAS.
   // En v13 corría ANTES de cargar ese detalle, así que el seed no incluía las tareas
