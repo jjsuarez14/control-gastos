@@ -737,6 +737,7 @@ function auditPanelHTML(acc){
     const a=auditarCuenta(acc,ACTIVE_ID);
     const f=v=>SALDOS_OCULTOS?'••••':fmtE(v);
     const ok=a.cuadra;const col=ok?'var(--tl)':'var(--rd)';
+    if(ok)return ''; // v151: el panel de auditoria no se muestra cuando cuadra (Jofre 3-oct-2026); solo aparece ante un desfase
     return `<div style="padding:0 16px 10px"><div style="padding:9px 11px;border-radius:12px;background:var(--s2);border:1px solid var(--bd2);font-size:11px;color:var(--t2);line-height:1.5"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:3px">AUDITORÍA DEL MES · ${a.aperturaFuente==='SALDO_APERTURA'?'sin cierre previo (apertura jul)':'apertura = '+a.aperturaFuente}</div>Apertura ${f(a.apertura)} + neto ${f(a.neto)} = esperado ${f(a.esperado)}<br>Saldo ${f(a.saldo)} · <b style="color:${col}">${ok?'cuadra ✓':'desfase '+f(a.desfase)}</b></div></div>`;
   }catch(e){return '';}
 }
@@ -2280,7 +2281,7 @@ function ahorroItemsFromSplit(total,id){
 }
 function ahorroTargetFor(id){
   if(id==='oct')return 400; // excepción confirmada por Jofre
-  return 500; // fijo desde noviembre (40/20/20/20)
+  return 400; // v151: Jofre 3-oct-2026 -- se mantiene en 400 desde noviembre HASTA NUEVO AVISO (no subir a 500). Reparto 40/20/20/20.
 }
 function itemsForKey(key,id){
   if(key==='servicios')return serviciosFor(id);
