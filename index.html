@@ -2081,7 +2081,9 @@ const SVC_RECIBO_DESC={svc8:'Recibo mensual · llega a mitad del mes anterior ·
 function migrarServiciosEstimados(ov,id){
   const off=monthOffsetFromBase(id);if(!Array.isArray(ov)||off==null||off<=monthOffsetFromBase('oct'))return;
   ov.forEach(x=>{
-    if((x.id!=='svc8'&&x.id!=='svc9')||x.man===true||x.est!==undefined)return;
+    // v149 -- ya NO depende de que `est` sea undefined: applyState/mergeItemArrays restauraba `a` desde lo guardado
+    // pero no el flag, dejando 71,38 marcado como estimado. Se reevalua siempre salvo confirmado (est:false) o man.
+    if((x.id!=='svc8'&&x.id!=='svc9')||x.man===true||x.est===false)return;
     if(x.a===0||(x.id==='svc8'&&x.a===71.38)||(x.id==='svc9'&&x.a===86.03)){x.a=0;x.est=true;x.d=SVC_RECIBO_DESC[x.id];}
   });
 }
@@ -4922,7 +4924,7 @@ function mergeItemArrays(freshArr,savedArr){
     // copiaba esos tres campos desde lo guardado. Root cause del bug donde
     // el flag "especial" de agosto (y probablemente el de julio) desaparecía
     // silenciosamente tras cualquier saveState/applyState -- ver auditoría CDG(9).
-    return Object.assign({},fi,{a:si.a!=null?si.a:fi.a,l:si.l||fi.l,d:si.d!=null?si.d:fi.d,tipo:si.tipo!==undefined?si.tipo:fi.tipo});
+    return Object.assign({},fi,{a:si.a!=null?si.a:fi.a,l:si.l||fi.l,d:si.d!=null?si.d:fi.d,tipo:si.tipo!==undefined?si.tipo:fi.tipo,est:si.est!==undefined?si.est:fi.est,man:si.man!==undefined?si.man:fi.man});  // v149: est/man tambien se conservan
   });
   savedArr.forEach(si=>{if(!freshIds.has(si.id)&&/^custom-/.test(si.id))merged.push(si);});
   return merged;
