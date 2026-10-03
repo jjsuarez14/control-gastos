@@ -2039,7 +2039,10 @@ function aplicarReglasDesde(key,monthId,list,soloEstructura){
     const j=list.findIndex(x=>x.id===r.id);
     if(r.op==='del'){if(j>-1)list.splice(j,1);}
     else if(r.op==='add'){if(j<0&&!isRemoved(key,monthId,r.id))list.push(Object.assign({},r.item));}
-    else if(r.op==='set'&&!soloEstructura){if(j>-1){if(r.a!=null)list[j].a=r.a;if(r.l)list[j].l=r.l;}}
+    // v148 -- FIX DE RAIZ: 'set' ("A partir de aquí") tambien debe llegar a los meses YA materializados
+    // (antes se saltaba todos los overrides: Limpieza 72 en oct/nov y 30 en dic). Solo respeta los
+    // ajustes puntuales explicitos (man:true, ver applyItemEdit 'solo').
+    else if(r.op==='set'&&(!soloEstructura||(j>-1&&list[j].man!==true))){if(j>-1){if(r.a!=null){list[j].a=r.a;list[j].est=false;svcConfirmaD(list[j]);}if(r.l)list[j].l=r.l;}}
   });
   return list;
 }
@@ -2054,6 +2057,14 @@ function serviciosBaseFresh(id){
   if(off!=null&&off%2===1){
     list.push({id:'svc9',l:'Agua',a:86.03,d:'Doméstica · bimestral',tag:'BBVA'});
   }
+  // v148 -- FIX DE RAIZ (Jofre 3-oct-2026). Luz (mensual) y Agua (bimestral) son RECIBOS
+  // que llegan a mitad del mes anterior (la Luz de noviembre llega a mitad de octubre).
+  // Hasta que el recibo no llega, el monto es DESCONOCIDO: antes un mes nuevo copiaba la
+  // plantilla (71,38 / 86,03) y la presentaba como dato confirmado; ahora nace en 0 y marcado
+  // `est` (estimado), y la categoria Servicios se muestra SIN CONFIRMAR hasta cargar el recibo.
+  if(off!=null&&off>monthOffsetFromBase('oct')){
+    list.forEach(x=>{if(x.id==='svc8'||x.id==='svc9'){x.a=0;x.est=true;x.d=SVC_RECIBO_DESC[x.id];}});
+  }
   if(off!=null&&off>=monthOffsetFromBase('ago')){
     // Se ve como UNA sola línea de €60 en Servicios (y en el total de la
     // categoría); taskSplit indica que las TAREAS ("Enviar a...") sí deben
@@ -2062,6 +2073,20 @@ function serviciosBaseFresh(id){
   }
   return aplicarReglasDesde('servicios',id,list);
 }
+const SVC_RECIBO_DESC={svc8:'Recibo mensual · llega a mitad del mes anterior · sin confirmar',svc9:'Recibo bimestral · llega a mitad del mes anterior · sin confirmar'};
+// v148 -- los meses ya materializados (override guardado) heredaron la plantilla como si fuera dato real.
+// Se corrigen UNA vez (idempotente: `est` queda definido): recibos con el valor exacto de la plantilla
+// (Luz 71,38 / Agua 86,03) o en 0 pasan a 0 + estimado. Un monto distinto, o uno ya confirmado (est:false
+// o man:true), NO se toca.
+function migrarServiciosEstimados(ov,id){
+  const off=monthOffsetFromBase(id);if(!Array.isArray(ov)||off==null||off<=monthOffsetFromBase('oct'))return;
+  ov.forEach(x=>{
+    if((x.id!=='svc8'&&x.id!=='svc9')||x.man===true||x.est!==undefined)return;
+    if(x.a===0||(x.id==='svc8'&&x.a===71.38)||(x.id==='svc9'&&x.a===86.03)){x.a=0;x.est=true;x.d=SVC_RECIBO_DESC[x.id];}
+  });
+}
+function svcConfirmaD(it){if(it&&typeof it.d==='string')it.d=it.d.replace(/ · sin confirmar$/,' · confirmado');}
+function svcConfirmado(id){return !serviciosFor(id).some(x=>x.est===true);}
 function migrateLegacyLimpieza(ov){
   // Versión anterior guardaba Limpieza·Hogar como 2 líneas (svc-limp1/2) en
   // Servicios. Si un override ya las tiene guardadas (incl. las que se
@@ -2111,6 +2136,7 @@ function serviciosFor(id){
   if(ov){
     migrateLegacyServiciosIds(ov);
     migrateLegacyLimpieza(ov);
+    migrarServiciosEstimados(ov,id);
     reconcileOverride('servicios',id,ov,fresh);
     aplicarReglasDesde('servicios',id,ov,true);
     return ov.concat((DET_EXTRA.servicios&&DET_EXTRA.servicios[id])||[]);
@@ -2447,6 +2473,7 @@ function recalcMonthTotals(id){
   // Refrescar c.a de cada categoría desde su detalle real (efecto secundario
   // que otras vistas esperan) — el reparto en sí ya no se calcula acá.
   m.cats.forEach(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);});
+  m.cats.forEach(c=>{if(c.id===id+'-svc')c.confirmed=svcConfirmado(id);});   // v148
   // Reparto desde la fuente única (v26): mismo número que aporteTotales.
   const r=repartoMes(id);
   const jofre=r.jofre, massiel=r.massiel;
@@ -2673,7 +2700,7 @@ function applyItemEdit(key,itemId,val,label){
     DET_MONTH_OVERRIDES[key]=DET_MONTH_OVERRIDES[key]||{};
     if(!DET_MONTH_OVERRIDES[key][currentMonth])DET_MONTH_OVERRIDES[key][currentMonth]=itemsForKey(key,currentMonth).map(x=>Object.assign({},x));
     const it=DET_MONTH_OVERRIDES[key][currentMonth].find(x=>x.id===itemId);
-    if(it){it.a=val;if(label)it.l=label;hit=true;}
+    if(it){it.a=val;it.est=false;it.man=true;svcConfirmaD(it);if(label)it.l=label;hit=true;}
   }else if(applyMode==='desde'){
     let idx=MONTH_ORDER.indexOf(currentMonth);if(idx<0)idx=0;
     if(idx>0)for(let i=0;i<idx;i++){
@@ -2686,7 +2713,7 @@ function applyItemEdit(key,itemId,val,label){
     if(Array.isArray(base)){const it=base.find(x=>x.id===itemId);if(it){it.a=val;if(label)it.l=label;hit=true;}}
     for(let i=idx;i<MONTH_ORDER.length;i++){
       const mid=MONTH_ORDER[i];
-      if(DET_MONTH_OVERRIDES[key]&&DET_MONTH_OVERRIDES[key][mid]){const it=DET_MONTH_OVERRIDES[key][mid].find(x=>x.id===itemId);if(it){it.a=val;if(label)it.l=label;hit=true;}}
+      if(DET_MONTH_OVERRIDES[key]&&DET_MONTH_OVERRIDES[key][mid]){const it=DET_MONTH_OVERRIDES[key][mid].find(x=>x.id===itemId);if(it){it.a=val;it.est=false;svcConfirmaD(it);if(label)it.l=label;hit=true;}}
     }
   }
   return hit;
