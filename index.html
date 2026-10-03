@@ -2505,6 +2505,7 @@ const keyMap=new Proxy({},{get(_,catId){if(typeof catId!=='string')return undefi
 let currentMonth=null,editingId=null;
 function openMov(id){
   currentMonth=id;const d=MONTHS[id];
+  {const _cs=(d.cats||[]).find(c=>c.id===id+'-svc');if(_cs)_cs.confirmed=svcConfirmado(id);}   // v150: SIN CONFIRMAR siempre fresco (meses guardados)
   document.getElementById('mov-title').textContent=d.name;
   const b=document.getElementById('mov-badge');b.textContent=d.badge;b.style.background=d.badgeBg;b.style.color=d.badgeC;b.style.border='1px solid '+d.badgeC+'55';
   {const _ap=aporteTotales(id);
