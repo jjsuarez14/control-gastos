@@ -2026,9 +2026,27 @@ function progTxt(st){return st.n+'/'+st.total+(st.last?' · ÚLTIMA':'');}
 // pisa un ajuste manual de un mes puntual). Se persiste como DET_MONTH_REMOVED.
 const DET_REGLAS_DESDE=[];
 function reglaDesdeKey(r){return r.k+'|'+r.op+'|'+r.id+'|'+r.m;}
-function registrarReglaDesde(r){
+// v152 -- FIX DE RAIZ (5-oct-2026): las reglas solo se podian AGREGAR (union por clave), nunca borrar.
+// Una sesion con datos viejos en memoria (otra pestana, el telefono) volvia a guardar la regla ya
+// eliminada y la RESUCITABA (Netflix desaparecia de nov en adelante y Orange 45 volvia). Ahora cada
+// regla lleva `ts` (cuando se creo) y las bajas viven en DET_REGLAS_BAJAS {clave:ts}: una regla solo
+// esta vigente si su ts es MAYOR que el de su baja. Las bajas solo crecen (max ts), igual que
+// DET_MONTH_REMOVED. Las dos iniciales son las reglas zombi detectadas el 5-oct (legacy, sin ts).
+const DET_REGLAS_BAJAS={'servicios|del|svc5|nov':1791187764423,'servicios|add|svc-orange|nov':1791187764423};
+function reglaVigente(r){const b=DET_REGLAS_BAJAS[reglaDesdeKey(r)];return b==null||(r.ts||0)>b;}
+function registrarReglaDesde(r,fromLoad){
+  if(!fromLoad&&r.ts==null)r.ts=Date.now();
+  if(fromLoad&&!reglaVigente(r))return;
   const i=DET_REGLAS_DESDE.findIndex(x=>reglaDesdeKey(x)===reglaDesdeKey(r));
   if(i>-1)DET_REGLAS_DESDE[i]=r;else DET_REGLAS_DESDE.push(r);
+}
+function anularReglaDesde(k,op,id,m){
+  const key=k+'|'+op+'|'+id+'|'+m;
+  DET_REGLAS_BAJAS[key]=Math.max(Date.now(),(DET_REGLAS_BAJAS[key]||0)+1);
+  for(let i=DET_REGLAS_DESDE.length-1;i>=0;i--)if(reglaDesdeKey(DET_REGLAS_DESDE[i])===key)DET_REGLAS_DESDE.splice(i,1);
+}
+function purgarReglasNoVigentes(){
+  for(let i=DET_REGLAS_DESDE.length-1;i>=0;i--)if(!reglaVigente(DET_REGLAS_DESDE[i]))DET_REGLAS_DESDE.splice(i,1);
 }
 function aplicarReglasDesde(key,monthId,list,soloEstructura){
   const iM=MONTH_ORDER.indexOf(monthId);
@@ -4722,7 +4740,7 @@ function buildPersistableState(overrides){
         :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
     );
   });
-  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS};
+  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,DET_REGLAS_BAJAS,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS};
 }
 async function saveState(){
   if(_saveInFlight){_saveQueued=true;return;} // v128: no se descarta -- se encola un guardado de seguimiento (ver finally) en vez de perder este cambio
@@ -4976,7 +4994,10 @@ function applyState(s){
     });
   });
   // v146 -- reglas desde: union por clave (k|op|id|m); la version persistida pisa.
-  if(Array.isArray(s.DET_REGLAS_DESDE))s.DET_REGLAS_DESDE.forEach(r=>{if(r&&r.k&&r.op&&r.id&&r.m)registrarReglaDesde(r);});
+  // v152 -- primero las bajas (max ts), luego las reglas vigentes, y se purga lo que ya no lo sea en memoria.
+  if(s.DET_REGLAS_BAJAS&&typeof s.DET_REGLAS_BAJAS==='object')Object.keys(s.DET_REGLAS_BAJAS).forEach(k=>{const t=Number(s.DET_REGLAS_BAJAS[k])||0;if(t>(DET_REGLAS_BAJAS[k]||0))DET_REGLAS_BAJAS[k]=t;});
+  if(Array.isArray(s.DET_REGLAS_DESDE))s.DET_REGLAS_DESDE.forEach(r=>{if(r&&r.k&&r.op&&r.id&&r.m)registrarReglaDesde(r,true);});
+  purgarReglasNoVigentes();
   // MONTH_PAGOS_REMOVED: union por mes, igual criterio que DET_MONTH_REMOVED --
   // solo crece, nunca se pisa una eliminación ya hecha.
   if(s.MONTH_PAGOS_REMOVED)Object.keys(s.MONTH_PAGOS_REMOVED).forEach(mid=>{
