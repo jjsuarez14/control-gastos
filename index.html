@@ -1938,7 +1938,10 @@ function lastKnownCat(key,beforeId){
   return 0;
 }
 function ensureMonthDefined(id){
-  if(MONTHS[id])return;
+  // v154: applyState REEMPLAZA MONTH_ORDER con el persistido pero deja en MONTHS los meses ya creados en memoria
+  // (p. ej. los creados al migrar la cola). Un mes que existe en MONTHS pero no en MONTH_ORDER es un mes
+  // "fantasma" (invisible en Prevision): se re-registra en el orden en vez de retornar sin hacer nada.
+  if(MONTHS[id]){if(!MONTH_ORDER.includes(id))MONTH_ORDER.push(id);return;}
   const priorId=MONTH_ORDER[MONTH_ORDER.length-1];
   const gymLast=lastKnownCat('gimnasios',priorId);
   const colLast=lastKnownCat('colegio',priorId);
@@ -1978,10 +1981,10 @@ function materializarCuotasFuturas(){
     const id=monthIdFromYm(c.ym);
     if(!id){CUOTAS_FUTURAS.push(c);return;}
     const last=MONTH_ORDER[MONTH_ORDER.length-1];
-    if(!MONTHS[id]){
+    if(!MONTH_ORDER.includes(id)){
       if(monthIdxAbs(id)<=monthIdxAbs(last)){CUOTAS_FUTURAS.push(c);return;}
-      let g=0;while(!MONTHS[id]&&g++<240)ensureMonthDefined(nextMonthId(MONTH_ORDER[MONTH_ORDER.length-1]));
-      if(!MONTHS[id]){CUOTAS_FUTURAS.push(c);return;}
+      let g=0;while(!MONTH_ORDER.includes(id)&&g++<240)ensureMonthDefined(nextMonthId(MONTH_ORDER[MONTH_ORDER.length-1]));
+      if(!MONTH_ORDER.includes(id)||!MONTHS[id]){CUOTAS_FUTURAS.push(c);return;}
     }
     const cu=Object.assign({},c);delete cu.ym;
     MONTHS[id].cuotas=MONTHS[id].cuotas||[];
