@@ -2679,6 +2679,18 @@ function deleteTareaPendiente(taskId,label,monto,monthId){
   document.getElementById('del-desc').textContent='¿Eliminar "'+label+'" ('+fmtE(monto)+')? Elige si es solo de '+(MONTHS[monthId]?MONTHS[monthId].name:'este mes')+' o desde ahora en adelante.';
   document.getElementById('delModal').style.display='flex';
 }
+// v156 -- FIX DE RAIZ (7-oct-2026, "eliminar GENUA desde noviembre"): eliminar/agregar un item "a partir de
+// aqui" cambiaba la regla y los totales, pero las TAREAS de pago de los meses siguientes (MONTH_PAGOS) ya
+// materializadas seguian listando el item (GENUA seguia como tarea pendiente en TR Jofre de nov-2027).
+// Una sola funcion propaga el cambio: para cada mes >= fromId recalcula totales y regenera las tareas
+// conservando done/monto de lo ya registrado (mismo patron que ya usan las cuotas).
+function propagarCambioDesde(fromId){
+  const i0=MONTH_ORDER.indexOf(fromId);if(i0<0)return;
+  for(let i=i0;i<MONTH_ORDER.length;i++){
+    const mid=MONTH_ORDER[i];if(!MONTHS[mid])continue;
+    recalcMonthTotals(mid);refreshMonthPagosPreservingState(mid);
+  }
+}
 function execDelete(mode){
   if(pendingDeleteTarea){
     const{taskId,label,monto,monthId:pendMonthId}=pendingDeleteTarea;
@@ -2716,7 +2728,7 @@ function execDelete(mode){
     const i=arr.findIndex(x=>x.id===itemId);if(i>-1)arr.splice(i,1);
     markRemoved(key,currentMonth,itemId);
     if(DET_EXTRA[key]&&DET_EXTRA[key][currentMonth]){const ei=DET_EXTRA[key][currentMonth].findIndex(x=>x.id===itemId);if(ei>-1)DET_EXTRA[key][currentMonth].splice(ei,1);}
-    recalcMonthTotals(currentMonth);
+    recalcMonthTotals(currentMonth);refreshMonthPagosPreservingState(currentMonth);
     refreshFxView();
     openMov(currentMonth);renderPrevision();updBbvaBadge();
     toast('✓ "'+label+'" eliminado solo de '+MONTHS[currentMonth].name+' — vuelve el próximo mes','var(--tl)');saveState();
@@ -2743,7 +2755,7 @@ function execDelete(mode){
       if(mi>=idx){const ei=DET_EXTRA[key][mid].findIndex(x=>x.id===itemId);if(ei>-1)DET_EXTRA[key][mid].splice(ei,1);}
     });
   }
-  recalcMonthTotals(currentMonth);
+  propagarCambioDesde(currentMonth);
   refreshFxView();
   openMov(currentMonth);renderPrevision();updBbvaBadge();
   toast('✓ "'+label+'" eliminado desde este mes','var(--tl)');saveState();
@@ -2874,6 +2886,7 @@ function saveAddItem(){
           DET_MONTH_OVERRIDES[currentFxKey][mid].push(copy);
         }
       }
+      if(MONTH_ORDER[idx+1])propagarCambioDesde(MONTH_ORDER[idx+1]);
     }
     if(currentMonth){recalcMonthTotals(currentMonth);syncPagoForNewItem(currentMonth,name,addCuentaSel,amt);}
     closeAddItem();refreshFxView();if(currentMonth)openMov(currentMonth);renderPrevision();updBbvaBadge();
