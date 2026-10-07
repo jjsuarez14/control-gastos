@@ -1973,6 +1973,9 @@ function ensureMonthDefined(id){
 // futura es una cuota de un mes real. Esta funcion convierte lo que haya en la cola (datos ya persistidos) en
 // cuotas de su mes. Idempotente (misma etiqueta+progreso en el mes => no se duplica), de modo que una sesion
 // vieja que reenvie la cola no genera duplicados. Si un ym no se puede resolver, la entrada se conserva.
+// v155 -- una entrada de la cola ya convertida en cuota de su mes NO se persiste (si no, el guardado la volvia a
+// unir desde Firestore y la cola legacy quedaba para siempre, con riesgo de resucitar una cuota borrada).
+function cuotaFuturaMaterializada(c){const id=monthIdFromYm(c&&c.ym);const m=id&&MONTHS[id];return !!(m&&(m.cuotas||[]).some(x=>x.l===c.l&&x.prog===c.prog));}
 function materializarCuotasFuturas(){
   if(!CUOTAS_FUTURAS.length)return 0;
   const pend=CUOTAS_FUTURAS.splice(0,CUOTAS_FUTURAS.length).sort((a,b)=>a.ym<b.ym?-1:a.ym>b.ym?1:0);
@@ -4784,7 +4787,7 @@ function buildPersistableState(overrides){
         :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
     );
   });
-  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,DET_REGLAS_BAJAS,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS};
+  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,DET_REGLAS_BAJAS,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS:CUOTAS_FUTURAS.filter(c=>!cuotaFuturaMaterializada(c))};
 }
 async function saveState(){
   if(_saveInFlight){_saveQueued=true;return;} // v128: no se descarta -- se encola un guardado de seguimiento (ver finally) en vez de perder este cambio
