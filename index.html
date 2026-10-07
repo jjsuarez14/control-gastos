@@ -1600,14 +1600,33 @@ const MONTH_ORDER=['jun','jul','ago','sep'];
 let ACTIVE_ID='jun';
 const BASE_ID='jun';
 const MONTH_CAL=[{id:'ene',name:'Enero'},{id:'feb',name:'Febrero'},{id:'mar',name:'Marzo'},{id:'abr',name:'Abril'},{id:'may',name:'Mayo'},{id:'jun',name:'Junio'},{id:'jul',name:'Julio'},{id:'ago',name:'Agosto'},{id:'sep',name:'Septiembre'},{id:'oct',name:'Octubre'},{id:'nov',name:'Noviembre'},{id:'dic',name:'Diciembre'}];
-function monthMeta(id){return MONTH_CAL.find(m=>m.id===id);}
-function nextMonthId(id){const i=MONTH_CAL.findIndex(m=>m.id===id);return MONTH_CAL[(i+1)%12].id;}
-// v147 -- anio de un ID de mes dentro de la ventana de 12 meses (MONTH_ORDER[0]='jun' = jun-2026).
-const MONTH_WINDOW_START_YEAR=2026;
-function monthYear(id){const f=MONTH_CAL.findIndex(m=>m.id===MONTH_ORDER[0]);const i=MONTH_CAL.findIndex(m=>m.id===id);return MONTH_WINDOW_START_YEAR+((f<0||i<0||i>=f)?0:1);}
-function ymMasMeses(id,k){const i=MONTH_CAL.findIndex(m=>m.id===id);if(i<0)return null;const t=i+k;const y=monthYear(id)+Math.floor(t/12);return y+'-'+String(((t%12)+12)%12+1).padStart(2,'0');}
-// cuantas de `cNum` cuotas que arrancan en startId NO caben en la ventana de 12 meses
-function cuotasFueraDeVentana(startId,cNum){const f=MONTH_CAL.findIndex(m=>m.id===MONTH_ORDER[0]);const i=MONTH_CAL.findIndex(m=>m.id===startId);if(f<0||i<0)return 0;return Math.max(0,cNum-(12-((i-f+12)%12)));}
+// v153 -- FIX DE RAIZ: IDs de mes CON ANIO. Antes el ID era solo el mes (jun..may), la app asumia una
+// ventana de 12 meses, `yr` estaba hardcodeado en ensureMonthDefined y todo lo posterior a may-2027 chocaba
+// con jun-2026 (cuotas en cola invisibles, imposible abrir jun-2027). Ahora EXISTE UNA SOLA definicion:
+//   * jun-2026 .. may-2027 (la epoca ya persistida) conservan su ID corto (jun, jul ... may): sus claves viven
+//     en MONTHS / MONTH_PAGOS / DET_MONTH_OVERRIDES / reglas / movimientos y NO se renombran (cero migracion).
+//   * cualquier otro mes lleva el anio en 2 digitos: jun27, jul27 ... may28, ene29 ...  (sin guion: los ids de
+//     tareas/categorias son "<mes>-<algo>" y un guion extra los romperia).
+// parseMonthId/monthIdOf son la unica fuente de verdad; nada mas deduce el anio de un ID.
+const MONTH_EPOCH_IDX=2026*12+5;   // jun-2026 = primer mes de la epoca de IDs cortos (la epoca dura 12 meses)
+function parseMonthId(id){
+  if(typeof id!=='string')return null;
+  const k=/^([a-z]{3})(\d{2})$/.exec(id);
+  if(k){const m=MONTH_CAL.findIndex(x=>x.id===k[1]);return m<0?null:{y:2000+(+k[2]),m};}
+  const m=MONTH_CAL.findIndex(x=>x.id===id);
+  return m<0?null:{y:m>=5?2026:2027,m};
+}
+function monthIdOf(y,m){
+  const idx=y*12+m;
+  return (idx>=MONTH_EPOCH_IDX&&idx<MONTH_EPOCH_IDX+12)?MONTH_CAL[m].id:MONTH_CAL[m].id+String(y%100).padStart(2,'0');
+}
+function monthShift(id,k){const p=parseMonthId(id);if(!p)return null;const t=p.y*12+p.m+k;return{y:Math.floor(t/12),m:((t%12)+12)%12};}
+function monthMeta(id){const p=parseMonthId(id);return p?{id,name:MONTH_CAL[p.m].name,y:p.y}:undefined;}
+function nextMonthId(id){const q=monthShift(id,1);return q?monthIdOf(q.y,q.m):null;}
+function monthYear(id){const p=parseMonthId(id);return p?p.y:null;}
+function ymMasMeses(id,k){const q=monthShift(id,k);return q?q.y+'-'+String(q.m+1).padStart(2,'0'):null;}
+function monthIdFromYm(ym){const t=/^(\d{4})-(\d{2})$/.exec(ym||'');return t&&+t[2]>=1&&+t[2]<=12?monthIdOf(+t[1],+t[2]-1):null;}
+function monthIdxAbs(id){const p=parseMonthId(id);return p?p.y*12+p.m:null;}
 // union idempotente por clave (ym|texto|progreso): nunca duplica ni pierde entradas entre sesiones
 function uneCuotasFuturas(arr){const ks=new Set(CUOTAS_FUTURAS.map(c=>c.ym+'|'+c.l+'|'+c.prog));(arr||[]).forEach(c=>{if(!c||!c.ym)return;const k=c.ym+'|'+c.l+'|'+c.prog;if(!ks.has(k)){CUOTAS_FUTURAS.push(c);ks.add(k);}});}
 // v69 (28-ago) -- mes ANTERIOR dentro de la secuencia real de trabajo de la
@@ -1926,7 +1945,7 @@ function ensureMonthDefined(id){
   const perLast=lastKnownCat('personales',priorId);
   MONTH_ORDER.push(id);
   const meta=monthMeta(id);
-  const yr=(id==='ene'||id==='feb'||id==='mar'||id==='abr'||id==='may')?'2027':'2026';
+  const yr=String(monthYear(id));   // v153: del ID, no hardcodeado
   const svc=Math.round(sumServicios(id)*100)/100;
   const arr=867,mrc=750,rem=190;
   const ahoTarget=ahorroTargetFor(id);
@@ -1946,6 +1965,30 @@ function ensureMonthDefined(id){
   MONTHS[id]={name:meta.name+' '+yr,badge:'Estimado · revisar montos',badgeC:'var(--t3)',badgeBg:'rgba(107,133,168,.14)',jofre:'—',massiel:'—',cuotas:[],partial:true,cats};
   recalcMonthTotals(id);
   ensureBridgeTask(id);
+}
+// v153 -- CUOTAS_FUTURAS era una cola de cuotas "fuera de ventana" (con `ym`). Ya no hay ventana: toda cuota
+// futura es una cuota de un mes real. Esta funcion convierte lo que haya en la cola (datos ya persistidos) en
+// cuotas de su mes. Idempotente (misma etiqueta+progreso en el mes => no se duplica), de modo que una sesion
+// vieja que reenvie la cola no genera duplicados. Si un ym no se puede resolver, la entrada se conserva.
+function materializarCuotasFuturas(){
+  if(!CUOTAS_FUTURAS.length)return 0;
+  const pend=CUOTAS_FUTURAS.splice(0,CUOTAS_FUTURAS.length).sort((a,b)=>a.ym<b.ym?-1:a.ym>b.ym?1:0);
+  const tocados=new Set();let n=0;
+  pend.forEach(c=>{
+    const id=monthIdFromYm(c.ym);
+    if(!id){CUOTAS_FUTURAS.push(c);return;}
+    const last=MONTH_ORDER[MONTH_ORDER.length-1];
+    if(!MONTHS[id]){
+      if(monthIdxAbs(id)<=monthIdxAbs(last)){CUOTAS_FUTURAS.push(c);return;}
+      let g=0;while(!MONTHS[id]&&g++<240)ensureMonthDefined(nextMonthId(MONTH_ORDER[MONTH_ORDER.length-1]));
+      if(!MONTHS[id]){CUOTAS_FUTURAS.push(c);return;}
+    }
+    const cu=Object.assign({},c);delete cu.ym;
+    MONTHS[id].cuotas=MONTHS[id].cuotas||[];
+    if(!MONTHS[id].cuotas.some(x=>x.l===cu.l&&x.prog===cu.prog)){MONTHS[id].cuotas.push(cu);tocados.add(id);n++;}
+  });
+  tocados.forEach(id=>{recalcMonthTotals(id);refreshMonthPagosPreservingState(id);});
+  return n;
 }
 function ensureMonthsAhead(fromId,n){
   // v147 -- antes: `while` sin salida. Con IDs de mes sin anio (ventana de 12) ensureMonthDefined
@@ -4194,7 +4237,6 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
   // en CUOTAS_FUTURAS (persistida, con anio-mes explicito `ym`) para no perder ni una cuota.
   // Pendiente (Arquitectura, antes de mar-2027): IDs de mes con anio, que es lo que las vuelve
   // visibles en Prevision -- hasta entonces la cola solo las conserva.
-  const mid0=MONTH_ORDER[idx];let nCola=0;
   for(let n=1;n<=cNum;n++){
     const mid=MONTH_ORDER[idx+n-1];            // undefined => fuera de la ventana
     const perCuota=isArr?cuotaAmts[n-1]:cuotaAmts;
@@ -4202,12 +4244,11 @@ function pushCuotaToMonths(startId,cNum,cuotaAmts,label,tags,opts){
     const esUltima=numCuota===totalCuotas;
     const cu={l:label,tags:tags,amt:fmtE(perCuota),prog:numCuota+'/'+totalCuotas+(esUltima?' · ÚLTIMA':''),pct:Math.round(numCuota/totalCuotas*100),warn:esUltima,fixed:false,tdcRelease:!!(opts&&opts.tdcRelease),liquidacion:!!(opts&&opts.aplazado)};
     if(tdcP>0&&tdcSum>0){const lib=(n===cNum)?Math.round((tdcP-tdcAcc)*100)/100:Math.round(tdcP*perCuota/tdcSum*100)/100;tdcAcc+=lib;if(lib>0)cu.tdcLibera=lib;}
-    if(!mid){CUOTAS_FUTURAS.push(Object.assign({ym:ymMasMeses(mid0,n-1)},cu));nCola++;continue;}
+    if(!mid)throw new Error('pushCuotaToMonths: mes inexistente tras ensureMonthsAhead (idx '+(idx+n-1)+')');
     MONTHS[mid].cuotas=MONTHS[mid].cuotas||[];
     MONTHS[mid].cuotas.push(cu);
     touched.push(mid);
   }
-  if(nCola>0)setTimeout(()=>{try{toast('⚠ '+nCola+' cuota'+(nCola>1?'s':'')+' fuera de la ventana de meses quedaron en cola (no visibles en Previsión aún)','var(--gd)');}catch(e){}},1800);
   touched.forEach(refreshMonthPagosPreservingState);
   return touched;
 }
@@ -4237,7 +4278,7 @@ function renderRegSummary(){
   rows.push(['Categoría',reg.category]);rows.push(['Cuenta pago',accName]);
   if(reg.fondoEmergencia)rows.push(['Origen del dinero','Fondo de Emergencia (se descuenta del fondo)']);
   if(reg.group){rows.push(['Responsabilidad',{jofre:'Solo Jofre',massiel:'Solo Massiel',compartida:'Compartido'}[reg.group]||reg.group]);}
-  if(reg.isCuota){rows.push(['Modalidad',reg.cType==='tdcFrac'?'Fraccionado en TDC Caixa':(reg.cType==='frac'?'Fraccionado con pago hoy':'Aplazado fin de mes')]);rows.push(['Responsabilidad',reg.shared?'Compartido · 50/50':'Solo Jofre']);if(reg.cType!=='aplazado'){rows.push(['Cuotas cobran en',cuotaCuenta]);if(reg.mesInicio)rows.push(['Inician en',MONTHS[reg.mesInicio]?MONTHS[reg.mesInicio].name:'—']);const __fv=cuotasFueraDeVentana(reg.mesInicio||nextMonthId(ACTIVE_ID),reg.cNum||0);if(__fv>0)rows.push(['⚠ Fuera de ventana',__fv+' cuota'+(__fv>1?'s':'')+' en cola (aún no visibles en Previsión)']);}}
+  if(reg.isCuota){rows.push(['Modalidad',reg.cType==='tdcFrac'?'Fraccionado en TDC Caixa':(reg.cType==='frac'?'Fraccionado con pago hoy':'Aplazado fin de mes')]);rows.push(['Responsabilidad',reg.shared?'Compartido · 50/50':'Solo Jofre']);if(reg.cType!=='aplazado'){rows.push(['Cuotas cobran en',cuotaCuenta]);if(reg.mesInicio)rows.push(['Inician en',MONTHS[reg.mesInicio]?MONTHS[reg.mesInicio].name:'—']);}}
   return `<div style="font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:10px">CONFIRMAR</div>`+rows.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)"><div style="font-size:12px;color:var(--t2)">${r[0]}</div><div style="font-size:12px;color:var(--t1);font-weight:600;text-align:right">${r[1]}</div></div>`).join('');
 }
 function renderReg(){
@@ -5149,6 +5190,7 @@ function applyState(s){
   });
   // v28 — baseline de tareas tras reconstrucción completa, para el merge-by-delta.
   snapshotPagosBaseline();
+  materializarCuotasFuturas();   // v153: la cola pasa a meses reales (despues del baseline: cuenta como cambio local)
 }
 // ── CACHÉ LOCAL DEL ÚLTIMO ESTADO BUENO (v30) ────────────────────────────────
 // FIX arranque iOS standalone: en la app instalada, los import() del SDK de
