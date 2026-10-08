@@ -1728,9 +1728,11 @@ function buildMonthPagos(id){
   {
     const colItems=itemsForKey('colegio',id);
     const piscina=colItems.find(it=>/piscina/i.test(it.l||''));
-    const restoTotal=colItems.filter(it=>it!==piscina).reduce((s,it)=>s+(it.a||0),0);
+    const escuela=colItems.find(it=>it.id==='col-escuela-verano');
+    const restoTotal=colItems.filter(it=>it!==piscina&&it!==escuela).reduce((s,it)=>s+(it.a||0),0);
     if(restoTotal>0)handleTaggedItem('Colegio J.A.','BBVA',restoTotal);
     if(piscina&&piscina.a>0)handleTaggedItem('Colegio · Piscina','BBVA',piscina.a);
+    if(escuela&&escuela.a>0)handleTaggedItem('Colegio · Escuela de Verano','BBVA',escuela.a);
   }
   const efectivoItems=[]; // {label, total, inc}
   itemsForKey('servicios',id).forEach(it=>{
@@ -2115,7 +2117,7 @@ function aplicarReglasDesde(key,monthId,list,soloEstructura){
     // v148 -- FIX DE RAIZ: 'set' ("A partir de aquí") tambien debe llegar a los meses YA materializados
     // (antes se saltaba todos los overrides: Limpieza 72 en oct/nov y 30 en dic). Solo respeta los
     // ajustes puntuales explicitos (man:true, ver applyItemEdit 'solo').
-    else if(r.op==='set'&&(!soloEstructura||(j>-1&&list[j].man!==true))){if(j>-1){if(r.a!=null){list[j].a=r.a;list[j].est=false;svcConfirmaD(list[j]);}if(r.l)list[j].l=r.l;}}
+    else if(r.op==='set'&&(!soloEstructura||(j>-1&&list[j].man!==true))){if(j>-1){if(r.a!=null){list[j].a=r.a;list[j].est=false;svcConfirmaD(list[j]);}if(r.l)list[j].l=r.l;if(r.efInc!=null)list[j].efInc=r.efInc;}}
   });
   return list;
 }
@@ -2394,6 +2396,7 @@ function itemsForKey(key,id){
     }
   }
   const fresh=aplicarReglasDesde(key,id,(DET[key]||[]).map(x=>Object.assign({},x)));
+  if(key==='colegio'&&colegioVacacional(id))aplicarVacacionesColegio(fresh);
   if(ov){
     reconcileOverride(key,id,ov,fresh);
     aplicarReglasDesde(key,id,ov,true);
@@ -2408,7 +2411,19 @@ function itemsForKey(key,id){
   }
   return fresh.concat(extraItems);
 }
-const PISCINA_SCHEDULE={sep:57,nov:97,ene:97,abr:97};
+// v158 -- calendario de Piscina confirmado por Jofre (8-oct-2026): 97 EUR en noviembre, febrero y abril (curso 2026-27).
+// Fuera de estos meses es 0. El curso 2027-28 se carga cuando haya calendario.
+const PISCINA_SCHEDULE={sep:57,nov:97,feb:97,abr:97};
+// v158 -- Colegio J.A. en vacaciones de verano: julio y agosto (desde 2027) NO tienen ningun cobro del colegio
+// (mensualidad, proyecto, comedor, piscina, extraescolar = 0) y aparece "Escuela de Verano" con monto por
+// confirmar (est:true => la categoria se ve SIN CONFIRMAR hasta que Jofre cargue el monto con el lapiz).
+// Es una regla de calendario (aplica a todos los julios y agostos futuros), no un ajuste mes a mes.
+function colegioVacacional(id){const p=parseMonthId(id);return !!(p&&p.y>=2027&&(p.m===6||p.m===7));}
+function aplicarVacacionesColegio(list){
+  list.forEach(x=>{x.a=0;});
+  if(!list.some(x=>x.id==='col-escuela-verano'))list.push({id:'col-escuela-verano',l:'Escuela de Verano',a:0,d:'Monto por confirmar',tag:'BBVA',est:true});
+  return list;
+}
 // On Air Nuevo Centro (gimnasio, desde agosto). CICLO REAL DE COBRO: cada 4
 // semanas (28 días), NO mensual → 13 cobros/año. Eso obliga a que una vez al
 // año un mes reciba DOS cobros. Ancla confirmada por Jofre: 1er cobro 03/08/26.
@@ -2548,7 +2563,7 @@ function recalcMonthTotals(id){
   // Refrescar c.a de cada categoría desde su detalle real (efecto secundario
   // que otras vistas esperan) — el reparto en sí ya no se calcula acá.
   m.cats.forEach(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);});
-  m.cats.forEach(c=>{if(c.id===id+'-svc')c.confirmed=svcConfirmado(id);});   // v148
+  m.cats.forEach(c=>{if(c.id===id+'-svc')c.confirmed=svcConfirmado(id);if(c.id===id+'-col'&&itemsForKey('colegio',id).some(x=>x.est===true))c.confirmed=false;});   // v148 / v158
   // Reparto desde la fuente única (v26): mismo número que aporteTotales.
   const r=repartoMes(id);
   const jofre=r.jofre, massiel=r.massiel;
@@ -2578,7 +2593,7 @@ const keyMap=new Proxy({},{get(_,catId){if(typeof catId!=='string')return undefi
 let currentMonth=null,editingId=null;
 function openMov(id){
   currentMonth=id;const d=MONTHS[id];
-  {const _cs=(d.cats||[]).find(c=>c.id===id+'-svc');if(_cs)_cs.confirmed=svcConfirmado(id);}   // v150: SIN CONFIRMAR siempre fresco (meses guardados)
+  {const _cs=(d.cats||[]).find(c=>c.id===id+'-svc');if(_cs)_cs.confirmed=svcConfirmado(id);const _cc=(d.cats||[]).find(c=>c.id===id+'-col');if(_cc&&itemsForKey('colegio',id).some(x=>x.est===true))_cc.confirmed=false;}   // v150: SIN CONFIRMAR siempre fresco (meses guardados) / v158 Colegio
   document.getElementById('mov-title').textContent=d.name;
   const b=document.getElementById('mov-badge');b.textContent=d.badge;b.style.background=d.badgeBg;b.style.color=d.badgeC;b.style.border='1px solid '+d.badgeC+'55';
   {const _ap=aporteTotales(id);
@@ -2835,7 +2850,7 @@ function saveEdit(){
     if(!found){for(const mid of [ACTIVE_ID].concat(MONTH_ORDER.filter(m=>m!==ACTIVE_ID))){const pg=(MONTH_PAGOS[mid]||[]).find(x=>x.id===editingId);if(pg){pg.amt=v;if(nm)pg.l=nm;found=true;updBbvaBadge();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);break;}}}
     if(currentMonth){const cat=MONTHS[currentMonth].cats.find(c=>c.id===editingId);if(cat){cat.a=v;if(nm)cat.l=nm;cat.jofreAmt=null;cat.massielAmt=null;cat.confirmed=true;}}
     if(found&&currentFxKey&&currentMonth){const parentCat=MONTHS[currentMonth].cats.find(c=>keyMap[c.id]===currentFxKey);if(parentCat)parentCat.confirmed=true;}
-    if(currentMonth){recalcMonthTotals(currentMonth);openMov(currentMonth);if(currentMonth===ACTIVE_ID){updPrevCard();}renderPrevision();}
+    if(currentMonth){recalcMonthTotals(currentMonth);if(applyMode==='desde'&&found)propagarCambioDesde(currentMonth);openMov(currentMonth);if(currentMonth===ACTIVE_ID){updPrevCard();}renderPrevision();}
   }
   closeEdit();updTile();{const fm=document.getElementById('fmov');if(fm&&fm.style.display==='block')renderFondoMutuoMassiel();}toast('✓ Cambio guardado — totales actualizados','var(--tl)');saveState();
 }
@@ -3256,6 +3271,7 @@ function patronServicio(itemId){
 function patronColegio(itemId){
   if(itemId==='col1'||itemId.startsWith('col-aum'))return /San Pedro Pascual|Pascual/i;
   if(itemId==='col4')return /Aquaur|Piscina/i;
+  if(itemId==='col-escuela-verano')return /Escuela de Verano/i;
   return null;
 }
 function esMesFuturo(id){
