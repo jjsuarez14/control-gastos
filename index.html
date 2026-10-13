@@ -2910,7 +2910,11 @@ function saveAddItem(){
       }
       if(MONTH_ORDER[idx+1])propagarCambioDesde(MONTH_ORDER[idx+1]);
     }
-    if(currentMonth){recalcMonthTotals(currentMonth);syncPagoForNewItem(currentMonth,name,addCuentaSel,amt);}
+    // v157 -- FIX DE RAIZ (13-oct-2026, duplicado Nutricionista): syncPagoForNewItem empujaba una tarea con id
+    // '<mes>-custom-<timestamp>' que NO coincide con el id por etiqueta que genera buildMonthPagos; al recargar,
+    // applyState regeneraba la tarea correcta y quedaban DOS (doble gasto en BBVA). Para items nuevos se usa la
+    // misma via que ya usan eliminar/propagar: regenerar el mes desde la fuente conservando done/monto.
+    if(currentMonth){recalcMonthTotals(currentMonth);refreshMonthPagosPreservingState(currentMonth);}
     closeAddItem();refreshFxView();if(currentMonth)openMov(currentMonth);renderPrevision();updBbvaBadge();
     toast('✓ Ítem agregado — totales y tareas actualizadas','var(--tl)');saveState();return;
   }
