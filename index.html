@@ -4597,6 +4597,24 @@ function reaplicarPendienteSobreNube(){
     if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
   }catch(e){}
 }
+// v162 -- RESPALDO DIARIO (15-oct-2026): hasta hoy un estado pisado en la nube no tenia como recuperarse. Ahora, en el primer guardado
+// de cada dia, se copia el estado que la nube tenia ANTES de ese guardado a un documento aparte 'respaldo-AAAA-MM-DD'. Si algo vuelve a
+// pisar el estado, el respaldo del dia anterior es la fuente de restauracion (restaurarRespaldo('AAAA-MM-DD')). Es mejor esfuerzo:
+// si falla no afecta al guardado normal.
+async function respaldarEstadoPrevio(prevJson){
+  try{
+    if(!prevJson||!db||!_fbSetDoc)return;
+    const hoy=new Date().toISOString().slice(0,10);
+    if(localStorage.getItem('cg_respaldo_dia')===hoy)return;
+    await _fbSetDoc(_fbDoc(db,'budgetApp','respaldo-'+hoy),{json:prevJson,updatedAt:Date.now(),nota:'estado de la nube ANTES del primer guardado del dia'});
+    localStorage.setItem('cg_respaldo_dia',hoy);
+  }catch(e){console.warn('[respaldo] no se pudo guardar',e);}
+}
+async function restaurarRespaldo(fecha){
+  const snap=await _fbGetDoc(_fbDoc(db,'budgetApp','respaldo-'+fecha));
+  if(!snap.exists())throw new Error('No hay respaldo para '+fecha);
+  applyState(JSON.parse(snap.data().json));renderAll();await saveState();
+}
 function checkPendingSyncOnBoot(){
   // Por si la pestaña se cerró/recargó antes de que un reintento anterior
   // lograra guardar -- el flag sobrevive en localStorage entre sesiones.
@@ -4928,7 +4946,7 @@ async function saveState(){
     // anterior. Recién cuando la transacción termina bien se vuelca el
     // resultado a las globales en vivo, una sola vez.
     let mergedOut=null;
-    let __staleFixedJson=null;
+    let __staleFixedJson=null,__prevJson=null;
     await _fbRunTransaction(db, async (tx)=>{
       __staleFixedJson=null;let freshTop=null;
       const freshSnap=await tx.get(stateDocRef());
@@ -4942,7 +4960,7 @@ async function saveState(){
       if(freshSnap.exists()){
         const freshData=freshSnap.data();
         if(freshData&&freshData.json){
-          const freshState=JSON.parse(freshData.json);freshTop=freshState;
+          const freshState=JSON.parse(freshData.json);freshTop=freshState;__prevJson=freshData.json;
           if(Array.isArray(freshState.CUOTAS_FUTURAS))uneCuotasFuturas(freshState.CUOTAS_FUTURAS);
           if(freshState.MOVS){
             Object.keys(mMovs).forEach(k=>{
@@ -5020,6 +5038,7 @@ async function saveState(){
       if(freshTop&&_stObj.ACTIVE_ID===freshTop.ACTIVE_ID&&ACTIVE_ID!==freshTop.ACTIVE_ID)__staleFixedJson=stateJson;
       tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now(),by:'v160 | rol:'+(localStorage.getItem('cg_role')||'?')+' | activo:'+ACTIVE_ID+' | '+String(navigator.userAgent||'').slice(0,90)});
     });
+    respaldarEstadoPrevio(__prevJson); // v162: respaldo diario (mejor esfuerzo, no bloquea)
     if(__staleFixedJson){const __sj=__staleFixedJson;setTimeout(()=>{try{applyState(JSON.parse(__sj));try{localStorage.setItem(STORAGE_KEY,__sj);}catch(e){}ensureMonthsAhead(ACTIVE_ID,3);renderAll();toast('Tu sesion estaba desactualizada: se sincronizo con '+MONTHS[ACTIVE_ID].name+'. Si no ves lo ultimo que hiciste, repitelo','var(--gd)');}catch(e){}},300);}
     // Transacción confirmada por Firestore. v129 -- FIX RAIZ (mismo día que
     // v128, incidente "movimientos no se guardan en móvil"): un
