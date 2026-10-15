@@ -1603,6 +1603,7 @@ function gTHome(){gT(localStorage.getItem('cg_role')==='massiel'?'m':'i');}
 function sMT(n){[1,2].forEach(i=>{document.getElementById('mt'+i).classList.remove('on');document.getElementById('mt-tab'+i).classList.remove('on');});document.getElementById('mt'+n).classList.add('on');document.getElementById('mt-tab'+n).classList.add('on');}
 const MONTH_ORDER=['jun','jul','ago','sep'];
 let ACTIVE_ID='jun';
+let STATE_REV=0; // v165: revision del estado en la nube que este dispositivo cargo/escribio por ultima vez
 const BASE_ID='jun';
 const MONTH_CAL=[{id:'ene',name:'Enero'},{id:'feb',name:'Febrero'},{id:'mar',name:'Marzo'},{id:'abr',name:'Abril'},{id:'may',name:'Mayo'},{id:'jun',name:'Junio'},{id:'jul',name:'Julio'},{id:'ago',name:'Agosto'},{id:'sep',name:'Septiembre'},{id:'oct',name:'Octubre'},{id:'nov',name:'Noviembre'},{id:'dic',name:'Diciembre'}];
 // v153 -- FIX DE RAIZ: IDs de mes CON ANIO. Antes el ID era solo el mes (jun..may), la app asumia una
@@ -4612,7 +4613,10 @@ async function restaurarRespaldo(fecha){
   const snap=await _fbGetDoc(stateDocRef());const d=snap.exists()?snap.data():null;
   const j=d&&d.respaldos&&d.respaldos[fecha];
   if(!j)throw new Error('No hay respaldo para '+fecha+' (disponibles: '+Object.keys((d&&d.respaldos)||{}).join(', ')+')');
-  applyState(JSON.parse(j));renderAll();await saveState();
+  applyState(JSON.parse(j));
+  try{STATE_REV=(JSON.parse(d.json).rev||0);}catch(e){}
+  window.__cgRestaurando=true;
+  try{renderAll();await saveState();}finally{window.__cgRestaurando=false;}
 }
 function checkPendingSyncOnBoot(){
   // Por si la pestaña se cerró/recargó antes de que un reintento anterior
@@ -4893,7 +4897,7 @@ function buildPersistableState(overrides){
         :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
     );
   });
-  return {ACTIVE_ID,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,DET_REGLAS_BAJAS,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS:CUOTAS_FUTURAS.filter(c=>!cuotaFuturaMaterializada(c))};
+  return {ACTIVE_ID,rev:STATE_REV,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,DET_REGLAS_BAJAS,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS:CUOTAS_FUTURAS.filter(c=>!cuotaFuturaMaterializada(c))};
 }
 async function saveState(){
   if(_saveInFlight){_saveQueued=true;return;} // v128: no se descarta -- se encola un guardado de seguimiento (ver finally) en vez de perder este cambio
@@ -4945,9 +4949,9 @@ async function saveState(){
     // anterior. Recién cuando la transacción termina bien se vuelca el
     // resultado a las globales en vivo, una sola vez.
     let mergedOut=null;
-    let __staleFixedJson=null,__prevJson=null,__prevResp=null;
+    let __staleFixedJson=null,__prevJson=null,__prevResp=null,__newRev=null;
     await _fbRunTransaction(db, async (tx)=>{
-      __staleFixedJson=null;let freshTop=null;
+      __staleFixedJson=null;__newRev=null;let freshTop=null;
       const freshSnap=await tx.get(stateDocRef());
       const mMovs=JSON.parse(JSON.stringify(pendingSnap.movs));
       const mPagos=JSON.parse(JSON.stringify(pendingSnap.pagos));
@@ -5026,20 +5030,26 @@ async function saveState(){
       // pendiente de sincronizacion atascado, que hace que loadState no cargue la nube) pisaba la nube con el mes anterior.
       // Ahora, si la nube ya esta en un mes POSTERIOR al de este dispositivo, ese estado estructural se toma de la nube
       // (los cambios de MOVS/tareas/saldos de este dispositivo igual se conservan por el merge) y la sesion se resincroniza.
-      if(freshTop&&typeof freshTop.ACTIVE_ID==='string'&&typeof _stObj.ACTIVE_ID==='string'){
+      // v165 -- FIX RAIZ DEFINITIVO: contador de revision. Cada guardado sube `rev`; si la nube trae una revision MAS NUEVA que la que este
+      // dispositivo cargo, este dispositivo esta desactualizado (cualquiera sea su mes activo) y NO puede pisar el estado estructural.
+      let _wasStale=false;
+      if(freshTop&&typeof freshTop.ACTIVE_ID==='string'&&typeof _stObj.ACTIVE_ID==='string'&&!window.__cgRestaurando){
         const _ord=(Array.isArray(freshTop.MONTH_ORDER)&&freshTop.MONTH_ORDER.length)?freshTop.MONTH_ORDER:_stObj.MONTH_ORDER;
         const _iF=_ord.indexOf(freshTop.ACTIVE_ID),_iL=_ord.indexOf(_stObj.ACTIVE_ID);
-        if(_iF>=0&&_iL>=0&&_iF>_iL){
+        if((freshTop.rev||0)>STATE_REV||(_iF>=0&&_iL>=0&&_iF>_iL)){
+          _wasStale=true;
           ['ACTIVE_ID','MONTH_ORDER','MONTHS','nominaReg','ytTCMes','massielDone','massielApplied','massielBizumOverride','massielYtAmt','HISTORIAL','mCats','mCuotas','DET','DET_MONTH_REMOVED','DET_REGLAS_DESDE','DET_REGLAS_BAJAS','MONTH_PAGOS_REMOVED','TAREAS_PROGRAMADAS','CUOTAS_NUEVAS'].forEach(k=>{if(freshTop[k]!==undefined)_stObj[k]=freshTop[k];});
           if(freshTop.pagosByMonth){_stObj.pagosByMonth=_stObj.pagosByMonth||{};Object.keys(freshTop.pagosByMonth).forEach(m=>{if(!_stObj.pagosByMonth[m])_stObj.pagosByMonth[m]=freshTop.pagosByMonth[m];});}
           console.warn('[v160] sesion desactualizada: activo local',_stObj.ACTIVE_ID,'< nube',freshTop.ACTIVE_ID,'-- se conserva el estado de la nube');
         }
       }
+      _stObj.rev=Math.max((freshTop&&freshTop.rev)||0,STATE_REV)+1;__newRev=_stObj.rev;
       const stateJson=JSON.stringify(_stObj);
-      if(freshTop&&_stObj.ACTIVE_ID===freshTop.ACTIVE_ID&&ACTIVE_ID!==freshTop.ACTIVE_ID)__staleFixedJson=stateJson;
+      if(_wasStale)__staleFixedJson=stateJson;
       const __resp=armarRespaldos(__prevResp,__prevJson);
       tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now(),respaldos:__resp,by:'v160 | rol:'+(localStorage.getItem('cg_role')||'?')+' | activo:'+ACTIVE_ID+' | '+String(navigator.userAgent||'').slice(0,90)});
     });
+    if(__newRev!=null)STATE_REV=__newRev;
     if(__staleFixedJson){const __sj=__staleFixedJson;setTimeout(()=>{try{applyState(JSON.parse(__sj));try{localStorage.setItem(STORAGE_KEY,__sj);}catch(e){}ensureMonthsAhead(ACTIVE_ID,3);renderAll();toast('Tu sesion estaba desactualizada: se sincronizo con '+MONTHS[ACTIVE_ID].name+'. Si no ves lo ultimo que hiciste, repitelo','var(--gd)');}catch(e){}},300);}
     // Transacción confirmada por Firestore. v129 -- FIX RAIZ (mismo día que
     // v128, incidente "movimientos no se guardan en móvil"): un
@@ -5131,6 +5141,7 @@ function applyState(s){
   if(s.MONTH_ORDER){MONTH_ORDER.length=0;s.MONTH_ORDER.forEach(id=>MONTH_ORDER.push(id));}
   if(s.MONTHS)Object.keys(s.MONTHS).forEach(k=>{MONTHS[k]=s.MONTHS[k];});
   if(typeof s.ACTIVE_ID==='string')ACTIVE_ID=s.ACTIVE_ID;
+  if(typeof s.rev==='number')STATE_REV=s.rev;
   if(s.BAL){Object.assign(BAL,s.BAL);limpiarSaldos(BAL);}
   if(s.MONTH_CIERRE)Object.keys(s.MONTH_CIERRE).forEach(mid=>{MONTH_CIERRE[mid]=s.MONTH_CIERRE[mid];});
   if(s.CAIXA_TDC)Object.assign(CAIXA_TDC,s.CAIXA_TDC);
