@@ -4909,7 +4909,9 @@ async function saveState(){
     // anterior. Recién cuando la transacción termina bien se vuelca el
     // resultado a las globales en vivo, una sola vez.
     let mergedOut=null;
+    let __staleFixedJson=null;
     await _fbRunTransaction(db, async (tx)=>{
+      __staleFixedJson=null;let freshTop=null;
       const freshSnap=await tx.get(stateDocRef());
       const mMovs=JSON.parse(JSON.stringify(pendingSnap.movs));
       const mPagos=JSON.parse(JSON.stringify(pendingSnap.pagos));
@@ -4921,7 +4923,7 @@ async function saveState(){
       if(freshSnap.exists()){
         const freshData=freshSnap.data();
         if(freshData&&freshData.json){
-          const freshState=JSON.parse(freshData.json);
+          const freshState=JSON.parse(freshData.json);freshTop=freshState;
           if(Array.isArray(freshState.CUOTAS_FUTURAS))uneCuotasFuturas(freshState.CUOTAS_FUTURAS);
           if(freshState.MOVS){
             Object.keys(mMovs).forEach(k=>{
@@ -4979,9 +4981,27 @@ async function saveState(){
       }
       limpiarSaldos(mBal);
       mergedOut={movs:mMovs,pagos:mPagos,detOv:mDetOv,detExtra:mDetExtra,bal:mBal,caixaTdc:mCaixaTdc,cierre:mCierre};
-      const stateJson=JSON.stringify(buildPersistableState({MOVS:mMovs,MONTH_PAGOS:mPagos,DET_MONTH_OVERRIDES:mDetOv,DET_EXTRA:mDetExtra,BAL:mBal,CAIXA_TDC:mCaixaTdc,MONTH_CIERRE:mCierre}));
-      tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now()});
+      const _stObj=buildPersistableState({MOVS:mMovs,MONTH_PAGOS:mPagos,DET_MONTH_OVERRIDES:mDetOv,DET_EXTRA:mDetExtra,BAL:mBal,CAIXA_TDC:mCaixaTdc,MONTH_CIERRE:mCierre});
+      // v160 -- FIX RAIZ (15-oct-2026, incidente 'el sistema se devolvio a SEP'): este merge por delta solo protege MOVS,
+      // tareas, DET_*, saldos y cierres. TODO lo demas (ACTIVE_ID, MONTH_ORDER, HISTORIAL, estado de Massiel, reglas,
+      // cuotas...) se tomaba de la memoria LOCAL del dispositivo que guarda: un dispositivo con cache viejo (ej. con un
+      // pendiente de sincronizacion atascado, que hace que loadState no cargue la nube) pisaba la nube con el mes anterior.
+      // Ahora, si la nube ya esta en un mes POSTERIOR al de este dispositivo, ese estado estructural se toma de la nube
+      // (los cambios de MOVS/tareas/saldos de este dispositivo igual se conservan por el merge) y la sesion se resincroniza.
+      if(freshTop&&typeof freshTop.ACTIVE_ID==='string'&&typeof _stObj.ACTIVE_ID==='string'){
+        const _ord=(Array.isArray(freshTop.MONTH_ORDER)&&freshTop.MONTH_ORDER.length)?freshTop.MONTH_ORDER:_stObj.MONTH_ORDER;
+        const _iF=_ord.indexOf(freshTop.ACTIVE_ID),_iL=_ord.indexOf(_stObj.ACTIVE_ID);
+        if(_iF>=0&&_iL>=0&&_iF>_iL){
+          ['ACTIVE_ID','MONTH_ORDER','MONTHS','nominaReg','ytTCMes','massielDone','massielApplied','massielBizumOverride','massielYtAmt','HISTORIAL','mCats','mCuotas','DET','DET_MONTH_REMOVED','DET_REGLAS_DESDE','DET_REGLAS_BAJAS','MONTH_PAGOS_REMOVED','TAREAS_PROGRAMADAS','CUOTAS_NUEVAS'].forEach(k=>{if(freshTop[k]!==undefined)_stObj[k]=freshTop[k];});
+          if(freshTop.pagosByMonth){_stObj.pagosByMonth=_stObj.pagosByMonth||{};Object.keys(freshTop.pagosByMonth).forEach(m=>{if(!_stObj.pagosByMonth[m])_stObj.pagosByMonth[m]=freshTop.pagosByMonth[m];});}
+          console.warn('[v160] sesion desactualizada: activo local',_stObj.ACTIVE_ID,'< nube',freshTop.ACTIVE_ID,'-- se conserva el estado de la nube');
+        }
+      }
+      const stateJson=JSON.stringify(_stObj);
+      if(freshTop&&_stObj.ACTIVE_ID===freshTop.ACTIVE_ID&&ACTIVE_ID!==freshTop.ACTIVE_ID)__staleFixedJson=stateJson;
+      tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now(),by:'v160 | rol:'+(localStorage.getItem('cg_role')||'?')+' | activo:'+ACTIVE_ID+' | '+String(navigator.userAgent||'').slice(0,90)});
     });
+    if(__staleFixedJson){const __sj=__staleFixedJson;setTimeout(()=>{try{applyState(JSON.parse(__sj));try{localStorage.setItem(STORAGE_KEY,__sj);}catch(e){}ensureMonthsAhead(ACTIVE_ID,3);renderAll();toast('Tu sesion estaba desactualizada: se sincronizo con '+MONTHS[ACTIVE_ID].name+'. Si no ves lo ultimo que hiciste, repitelo','var(--gd)');}catch(e){}},300);}
     // Transacción confirmada por Firestore. v129 -- FIX RAIZ (mismo día que
     // v128, incidente "movimientos no se guardan en móvil"): un
     // Object.assign directo acá pisaba en silencio cualquier cambio hecho en
