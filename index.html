@@ -4992,6 +4992,7 @@ async function saveState(){
           if(freshState.pagosByMonth){
             Object.keys(mPagos).forEach(k=>{
               const freshLiviano=freshState.pagosByMonth[k];
+              const _remIds=new Set([...(MONTH_PAGOS_REMOVED[k]||[]),...((freshState.MONTH_PAGOS_REMOVED||{})[k]||[])]); // v164
               if(!Array.isArray(freshLiviano))return;
               // Reconstruir tareas frescas: base generada + estado (done/amt) del liviano.
               const gen=buildMonthPagos(k);
@@ -5007,6 +5008,7 @@ async function saveState(){
                 const base=genById[lp.id];
                 if(base)return Object.assign({},base,{done:lp.done,amt:lp.amt!=null?lp.amt:base.amt});
                 const esCustomAdHoc=/-custom-\d+$/.test(lp.id||'');
+                if(_remIds.has(lp.id))return null; // v164 FIX RAIZ: una tarea ELIMINADA a proposito no se reinyecta aunque quedara marcada como hecha
                 if(!lp.done&&!esCustomAdHoc)return null;
                 return {id:lp.id,l:lp.l,acc:lp.acc,cat:lp.cat,amt:lp.amt,done:lp.done,vacacion:lp.vacacion};
               }).filter(Boolean);
@@ -5236,6 +5238,7 @@ function applyState(s){
         // descarta (buildMonthPagos ya generó la tarea correcta si la regla sigue
         // vigente).
         const esCustomAdHoc=/-custom-\d+$/.test(sp.id||'');
+        if((MONTH_PAGOS_REMOVED[k]||[]).includes(sp.id))return; // v164 FIX RAIZ (15-oct-2026): la regla 'lo ya pagado nunca se descarta' resucitaba tareas eliminadas a proposito (ej. Amazon Prime de octubre, hecha sin movimiento real)
         if(!sp.done&&!esCustomAdHoc)return;
         // Si el guardado trae l/acc/cat propios (item custom), se reconstruye tal cual --
         // nunca con placeholders inventados.
