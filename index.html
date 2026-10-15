@@ -4522,11 +4522,13 @@ function showSyncBadge(){
   if(!b){
     b=document.createElement('div');
     b.id='syncBadge';
-    b.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);background:var(--rd,#c0392b);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:500;box-shadow:0 2px 10px rgba(0,0,0,.3);cursor:pointer;white-space:nowrap;';
+    b.style.cssText='position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);background:var(--rd,#c0392b);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:99999;max-width:92vw;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 10px rgba(0,0,0,.3);cursor:pointer;white-space:nowrap;';
     b.textContent='⚠ Sin sincronizar — toca para reintentar';
     b.onclick=()=>{if(!_saveInFlight)saveState();};
     document.body.appendChild(b);
   }
+  // v161 -- el aviso muestra el motivo real del ultimo fallo (antes se tragaba en silencio)
+  try{const _e=localStorage.getItem('cgv6-lastSyncError');b.textContent='⚠ Sin sincronizar — toca para reintentar'+(_e?' ('+_e.slice(0,70)+')':'');}catch(e){}
 }
 function hideSyncBadge(){const b=document.getElementById('syncBadge');if(b)b.remove();}
 function markPendingSync(snapshot){
@@ -4538,7 +4540,7 @@ function markPendingSync(snapshot){
   scheduleSyncRetry();
 }
 function clearPendingSync(){
-  try{localStorage.removeItem(PENDING_SYNC_KEY);}catch(e){}
+  try{localStorage.removeItem(PENDING_SYNC_KEY);localStorage.removeItem('cgv6-lastSyncError');}catch(e){}
   hideSyncBadge();
   if(_pendingSyncTimer){clearTimeout(_pendingSyncTimer);_pendingSyncTimer=null;}
   _syncRetryDelay=8000;
@@ -4581,6 +4583,20 @@ function replayPendingDelta(){
   }catch(e){}
   return true;
 }
+// v161 -- FIX RAIZ (15-oct-2026, incidente 'el sistema se devolvio a SEP'): con un pendiente de sincronizacion atascado,
+// loadState() y el listener en tiempo real salian sin cargar la nube, asi que el dispositivo se quedaba congelado en el mes
+// viejo para siempre (en el iPhone duro dias). Ahora SIEMPRE se carga la nube y encima se reaplica el cambio pendiente
+// (movimientos, tareas, ajustes, cierres y saldos) con el mismo merge por delta que usa saveState.
+function reaplicarPendienteSobreNube(){
+  try{
+    if(!hasPendingSync())return;
+    replayPendingDelta();
+    const pd=readPendingSync();
+    if(pd&&pd.bal&&pd.baselineBal)Object.assign(BAL,mergeScalarDelta(BAL,pd.baselineBal,pd.bal));
+    if(pd&&pd.caixaTdc&&pd.baselineCaixaTdc)Object.assign(CAIXA_TDC,mergeScalarDelta(CAIXA_TDC,pd.baselineCaixaTdc,pd.caixaTdc));
+    if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
+  }catch(e){}
+}
 function checkPendingSyncOnBoot(){
   // Por si la pestaña se cerró/recargó antes de que un reintento anterior
   // lograra guardar -- el flag sobrevive en localStorage entre sesiones.
@@ -4588,6 +4604,9 @@ function checkPendingSyncOnBoot(){
   // mostramos el aviso y agendamos el reintento.
   if(hasPendingSync()){showSyncBadge();scheduleSyncRetry();}
 }
+// v161 -- reintento automatico al volver a la app (iPhone standalone): antes dependia de tocar un aviso que podia quedar fuera de pantalla
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&hasPendingSync()&&!_saveInFlight)saveState();});
+window.addEventListener('pageshow',()=>{if(hasPendingSync()&&!_saveInFlight)saveState();});
 window.addEventListener('online',()=>{
   if(hasPendingSync()&&!_saveInFlight){
     if(_pendingSyncTimer){clearTimeout(_pendingSyncTimer);_pendingSyncTimer=null;}
@@ -5060,6 +5079,8 @@ async function saveState(){
     // reproducir este cambio más tarde -- en esta sesión (reintento
     // automático) o, si la pestaña se cierra antes, en la próxima (ver
     // replayPendingDelta en init()) -- y avisamos con el indicador visible.
+    try{localStorage.setItem('cgv6-lastSyncError',String((e&&(e.message||e))||'error').replace(/\s+/g,' ').slice(0,200));}catch(_){}
+    console.error('[saveState] fallo de sincronizacion:',e);
     markPendingSync(pendingSnap);
   }finally{
     _saveInFlight=false;
@@ -5302,12 +5323,12 @@ async function loadState(){
     // pisamos con lo que Firestore tenga guardado (por definición desactualizado
     // respecto a ese cambio) -- se resincroniza solo cuando el reintento
     // automático de saveState() confirme el guardado y limpie el pendiente.
-    if(hasPendingSync())return false;
     if(!await fbReady)return false;
     const snap=await _fbGetDoc(stateDocRef());
     if(!snap.exists())return false;
     const data=snap.data();if(!data||!data.json)return false;
     applyState(JSON.parse(data.json));
+    reaplicarPendienteSobreNube();
     try{localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
     return true;
   }catch(e){return false;}
@@ -5321,7 +5342,7 @@ function startRealtimeSync(){
   if(!db)return;
   _fbOnSnapshot(stateDocRef(),(snap)=>{
     if(snap.metadata.hasPendingWrites)return; // eco de nuestro propio guardado, ya reflejado en pantalla
-    if(hasPendingSync())return; // v-sync-fix: ídem loadState() -- no pisar un cambio local aún no confirmado
+    // v161: ya no se ignora el snapshot por tener un pendiente -- se aplica y se reaplica el pendiente encima
     // v77 -- FIX: si esta sesión tiene su propio saveState() en curso (fetch+merge
     // interno todavía sin terminar), un snapshot remoto que llega en esa ventana
     // pisaba MOVS/BAL/etc en memoria vía applyState() ANTES de que ese saveState()
@@ -5332,7 +5353,7 @@ function startRealtimeSync(){
     if(_saveInFlight)return;
     if(!snap.exists())return;
     const data=snap.data();if(!data||!data.json)return;
-    try{applyState(JSON.parse(data.json));renderAll();localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
+    try{applyState(JSON.parse(data.json));reaplicarPendienteSobreNube();renderAll();localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
   });
 }
 async function init(){
