@@ -2612,7 +2612,7 @@ function closeMov(){document.getElementById('mov-full').classList.remove('on');c
 function rowHTML(x){
   const editBtn=x.fixed?'':`<button onclick="event.stopPropagation();openEdit('${x.id}','${x.l.replace(/'/g,"\\'")}',${x.a})" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:8px"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button>`;
   const delBtn=x.fixed?'':`<button onclick="event.stopPropagation();deleteItem('${currentFxKey}','${x.id}','${x.l.replace(/'/g,"\\'")}')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px"><i class="ti ti-trash" style="font-size:13px;color:var(--rd)"></i></button>`;
-  return `<div class="fxr"><div style="flex:1"><div style="font-size:13px;color:var(--t1)">${x.l}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${x.d}</div></div><div style="font-size:14px;font-weight:700;color:${x.a>0?'var(--gd)':'var(--t3)'};min-width:60px;text-align:right">${fmtE(x.a)}</div>${editBtn}${delBtn}</div>`;
+  return `<div class="fxr"><div style="flex:1"><div style="font-size:13px;color:var(--t1)">${x.l}</div><!-- v167: x.d es nota interna (que se registro y por que); no se muestra --></div><div style="font-size:14px;font-weight:700;color:${x.a>0?'var(--gd)':'var(--t3)'};min-width:60px;text-align:right">${fmtE(x.a)}</div>${editBtn}${delBtn}</div>`;
 }
 const GROUP_META={jofre:{l:'JOFRE',c:'#0A84FF'},massiel:{l:'MASSIEL',c:'#FF375F'},compartida:{l:'COMPARTIDA',c:'#30D158'}};
 const SERVICIOS_GROUP_META={suscripciones:{l:'SUSCRIPCIONES',title:'Suscripciones',c:'#8B5CF6'}};
@@ -3229,7 +3229,7 @@ function jofreCuotaRowHTML(c){
   return `<div style="border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:13px;font-weight:600;color:#fff">${c.l}</div><div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">${c.prog} · ${respLabel}</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:#0A84FF">${fmtE(total)}</div></div></div><div class="btr"><div class="bfl" style="width:${c.pct}%;background:${c.warn?'#64D2FF':'#BF5AF2'}"></div></div></div>`;
 }
 function sMTma(n){[1,2,3].forEach(i=>{const b=document.getElementById('mamt'+i),t=document.getElementById('mamt-tab'+i);if(b)b.classList.remove('on');if(t)t.classList.remove('on');});const b=document.getElementById('mamt'+n),t=document.getElementById('mamt-tab'+n);if(b)b.classList.add('on');if(t)t.classList.add('on');}
-function maRowHTML(x){return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="flex:1"><div style="font-size:13px;color:#fff">${x.l}</div><div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">${x.d}</div></div><div style="font-size:13px;font-weight:700;color:${x.a>0?'#64D2FF':'rgba(255,255,255,.3)'}">${SALDOS_OCULTOS?'••••':fmtE(x.a)}</div></div>`;}
+function maRowHTML(x){return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="flex:1"><div style="font-size:13px;color:#fff">${x.l}</div><!-- v167: x.d es nota interna; no se muestra --></div><div style="font-size:13px;font-weight:700;color:${x.a>0?'#64D2FF':'rgba(255,255,255,.3)'}">${SALDOS_OCULTOS?'••••':fmtE(x.a)}</div></div>`;}
 function isMassielRole(){return document.body.classList.contains('role-massiel');}
 // v89 -- helper centralizado (antes duplicado en renderFondoMutuoMassiel y
 // showMaMonthDetail, ver v54/v55/v81). isMassielRole() solo mira el ROL DE
@@ -4584,6 +4584,27 @@ function replayPendingDelta(){
   }catch(e){}
   return true;
 }
+// v166 -- FIX RAIZ (15-oct-2026, "se borraron dos movimientos que acababa de registrar"): aplicar el estado de la nube con applyState()
+// REEMPLAZA la memoria completa; todo lo que este dispositivo registro y aun no llego a la nube (o llego despues de la foto del guardado)
+// se perdia. Ahora la nube se aplica CONSERVANDO lo local: se toma foto de lo que hay en memoria + su linea base, se aplica la nube y se
+// reaplica la diferencia local con el mismo merge por delta de saveState (movimientos, tareas, ajustes, saldos, cierres). Si quedo algo
+// local sin confirmar, devuelve true para que el llamador lo guarde.
+function aplicarNubeConservandoLocal(cloudJson){
+  const cl=o=>JSON.parse(JSON.stringify(o||{}));
+  const L={movs:cl(MOVS),pagos:cl(MONTH_PAGOS),detOv:cl(DET_MONTH_OVERRIDES),detExtra:cl(DET_EXTRA),bal:cl(BAL),caixa:cl(CAIXA_TDC),cierre:cl(MONTH_CIERRE)};
+  const Bz={movs:MOVS_BASELINE,pagos:MONTH_PAGOS_BASELINE,detOv:DET_OV_BASELINE,detExtra:DET_EXTRA_BASELINE,bal:BAL_BASELINE,caixa:CAIXA_TDC_BASELINE};
+  applyState(JSON.parse(cloudJson));
+  const antes=JSON.stringify([MOVS,MONTH_PAGOS,DET_MONTH_OVERRIDES,DET_EXTRA,BAL,CAIXA_TDC]);
+  Object.keys(L.movs).forEach(k=>{MOVS[k]=mergeMovsConDelta(MOVS[k],(Bz.movs||{})[k],L.movs[k]);});
+  Object.keys(L.pagos).forEach(k=>{MONTH_PAGOS[k]=mergePagosConDelta(MONTH_PAGOS[k],(Bz.pagos||{})[k],L.pagos[k]);});
+  const mo=mergeDetObjConDelta(DET_MONTH_OVERRIDES,Bz.detOv,L.detOv);Object.keys(mo).forEach(k=>{DET_MONTH_OVERRIDES[k]=mo[k];});
+  const me=mergeDetObjConDelta(DET_EXTRA,Bz.detExtra,L.detExtra);Object.keys(me).forEach(k=>{DET_EXTRA[k]=me[k];});
+  Object.assign(BAL,mergeScalarDelta(BAL,Bz.bal,L.bal));limpiarSaldos(BAL);
+  Object.assign(CAIXA_TDC,mergeScalarDelta(CAIXA_TDC,Bz.caixa,L.caixa));
+  Object.keys(L.cierre).forEach(mid=>{if(!MONTH_CIERRE[mid])MONTH_CIERRE[mid]=L.cierre[mid];});
+  if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
+  return JSON.stringify([MOVS,MONTH_PAGOS,DET_MONTH_OVERRIDES,DET_EXTRA,BAL,CAIXA_TDC])!==antes;
+}
 // v161 -- FIX RAIZ (15-oct-2026, incidente 'el sistema se devolvio a SEP'): con un pendiente de sincronizacion atascado,
 // loadState() y el listener en tiempo real salian sin cargar la nube, asi que el dispositivo se quedaba congelado en el mes
 // viejo para siempre (en el iPhone duro dias). Ahora SIEMPRE se carga la nube y encima se reaplica el cambio pendiente
@@ -5050,7 +5071,7 @@ async function saveState(){
       tx.set(stateDocRef(),{json:stateJson,updatedAt:Date.now(),respaldos:__resp,by:'v160 | rol:'+(localStorage.getItem('cg_role')||'?')+' | activo:'+ACTIVE_ID+' | '+String(navigator.userAgent||'').slice(0,90)});
     });
     if(__newRev!=null)STATE_REV=__newRev;
-    if(__staleFixedJson){const __sj=__staleFixedJson;setTimeout(()=>{try{applyState(JSON.parse(__sj));try{localStorage.setItem(STORAGE_KEY,__sj);}catch(e){}ensureMonthsAhead(ACTIVE_ID,3);renderAll();toast('Tu sesion estaba desactualizada: se sincronizo con '+MONTHS[ACTIVE_ID].name+'. Si no ves lo ultimo que hiciste, repitelo','var(--gd)');}catch(e){}},300);}
+    if(__staleFixedJson){const __sj=__staleFixedJson;setTimeout(()=>{try{const _hl=aplicarNubeConservandoLocal(__sj);try{localStorage.setItem(STORAGE_KEY,__sj);}catch(e){}ensureMonthsAhead(ACTIVE_ID,3);renderAll();toast('Tu sesion estaba desactualizada: se sincronizo con '+MONTHS[ACTIVE_ID].name+'. Lo que registraste en este dispositivo se conservo','var(--gd)');if(_hl)saveState();}catch(e){}},300);}
     // Transacción confirmada por Firestore. v129 -- FIX RAIZ (mismo día que
     // v128, incidente "movimientos no se guardan en móvil"): un
     // Object.assign directo acá pisaba en silencio cualquier cambio hecho en
@@ -5359,9 +5380,9 @@ async function loadState(){
     const snap=await _fbGetDoc(stateDocRef());
     if(!snap.exists())return false;
     const data=snap.data();if(!data||!data.json)return false;
-    applyState(JSON.parse(data.json));
-    reaplicarPendienteSobreNube();
+    const _hayLocal=aplicarNubeConservandoLocal(data.json); // v166: la nube se aplica CONSERVANDO lo local
     try{localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
+    if(_hayLocal)setTimeout(()=>{if(!_saveInFlight)saveState();},0);
     return true;
   }catch(e){return false;}
 }
@@ -5385,7 +5406,7 @@ function startRealtimeSync(){
     if(_saveInFlight)return;
     if(!snap.exists())return;
     const data=snap.data();if(!data||!data.json)return;
-    try{applyState(JSON.parse(data.json));reaplicarPendienteSobreNube();renderAll();localStorage.setItem(STORAGE_KEY,data.json);}catch(e){}
+    try{const _hl=aplicarNubeConservandoLocal(data.json);renderAll();localStorage.setItem(STORAGE_KEY,data.json);if(_hl&&!_saveInFlight)saveState();}catch(e){} // v166
   });
 }
 async function init(){
@@ -5408,7 +5429,7 @@ async function init(){
     // v-sync-fix: reproducir acá cualquier cambio que quedó pendiente de una
     // sesión anterior (ver replayPendingDelta) -- ANTES de renderizar, para
     // que el primer pintado ya muestre el movimiento/tarea que faltaba.
-    replayPendingDelta();
+    reaplicarPendienteSobreNube(); // v166: pendiente (movs, tareas, ajustes, saldos) sobre la cache al arrancar
     ensureMonthsAhead(ACTIVE_ID,3);
     updHeaders();updTile();updBbvaBadge();renderMaTile();renderAhorroTileMassiel();renderHist();renderPrevision();
     const bl=document.getElementById('bootLoader');if(bl)bl.remove();
