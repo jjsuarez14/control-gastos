@@ -895,6 +895,11 @@ function toNum(v){return parseFloat(String(v==null?'':v).trim().replace(',','.')
 function nuevoMovId(){return 'm'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag,extra){
   if(!CUENTAS_VALIDAS.includes(acc)){console.error('regMov: cuenta invalida',acc,label);toast('Cuenta inválida, movimiento NO registrado','var(--rd)');return;}
+  // v168 -- FIX RAIZ (16-oct-2026, 'Meteorito' x3): un doble/triple toque en Guardar creaba el mismo movimiento varias veces (3 ids con <1 s de
+  // diferencia). Un movimiento IDENTICO (misma cuenta, etiqueta, monto, signo, categoria y mes) registrado en menos de 2,5 s se ignora.
+  {const _sig=[acc,String(label).trim().toLowerCase(),Math.round(Math.abs(amt)*100),plus?'+':'-',cat||'',mesIdOverride||ACTIVE_ID].join('|');const _now=Date.now();window.__regUlt=window.__regUlt||{};
+   if(window.__regUlt[_sig]&&_now-window.__regUlt[_sig]<2500){console.warn('[regMov] duplicado por doble toque ignorado:',_sig);toast('Movimiento duplicado ignorado (doble toque)','var(--gd)');return;}
+   window.__regUlt[_sig]=_now;}
   BAL[acc]=Math.round((BAL[acc]+(plus?amt:-amt))*100)/100;
   const dt=__movDateOverride||new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS[acc]=MOVS[acc]||[];
