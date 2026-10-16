@@ -2734,9 +2734,9 @@ function execDelete(mode){
     // agregado) preservando done/amt de lo demás -- mismo criterio que usa
     // applyState al reconciliar: los "enviar" no-done se recalculan frescos,
     // el resto respeta lo que ya había.
-    const prevById={};(MONTH_PAGOS[monthId]||[]).forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
+    const prevById={};(MONTH_PAGOS[monthId]||[]).forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt,man:x.man};});
     const fresh=buildMonthPagos(monthId);
-    fresh.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.cat==='retiro'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
+    fresh.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;/* v169: el monto guardado manda solo si esta hecha o fue editada a mano (man); si no, se recalcula desde los items */if(prev.man||prev.done){np.amt=prev.amt;if(prev.man)np.man=true;}}});
     MONTH_PAGOS[monthId]=fresh;
     updBbvaBadge();updPrevCard();updTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);renderPrevision();
     toast('✓ "'+label+'" eliminada'+(mode==='desde'?' desde '+MONTHS[monthId].name+' en adelante':' de '+MONTHS[monthId].name),'var(--tl)');
@@ -2853,7 +2853,7 @@ function saveEdit(){
     if(!found)for(const sec in DET){if(Array.isArray(DET[sec])){const it=DET[sec].find(x=>x.id===editingId);if(it){it.a=v;if(nm)it.l=nm;found=true;break;}}}
     // v157 -- la tarea se busca en TODOS los meses (antes solo en el activo): las pendientes del Fondo Mutuo
     // pueden venir de un mes anterior y no tenian forma de editarse.
-    if(!found){for(const mid of [ACTIVE_ID].concat(MONTH_ORDER.filter(m=>m!==ACTIVE_ID))){const pg=(MONTH_PAGOS[mid]||[]).find(x=>x.id===editingId);if(pg){pg.amt=v;if(nm)pg.l=nm;found=true;updBbvaBadge();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);break;}}}
+    if(!found){for(const mid of [ACTIVE_ID].concat(MONTH_ORDER.filter(m=>m!==ACTIVE_ID))){const pg=(MONTH_PAGOS[mid]||[]).find(x=>x.id===editingId);if(pg){pg.amt=v;pg.man=true;if(nm)pg.l=nm;found=true;updBbvaBadge();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);break;}}}
     if(currentMonth){const cat=MONTHS[currentMonth].cats.find(c=>c.id===editingId);if(cat){cat.a=v;if(nm)cat.l=nm;cat.jofreAmt=null;cat.massielAmt=null;cat.confirmed=true;}}
     if(found&&currentFxKey&&currentMonth){const parentCat=MONTHS[currentMonth].cats.find(c=>keyMap[c.id]===currentFxKey);if(parentCat)parentCat.confirmed=true;}
     if(currentMonth){recalcMonthTotals(currentMonth);if(applyMode==='desde'&&found)propagarCambioDesde(currentMonth);openMov(currentMonth);if(currentMonth===ACTIVE_ID){updPrevCard();}renderPrevision();}
@@ -4266,9 +4266,9 @@ function confirmCuotaVar(){const v=toNum((document.getElementById('reg-cvar')||{
 // es la fuente de verdad -- cuotasFor() ya la lee, ver buildMonthPagos).
 function refreshMonthPagosPreservingState(monthId){
   if(!MONTH_PAGOS[monthId])return;
-  const prevById={};MONTH_PAGOS[monthId].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
+  const prevById={};MONTH_PAGOS[monthId].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt,man:x.man};});
   const freshP=buildMonthPagos(monthId);
-  freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.cat==='retiro'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
+  freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;/* v169: el monto guardado manda solo si esta hecha o fue editada a mano (man); si no, se recalcula desde los items */if(prev.man||prev.done){np.amt=prev.amt;if(prev.man)np.man=true;}}});
   MONTH_PAGOS[monthId]=freshP;
   if(monthId===ACTIVE_ID)PAGOS=MONTH_PAGOS[monthId];
 }
@@ -4439,9 +4439,9 @@ function regDateISO(d){d=d||reg.customDate||new Date();return d.getFullYear()+'-
     // execDelete/applyState (fondeo no-done se recalcula fresco, el resto
     // respeta lo que ya había).
     if(MONTH_PAGOS[targetMonth]){
-      const prevById={};MONTH_PAGOS[targetMonth].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt};});
+      const prevById={};MONTH_PAGOS[targetMonth].forEach(x=>{prevById[x.id]={done:x.done,amt:x.amt,man:x.man};});
       const freshP=buildMonthPagos(targetMonth);
-      freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;if(!((np.cat==='enviar'||np.cat==='retiro'||np.sistema)&&!prev.done))np.amt=prev.amt;}});
+      freshP.forEach(np=>{const prev=prevById[np.id];if(prev){np.done=prev.done;/* v169: el monto guardado manda solo si esta hecha o fue editada a mano (man); si no, se recalcula desde los items */if(prev.man||prev.done){np.amt=prev.amt;if(prev.man)np.man=true;}}});
       MONTH_PAGOS[targetMonth]=freshP;
     }
     updBbvaBadge();
@@ -4794,6 +4794,7 @@ function mergePagosConDelta(freshArr,baseArr,actualArr){
     if(!bp||ap.done!==bp.done)out.done=ap.done;
     // amt: idem (permite editar el monto real de la tarea sin pisar a la otra).
     if(!bp||ap.amt!==bp.amt)out.amt=ap.amt;
+    if(!bp||ap.man!==bp.man)out.man=ap.man; /* v169 */
     return out;
   });
   // Tareas que esta sesión tiene y no están en lo fresco (ad-hoc/custom): añadir.
@@ -4919,8 +4920,8 @@ function buildPersistableState(overrides){
     const freshIds=new Set(buildMonthPagos(k).map(x=>x.id));
     pagosByMonth[k]=MONTH_PAGOS_[k].map(p=>
       freshIds.has(p.id)
-        ?{id:p.id,done:p.done,amt:p.amt}
-        :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion}
+        ?{id:p.id,done:p.done,amt:p.amt,man:p.man||undefined}
+        :{id:p.id,l:p.l,acc:p.acc,cat:p.cat,amt:p.amt,done:p.done,vacacion:p.vacacion,man:p.man||undefined}
     );
   });
   return {ACTIVE_ID,rev:STATE_REV,MONTH_ORDER,MONTHS,BAL:limpiarSaldos(Object.assign({},BAL_)),MONTH_CIERRE:(o.MONTH_CIERRE||MONTH_CIERRE),CAIXA_TDC:CAIXA_TDC_,nominaReg,ytTCMes,pagosByMonth,massielDone,massielApplied,massielBizumOverride,massielYtAmt:MASSIEL_TASKS[0].amt,HISTORIAL,mCats,mCuotas,DET,DET_MONTH_OVERRIDES:DET_MONTH_OVERRIDES_,DET_EXTRA:DET_EXTRA_,DET_MONTH_REMOVED,DET_REGLAS_DESDE,DET_REGLAS_BAJAS,MONTH_PAGOS_REMOVED,TAREAS_PROGRAMADAS,MOVS:MOVS_,CUOTAS_NUEVAS,CUOTAS_FUTURAS:CUOTAS_FUTURAS.filter(c=>!cuotaFuturaMaterializada(c))};
@@ -5036,7 +5037,7 @@ async function saveState(){
               // nunca se sostuviera en Firestore de un guardado a otro.
               const freshTasks=freshLiviano.map(lp=>{
                 const base=genById[lp.id];
-                if(base)return Object.assign({},base,{done:lp.done,amt:lp.amt!=null?lp.amt:base.amt});
+                if(base)return Object.assign({},base,{done:lp.done,amt:((lp.done||lp.man)&&lp.amt!=null)?lp.amt:base.amt,man:lp.man||undefined}); /* v169 */
                 const esCustomAdHoc=/-custom-\d+$/.test(lp.id||'');
                 if(_remIds.has(lp.id))return null; // v164 FIX RAIZ: una tarea ELIMINADA a proposito no se reinyecta aunque quedara marcada como hecha
                 if(!lp.done&&!esCustomAdHoc)return null;
@@ -5293,10 +5294,10 @@ function applyState(s){
       const esFondeo=(p.cat==='enviar')||(fresh&&fresh.cat==='enviar')||(p.cat==='retiro')||(fresh&&fresh.cat==='retiro')||p.sistema||(fresh&&fresh.sistema);
       if(esFondeo&&!sp.done&&fresh&&fresh.amt!=null){
         p.amt=fresh.amt;                 // no-done: recalcular fresco
-      }else if(sp.amt!=null){
+      }else if(sp.amt!=null&&(sp.done||sp.man)){ /* v169: el guardado manda solo si hecha o editada a mano */
         p.amt=sp.amt;                    // done o no-fondeo: respetar guardado
       }
-      if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;if(sp.vacacion!==undefined)p.vacacion=sp.vacacion;
+      if(sp.man)p.man=true;if(sp.l)p.l=sp.l;if(sp.acc)p.acc=sp.acc;if(sp.cat)p.cat=sp.cat;if(sp.vacacion!==undefined)p.vacacion=sp.vacacion;
     });
   });
   // ── Auto-saneamiento (v16): corrige datos custom viejos que la lógica nueva ya no debe
