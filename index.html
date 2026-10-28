@@ -714,6 +714,36 @@ function sumaNetaMovsMes(acc,monthId){
   salidas=Math.round(salidas*100)/100;
   return {entradas,salidas,neto:Math.round((entradas-salidas)*100)/100};
 }
+// v170 -- FIX RAIZ (28-oct-2026, saldo BBVA negativo en Disponible): BAL era un numero guardado aparte que se movia con sumas/restas incrementales y merges
+// por delta. Cuando un guardado o una sincronizacion perdia un delta, BAL se separaba de los movimientos (BBVA 103,40 contra 320,77 real: los 10 movimientos
+// del 17 al 23-oct estaban en MOVS pero no restados en BAL) y Disponible salia negativo. Ahora el saldo de cada cuenta se DERIVA (cierre del mes anterior +
+// neto de caja del mes activo + pagos atrasados de meses anteriores registrados despues del cierre) al cargar, al aplicar la nube, al guardar y antes de
+// cerrar el mes: BAL ya no puede desviarse de los movimientos. Es idempotente.
+function derivarSaldosDesdeMovs(bal,movs,cierre,activeId,order){
+  const cambios=[];
+  try{
+    const ord=order||MONTH_ORDER;const idx=ord.indexOf(activeId);
+    if(idx<1||!bal||!movs||!cierre)return cambios;
+    const ci=cierre[ord[idx-1]];if(!ci)return cambios;
+    const tsDe=id=>{if(typeof id!=='string'||id.length<9||id.charAt(0)!=='m')return null;const n=parseInt(id.slice(1,9),36);return(isFinite(n)&&n>1.7e12&&n<2.5e12)?n:null;};
+    let corte=Infinity;
+    CUENTAS_VALIDAS.forEach(acc=>{(movs[acc]||[]).forEach(mv=>{if(mv&&mv.mesId===activeId){const t=tsDe(mv.id);if(t&&t<corte)corte=t;}});});
+    CUENTAS_VALIDAS.forEach(acc=>{
+      if(typeof ci[acc]!=='number'||!Array.isArray(movs[acc]))return;
+      let neto=0;
+      movs[acc].forEach(mv=>{
+        if(!mv||esMovNoCaja(mv))return;
+        let cuenta=(mv.mesId===activeId);
+        if(!cuenta&&mv.mesId){const mi=ord.indexOf(mv.mesId);if(mi>=0&&mi<idx){const t=tsDe(mv.id);if(t&&t>corte)cuenta=true;}}
+        if(cuenta)neto+=parseEuro(mv.a);
+      });
+      const esp=Math.round((ci[acc]+neto)*100)/100;const act=Math.round((bal[acc]||0)*100)/100;
+      if(isFinite(esp)&&Math.abs(esp-act)>=0.005){cambios.push({acc:acc,antes:act,despues:esp});bal[acc]=esp;}
+    });
+  }catch(e){console.error('[v170] derivarSaldosDesdeMovs',e);}
+  if(cambios.length)console.warn('[v170] saldos recalculados desde cierre + movimientos',JSON.stringify(cambios));
+  return cambios;
+}
 function cerrarMes(monthId,saldos,opts){
   // v143 -- Congela el saldo de CADA cuenta como cierre de monthId; es la
   // apertura del mes siguiente en auditarCuenta. `saldos` (opcional) son los
@@ -722,6 +752,7 @@ function cerrarMes(monthId,saldos,opts){
   // resultado se persiste en Firestore (antes vivia solo en memoria y nunca se
   // llenaba, por eso la auditoria comparaba contra SALDO_APERTURA de julio).
   opts=opts||{};
+  if(monthId===ACTIVE_ID)derivarSaldosDesdeMovs(BAL,MOVS,MONTH_CIERRE,ACTIVE_ID,MONTH_ORDER);
   const base={};
   CUENTAS_VALIDAS.forEach(k=>{base[k]=Math.round((BAL[k]||0)*100)/100;});
   if(saldos)Object.keys(saldos).forEach(k=>{
@@ -4604,7 +4635,7 @@ function aplicarNubeConservandoLocal(cloudJson){
   Object.keys(L.pagos).forEach(k=>{MONTH_PAGOS[k]=mergePagosConDelta(MONTH_PAGOS[k],(Bz.pagos||{})[k],L.pagos[k]);});
   const mo=mergeDetObjConDelta(DET_MONTH_OVERRIDES,Bz.detOv,L.detOv);Object.keys(mo).forEach(k=>{DET_MONTH_OVERRIDES[k]=mo[k];});
   const me=mergeDetObjConDelta(DET_EXTRA,Bz.detExtra,L.detExtra);Object.keys(me).forEach(k=>{DET_EXTRA[k]=me[k];});
-  Object.assign(BAL,mergeScalarDelta(BAL,Bz.bal,L.bal));limpiarSaldos(BAL);
+  Object.assign(BAL,mergeScalarDelta(BAL,Bz.bal,L.bal));limpiarSaldos(BAL); derivarSaldosDesdeMovs(BAL,MOVS,MONTH_CIERRE,ACTIVE_ID,MONTH_ORDER);
   Object.assign(CAIXA_TDC,mergeScalarDelta(CAIXA_TDC,Bz.caixa,L.caixa));
   Object.keys(L.cierre).forEach(mid=>{if(!MONTH_CIERRE[mid])MONTH_CIERRE[mid]=L.cierre[mid];});
   if(MONTH_PAGOS[ACTIVE_ID])PAGOS=MONTH_PAGOS[ACTIVE_ID];
@@ -5070,7 +5101,8 @@ async function saveState(){
           console.warn('[v160] sesion desactualizada: activo local',_stObj.ACTIVE_ID,'< nube',freshTop.ACTIVE_ID,'-- se conserva el estado de la nube');
         }
       }
-      _stObj.rev=Math.max((freshTop&&freshTop.rev)||0,STATE_REV)+1;__newRev=_stObj.rev;
+      try{const _dv170=derivarSaldosDesdeMovs(_stObj.BAL,_stObj.MOVS,_stObj.MONTH_CIERRE,_stObj.ACTIVE_ID,_stObj.MONTH_ORDER);if(_dv170.length)Object.keys(_stObj.BAL).forEach(k=>{if(typeof _stObj.BAL[k]==='number')mBal[k]=_stObj.BAL[k];});}catch(e){console.error('[v170] saldos',e);}
+    _stObj.rev=Math.max((freshTop&&freshTop.rev)||0,STATE_REV)+1;__newRev=_stObj.rev;
       const stateJson=JSON.stringify(_stObj);
       if(_wasStale)__staleFixedJson=stateJson;
       const __resp=armarRespaldos(__prevResp,__prevJson);
@@ -5366,7 +5398,7 @@ function applyState(s){
   });
   // v28 — baseline de tareas tras reconstrucción completa, para el merge-by-delta.
   snapshotPagosBaseline();
-  materializarCuotasFuturas();   // v153: la cola pasa a meses reales (despues del baseline: cuenta como cambio local)
+  materializarCuotasFuturas();derivarSaldosDesdeMovs(BAL,MOVS,MONTH_CIERRE,ACTIVE_ID,MONTH_ORDER);   // v153: la cola pasa a meses reales (despues del baseline: cuenta como cambio local)
 }
 // ── CACHÉ LOCAL DEL ÚLTIMO ESTADO BUENO (v30) ────────────────────────────────
 // FIX arranque iOS standalone: en la app instalada, los import() del SDK de
