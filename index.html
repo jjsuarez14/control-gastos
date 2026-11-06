@@ -1047,7 +1047,11 @@ const ACC_META={BBVA:{n:'BBVA',c:'#0A84FF',desc:'Cuenta principal'},CAIXA:{n:'Ca
 // Mutuo tiene su propia lista de pendientes, ver fondoMutuoPendientes).
 function tasksFor(accId){if(accId==='BBVA')return PAGOS.filter(p=>(p.cat==='enviar'||p.cat==='retiro'||(p.cat==='gasto'&&p.acc==='BBVA'&&!p.vacacion))&&tareaPendiente(p));return PAGOS.filter(p=>p.cat==='gasto'&&p.acc===accId&&tareaPendiente(p));}
 function srcReady(accId){if(accId==='CAIXA'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='CAIXA');return t?t.done:true;}if(accId==='TRJ'){const t=PAGOS.find(p=>p.cat==='enviar'&&p.acc==='TRJ');return t?t.done:true;}if(accId==='EFECTIVO'){const t=PAGOS.find(p=>p.cat==='retiro');return t?t.done:true;}return true;}
-function renderAccountOverlay(accId){
+function __ovScrollGuardar(){const r=[];try{document.querySelectorAll('#aov,#aov-c,#aov-c *').forEach((e,i)=>{if(e.scrollTop>0)r.push([i,e.scrollTop]);});}catch(e){}return r;}
+function __ovScrollRestaurar(r){try{const els=document.querySelectorAll('#aov,#aov-c,#aov-c *');r.forEach(p=>{if(els[p[0]])els[p[0]].scrollTop=p[1];});}catch(e){}}
+function podarVaciosExtra(o){try{Object.keys(o||{}).forEach(k=>{const v=o[k];if(v&&typeof v==='object'&&!Array.isArray(v)){Object.keys(v).forEach(m=>{if(Array.isArray(v[m])&&v[m].length===0)delete v[m];});}});}catch(e){}}
+function renderAccountOverlay(accId){const __sc=__ovScrollGuardar();try{return __renderAccountOverlay(accId);}finally{__ovScrollRestaurar(__sc);}}
+function __renderAccountOverlay(accId){
   currentOverlayAcc=accId;const d=ACC_META[accId];let balHTML='';
   const _fmtE=v=>SALDOS_OCULTOS?'••••':fmtE(v);
   // T2: en perfil Massiel las cuentas son SOLO consulta (saldo + movimientos).
@@ -3329,17 +3333,17 @@ function esMesFuturo(id){
 // cuentas tiene su propia tarea 'gasto' y se gatea por ella.
 function malaraDone(id){
   const t=(MONTH_PAGOS[id]||[]).find(p=>/Ma\.?\s*Lara/i.test(p.l));
-  return !!(t&&t.done);
+  return !!(t&&(t.done||mesSinSeguimientoTareas(id)));
 }
 function tareaEnviarDone(id,pattern){
   const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='enviar'&&pattern.test(p.l));
-  return !!(t&&t.done);
+  return !!(t&&(t.done||mesSinSeguimientoTareas(id)));
 }
 function tareaGastoDoneExacta(id,pattern){
   // true solo si existe una tarea 'gasto' que casa el patrón Y está done. Si NO
   // existe, devuelve false (no la da por hecha) — clave para "empieza en 0".
   const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&pattern.test(p.l));
-  return !!(t&&t.done);
+  return !!(t&&(t.done||mesSinSeguimientoTareas(id)));
 }
 // Arriendo/Luz: ejecutados por su tarea individual (jul/jun) O por "Ma. Lara"
 // (ago+). En futuro no gatea.
@@ -3373,9 +3377,10 @@ function categoriaDeTarea(label){
 // · cuotas (se resuelven vía cuotasFor+tags para no duplicar)
 // Devuelve [{l,amt}] para el desglose.
 const CUOTA_TAREA_RE=/·\s*\d+\/\d+|última cuota|Colch[oó]n|Movistar|Nike|Zalando|C\.C\.|Amazon · Pago/i;
+function mesSinSeguimientoTareas(id){try{if(!id||id===ACTIVE_ID||esMesFuturo(id))return false;const l=MONTH_PAGOS[id]||[];if(!l.length||l.some(p=>p.done))return false;return Object.keys(MOVS).some(a=>(MOVS[a]||[]).some(mv=>movBelongsToMonth(mv,id)));}catch(e){return false;}}
 function tareasGastoEjecutadas(id,cat){
   return (MONTH_PAGOS[id]||[]).filter(p=>{
-    if(p.cat!=='gasto'||!p.done)return false;
+    if(p.cat!=='gasto'||!(p.done||mesSinSeguimientoTareas(id)))return false;
     if(/Ma\.?\s*Lara/i.test(p.l))return false;   // se desglosa en Casa
     if(CUOTA_TAREA_RE.test(p.l))return false;      // cuotas via cuotasFor
     return categoriaDeTarea(p.l)===cat;
@@ -3433,7 +3438,7 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
       // Vista de Jofre: sin cambios, todo lo 'gasto' done que mapea acá.
       if(maovEsVistaMassiel){
         itemsForKey('personales',id).filter(x=>x.group!=='jofre').forEach(x=>{
-          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&p.done&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
+          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&(p.done||mesSinSeguimientoTareas(id))&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
           if(t)out.push({l:x.l,a:t.amt,drill:null});
         });
       }else{
@@ -3474,7 +3479,7 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
       // de ella en Deporte, esto ya lo recoge automáticamente.
       if(maovEsVistaMassiel){
         itemsForKey('personales',id).filter(x=>x.id==='per6').filter(x=>x.group!=='jofre').forEach(x=>{
-          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&p.done&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
+          const t=(MONTH_PAGOS[id]||[]).find(p=>p.cat==='gasto'&&(p.done||mesSinSeguimientoTareas(id))&&p.l.trim().toLowerCase()===x.l.trim().toLowerCase());
           if(t)out.push({l:x.l,a:t.amt,drill:null});
         });
       }else{
@@ -4634,7 +4639,7 @@ function aplicarNubeConservandoLocal(cloudJson){
   Object.keys(L.movs).forEach(k=>{MOVS[k]=mergeMovsConDelta(MOVS[k],(Bz.movs||{})[k],L.movs[k]);});
   Object.keys(L.pagos).forEach(k=>{MONTH_PAGOS[k]=mergePagosConDelta(MONTH_PAGOS[k],(Bz.pagos||{})[k],L.pagos[k]);});
   const mo=mergeDetObjConDelta(DET_MONTH_OVERRIDES,Bz.detOv,L.detOv);Object.keys(mo).forEach(k=>{DET_MONTH_OVERRIDES[k]=mo[k];});
-  const me=mergeDetObjConDelta(DET_EXTRA,Bz.detExtra,L.detExtra);Object.keys(me).forEach(k=>{DET_EXTRA[k]=me[k];});
+  const me=mergeDetObjConDelta(DET_EXTRA,Bz.detExtra,L.detExtra);Object.keys(me).forEach(k=>{DET_EXTRA[k]=me[k];}); podarVaciosExtra(DET_EXTRA);
   Object.assign(BAL,mergeScalarDelta(BAL,Bz.bal,L.bal));limpiarSaldos(BAL); derivarSaldosDesdeMovs(BAL,MOVS,MONTH_CIERRE,ACTIVE_ID,MONTH_ORDER);
   Object.assign(CAIXA_TDC,mergeScalarDelta(CAIXA_TDC,Bz.caixa,L.caixa));
   Object.keys(L.cierre).forEach(mid=>{if(!MONTH_CIERRE[mid])MONTH_CIERRE[mid]=L.cierre[mid];});
@@ -5432,7 +5437,7 @@ function renderAll(){
 function startRealtimeSync(){
   if(!db)return;
   _fbOnSnapshot(stateDocRef(),(snap)=>{
-    if(snap.metadata.hasPendingWrites)return; // eco de nuestro propio guardado, ya reflejado en pantalla
+    if(snap.metadata.hasPendingWrites)return; try{const _d0=snap.data();const _rv=(_d0&&_d0.json)?JSON.parse(_d0.json).rev:null;if(_rv!=null&&_rv<=STATE_REV)return;}catch(e){} // eco de nuestro propio guardado, ya reflejado en pantalla
     // v161: ya no se ignora el snapshot por tener un pendiente -- se aplica y se reaplica el pendiente encima
     // v77 -- FIX: si esta sesión tiene su propio saveState() en curso (fetch+merge
     // interno todavía sin terminar), un snapshot remoto que llega en esa ventana
@@ -5444,7 +5449,7 @@ function startRealtimeSync(){
     if(_saveInFlight)return;
     if(!snap.exists())return;
     const data=snap.data();if(!data||!data.json)return;
-    try{const _hl=aplicarNubeConservandoLocal(data.json);renderAll();localStorage.setItem(STORAGE_KEY,data.json);if(_hl&&!_saveInFlight)saveState();}catch(e){} // v166
+    try{const _hl=aplicarNubeConservandoLocal(data.json);renderAll();localStorage.setItem(STORAGE_KEY,data.json);if(_hl&&!_saveInFlight){const _t=Date.now();window.__reSaves=(window.__reSaves||[]).filter(x=>_t-x<60000);if(window.__reSaves.length<3){window.__reSaves.push(_t);saveState();}else{console.warn('[v171] re-guardado desde snapshot limitado (posible ciclo)');}}}catch(e){} // v166
   });
 }
 async function init(){
