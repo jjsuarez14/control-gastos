@@ -1939,7 +1939,7 @@ function buildMonthPagos(id){
   if(carCat){
     itemsForKey('carromoto',id).forEach(x=>{
       if(!(x.a>0))return;
-      handleTaggedItem(x.l,x.tag||'CB',x.a);
+      handleTaggedItem(x.l,x.tag||'CB',x.a,x.fondoFE?{pagaFE:true}:undefined); // v174: item de Renting financiado por el Fondo Emergencia (pagaFE registra el consumo del fondo)
     });
   }else{
     const rentingLegacy=ahorroItems.find(x=>x.l==='Renting');
@@ -2621,11 +2621,13 @@ function badgeForTotal(total){
   if(total<=3500)return{badge:'Ajustado',badgeC:'var(--or)',badgeBg:'var(--or2)'};
   return{badge:'Crítico',badgeC:'var(--rd)',badgeBg:'var(--rd2)'};
 }
+// v174 -- un item con fondoFE:true (ej. Renting · prop. Nov) es gasto REAL con tarea propia, pero lo cubre la asignacion de Fondo Emergencia del mes: NO suma al total/reparto de su categoria.
+function sumItemsCat(items){return items.reduce((s,x)=>s+(x.fondoFE?0:x.a),0);}
 function recalcMonthTotals(id){
   const m=MONTHS[id];if(!m)return;
   // Refrescar c.a de cada categoría desde su detalle real (efecto secundario
   // que otras vistas esperan) — el reparto en sí ya no se calcula acá.
-  m.cats.forEach(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);});
+  m.cats.forEach(c=>{const key=keyMap[c.id];if(key)c.a=sumItemsCat(itemsForKey(key,id));});
   m.cats.forEach(c=>{if(c.id===id+'-svc')c.confirmed=svcConfirmado(id);if(c.id===id+'-col'&&itemsForKey('colegio',id).some(x=>x.est===true))c.confirmed=false;});   // v148 / v158
   // Reparto desde la fuente única (v26): mismo número que aporteTotales.
   const r=repartoMes(id);
@@ -2662,7 +2664,7 @@ function openMov(id){
   {const _ap=aporteTotales(id);
    document.getElementById('mov-jofre-total').textContent=fmtAporte(_ap.jofre);
    document.getElementById('mov-massiel-total').textContent=fmtAporte(_ap.massiel);}
-  const catsView=d.cats.map(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);return c;});
+  const catsView=d.cats.map(c=>{const key=keyMap[c.id];if(key)c.a=sumItemsCat(itemsForKey(key,id));return c;});
   document.getElementById('mov-cats').innerHTML=catsView.map(c=>{const isCustom=c.id.indexOf('custom-')===0;return `<div class="fxr" onclick="${c.drill?'showFx(\''+c.id+'\',\''+c.l+'\')':'void(0)'}"><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--t1)" id="lblc-${c.id}">${c.l}${c.confirmed===false?' <span style="font-size:9px;font-weight:700;color:var(--gd);background:var(--gd2);padding:1px 6px;border-radius:5px;vertical-align:middle">SIN CONFIRMAR</span>':''}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${c.rule}</div></div><div style="font-size:14px;font-weight:700;color:${c.confirmed===false?'var(--gd)':'var(--t1)'};margin-right:8px" id="ca-${c.id}">${fmtE(c.a)}</div>${c.drill?'<i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i>':'<button onclick="event.stopPropagation();openEdit(\''+c.id+'\',\''+c.l+'\','+c.a+')" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button>'}${isCustom?'<button onclick="event.stopPropagation();deleteCat(\''+c.id+'\',\''+c.l.replace(/'/g,"\\\\'")+'\')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px"><i class="ti ti-trash" style="font-size:13px;color:var(--rd)"></i></button>':''}</div>`;}).join('')+`<div style="padding:10px 0 4px"><button class="btng" style="background:var(--s2);color:var(--t1);border:1px dashed var(--bd2)" onclick="openAddItem('cat')">+ Agregar gasto fijo</button></div>`;
   const cuotasView=cuotasFor(id);
   const customCount=(d.cuotas||[]).length;
