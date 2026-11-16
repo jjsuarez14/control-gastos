@@ -1026,7 +1026,7 @@ async function markPago(id){
     nominaReg=true;
     if(p.nextId){advanceMonth(p.nextId,p.amt);return;}
     regMov('BBVA',p.l,p.amt,true);renderPrevision();
-  }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);}
+  }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);if(p.feConsumo>0){regConsumoFE({id:p.id,l:p.l+' (parte del Fondo Emergencia)',amt:p.feConsumo});}} // v175: el dinero del FE sale de BBVA con este envio -> registra el consumo del fondo
   else if(p.cat==='retiro'){regMov('BBVA',p.l,p.amt,false);regMov('EFECTIVO',p.l,p.amt,true);}
   else if(p.reponeFE){regReposicionFE(p);} // v173: el cobro ya salio del Fondo Emergencia en su momento; ejecutar la tarea REPONE el fondo (sin mover caja)
   else{regMov(p.acc,p.l,p.amt,false,undefined,undefined,undefined,undefined,(p.tdcRelease||p.dest)?{noGasto:true,pagoId:p.id}:{pagoId:p.id});if(p.pagaFE){regConsumoFE(p);}if(p.dest){regMov(p.dest,p.l,p.amt,true,undefined,undefined,undefined,undefined,{noGasto:true,pagoId:p.id});}if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}
@@ -1709,7 +1709,7 @@ const RENTING_MENSUAL=375; // v99 -- YA NO se usa para la tarea real (ver DET.ca
 // editables: Renting 375 + Gasolina 25 = 400, ver DET.carromoto/
 // CAT_SUFFIX_KEY). Ya NO hay "buffer" oculto: ambos ítems son gasto real,
 // 50/50, a Caixa. Confirmado por Jofre 9-sep-2026.
-const CARRO_MOTO_PRESUPUESTO=412.2; // v173: suma de referencia (Renting 387,20 + Gasolina 25); el total real siempre se recalcula desde DET.carromoto
+const CARRO_MOTO_PRESUPUESTO=400; // v175: asignacion mensual = Renting ARVAL 387,20 + Gasolina 12,80; el total real siempre se recalcula desde DET.carromoto
 function moneyFromStr(s){return parseFloat(String(s).replace(/[^\d,.-]/g,'').replace(',','.'))||0;}
 function ordenarMovsPorFecha(arr){
   // BUG encontrado (18-jul): el listado de una cuenta tomaba los primeros 8
@@ -1754,7 +1754,7 @@ function myBoxMensual(id){return vacacionesVanATRJ(id)?MY_BOX_MENSUAL:0;}
 // Vacaciones acumuladas en TR Jofre: suma de los meses desde dic cuyo "Enviar a TR Jofre" ya se ejecuto (monto = asignacion de Ahorro de ese mes, dinamica). Hoy = 0.
 function vacacionesAcumuladas(){try{let t=0;MONTH_ORDER.forEach(mid=>{if(!vacacionesVanATRJ(mid))return;const tk=(MONTH_PAGOS[mid]||[]).find(p=>p.id===mid+'-eac-tr');if(!tk||!(tk.done||(mid===ACTIVE_ID&&!tareaPendiente(tk))))return;const v=itemsForKey('ahorro',mid).find(x=>x.key==='vacaciones');if(v&&v.a>0)t+=v.a;});return Math.round(t*100)/100;}catch(e){return 0;}}
 function buildMonthPagos(id){
-  const list=[];const p=id+'-';let caixaSum=0,trjSum=0,malaraSum=0,trjaSum=0;
+  const list=[];const p=id+'-';let caixaSum=0,trjSum=0,malaraSum=0,trjaSum=0,feSum=0; // v175: feSum = parte de lo que viaja a Caixa financiada por el Fondo Emergencia
   // Tareas eliminadas a mano por Jofre desde una cuenta ("TAREAS DEL MES" ->
   // ícono de papelera). Se filtran ACÁ, en el punto donde se generan, para que
   // el monto eliminado tampoco quede sumado en su agregado "Enviar a X" — igual
@@ -1939,7 +1939,8 @@ function buildMonthPagos(id){
   if(carCat){
     itemsForKey('carromoto',id).forEach(x=>{
       if(!(x.a>0))return;
-      handleTaggedItem(x.l,x.tag||'CB',x.a,x.fondoFE?{pagaFE:true}:undefined); // v174: item de Renting financiado por el Fondo Emergencia (pagaFE registra el consumo del fondo)
+      handleTaggedItem(x.l,x.tag||'CB',x.a);
+      if((x.tag||'CB')==='CB'&&x.feFin>0)feSum+=x.feFin; // v175: parte del item financiada por el Fondo Emergencia (feFin)
     });
   }else{
     const rentingLegacy=ahorroItems.find(x=>x.l==='Renting');
@@ -1990,7 +1991,7 @@ function buildMonthPagos(id){
   const inv=ahorroItems.find(x=>/Inversión/.test(x.l));
   if(inv&&inv.a>0)pushDirect('Enviar a IBKR','BBVA',inv.a,{cat:'enviar'});
   {const mb=myBoxMensual(id);if(mb>0&&!removedSet.has(p+'mybox')){caixaSum+=mb;list.push({id:p+'mybox',l:'My Box Jubilación',acc:'CAIXA',amt:mb,cat:'gasto',done:false,dest:'TRJA',sistema:true});}}
-  if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false});
+  if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false,feConsumo:feSum>0?Math.round(feSum*100)/100:undefined}); // v175: feConsumo = parte de este envio que sale del Fondo Emergencia
   if(trjSum>0)list.unshift({id:p+'eac-tr',l:'Enviar a TR Jofre',acc:'TRJ',src:'BBVA',amt:Math.round(trjSum*100)/100,cat:'enviar',done:false});
   if(trjaSum>0)list.unshift({id:p+'eac-ja',l:'Enviar a TR J.A.',acc:'TRJA',src:'BBVA',amt:Math.round(trjaSum*100)/100,cat:'enviar',done:false});
   if(malaraSum>0)list.unshift({id:p+'eac-malara',l:'Enviar a Ma. Lara',acc:'BBVA',amt:Math.round(malaraSum*100)/100,cat:'gasto',done:false,sistema:true});
@@ -2621,13 +2622,14 @@ function badgeForTotal(total){
   if(total<=3500)return{badge:'Ajustado',badgeC:'var(--or)',badgeBg:'var(--or2)'};
   return{badge:'Crítico',badgeC:'var(--rd)',badgeBg:'var(--rd2)'};
 }
-// v174 -- un item con fondoFE:true (ej. Renting · prop. Nov) es gasto REAL con tarea propia, pero lo cubre la asignacion de Fondo Emergencia del mes: NO suma al total/reparto de su categoria.
-function sumItemsCat(items){return items.reduce((s,x)=>s+(x.fondoFE?0:x.a),0);}
+// v175 -- feFin = parte de un item financiada por la asignacion de Fondo Emergencia del mes (ej. Renting prop. Nov). El item SIGUE sumando al total de su categoria (control real);
+// solo se descuenta del REPARTO (repartoMes) porque esa plata ya esta en Ahorro > Fondo Emergencia y contarla dos veces cobraria de mas.
+function sumFeFin(items){return items.reduce((s,x)=>s+(x.feFin||0),0);}
 function recalcMonthTotals(id){
   const m=MONTHS[id];if(!m)return;
   // Refrescar c.a de cada categoría desde su detalle real (efecto secundario
   // que otras vistas esperan) — el reparto en sí ya no se calcula acá.
-  m.cats.forEach(c=>{const key=keyMap[c.id];if(key)c.a=sumItemsCat(itemsForKey(key,id));});
+  m.cats.forEach(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);});
   m.cats.forEach(c=>{if(c.id===id+'-svc')c.confirmed=svcConfirmado(id);if(c.id===id+'-col'&&itemsForKey('colegio',id).some(x=>x.est===true))c.confirmed=false;});   // v148 / v158
   // Reparto desde la fuente única (v26): mismo número que aporteTotales.
   const r=repartoMes(id);
@@ -2646,10 +2648,10 @@ const DET={
   remesas:[{id:'rem1',l:'Yoffre Suárez',a:125,d:'Solo Jofre'},{id:'rem2',l:'Zoraima Cueva',a:65,d:'Solo Jofre'}],
   // v99 (9-sep-2026) -- Carro/Moto: 2 ítems reales editables, 50/50, ambos a
   // Caixa (ver CAT_SUFFIX_KEY.car y buildMonthPagos). Renting 375 (pago fijo
-  // REVEL, ver RENTING_MENSUAL) + Gasolina 25 (antes vivía como buffer
+  // ARVAL, ver RENTING_MENSUAL) + Gasolina 25 (antes vivía como buffer
   // implícito dentro del presupuesto de 400, ahora es su propio ítem con
   // tarea real). Confirmado por Jofre 9-sep-2026.
-  carromoto:[{id:'car1',l:'Renting',a:387.2,d:'Caixa · 50/50',tag:'CB'},{id:'car2',l:'Gasolina',a:25,d:'Caixa · 50/50',tag:'CB'}],
+  carromoto:[{id:'car1',l:'Renting',a:387.2,d:'Caixa · 50/50',tag:'CB'},{id:'car2',l:'Gasolina',a:12.8,d:'Caixa · 50/50',tag:'CB'}],
   ahorro:[{id:'aho1',l:'Fondo Emergencia (TR J.A.)',a:100,d:'TR J.A.'},{id:'aho2',l:'Inversión Hipoteca (TR)',a:140,d:'Trade Republic'},{id:'aho3',l:'Fondo Mutuo (TR Jofre)',a:160,d:'TR Jofre'},{id:'aho4',l:'Inversión Bolsa (IBKR)',a:0,d:'IBKR'}],
   variables:[{id:'var1',l:'Compartir Fam. / Varios',a:509.80,d:'Detalle completo en Base 06/26',fixed:true}]
 };
@@ -2664,7 +2666,7 @@ function openMov(id){
   {const _ap=aporteTotales(id);
    document.getElementById('mov-jofre-total').textContent=fmtAporte(_ap.jofre);
    document.getElementById('mov-massiel-total').textContent=fmtAporte(_ap.massiel);}
-  const catsView=d.cats.map(c=>{const key=keyMap[c.id];if(key)c.a=sumItemsCat(itemsForKey(key,id));return c;});
+  const catsView=d.cats.map(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);return c;});
   document.getElementById('mov-cats').innerHTML=catsView.map(c=>{const isCustom=c.id.indexOf('custom-')===0;return `<div class="fxr" onclick="${c.drill?'showFx(\''+c.id+'\',\''+c.l+'\')':'void(0)'}"><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--t1)" id="lblc-${c.id}">${c.l}${c.confirmed===false?' <span style="font-size:9px;font-weight:700;color:var(--gd);background:var(--gd2);padding:1px 6px;border-radius:5px;vertical-align:middle">SIN CONFIRMAR</span>':''}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${c.rule}</div></div><div style="font-size:14px;font-weight:700;color:${c.confirmed===false?'var(--gd)':'var(--t1)'};margin-right:8px" id="ca-${c.id}">${fmtE(c.a)}</div>${c.drill?'<i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i>':'<button onclick="event.stopPropagation();openEdit(\''+c.id+'\',\''+c.l+'\','+c.a+')" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button>'}${isCustom?'<button onclick="event.stopPropagation();deleteCat(\''+c.id+'\',\''+c.l.replace(/'/g,"\\\\'")+'\')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px"><i class="ti ti-trash" style="font-size:13px;color:var(--rd)"></i></button>':''}</div>`;}).join('')+`<div style="padding:10px 0 4px"><button class="btng" style="background:var(--s2);color:var(--t1);border:1px dashed var(--bd2)" onclick="openAddItem('cat')">+ Agregar gasto fijo</button></div>`;
   const cuotasView=cuotasFor(id);
   const customCount=(d.cuotas||[]).length;
@@ -3152,7 +3154,7 @@ function repartoMes(id){
       });
       return;
     }
-    const sp=splitAmount(c.rule,c.a);
+    const sp=splitAmount(c.rule,c.a-(key?sumFeFin(itemsForKey(key,id)):0)); // v175: descuenta lo financiado por el Fondo Emergencia (ya esta en Ahorro)
     if(sp){jofre+=sp.jofre;massiel+=sp.massiel;}
   });
   // Cuotas: cada una por su responsabilidad real (tags)
@@ -3952,7 +3954,7 @@ function gastoFijoVariable(id,cats){
 // Asignación mensual por categoría para el semáforo. Prioridad: (1) asignación
 // fijada por Jofre (CAT_ASIGNACION), (2) lo previsto en Previsión, (3) promedio
 // de los meses anteriores con registro en esa categoría.
-const CAT_ASIGNACION={'Carro/Moto':412.2}; // v173: Renting 387,20 + Gasolina 25
+const CAT_ASIGNACION={'Carro/Moto':400}; // v175: Renting ARVAL 387,20 + Gasolina 12,80
 function asignacionCategoria(cat,id){
   if(cat==='Ahorro'||cat==='Fondo Emergencia')return null; // ahorrar de más no es sobregasto: sin semáforo
   if(CAT_ASIGNACION[cat]>0)return CAT_ASIGNACION[cat];
