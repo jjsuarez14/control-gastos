@@ -943,6 +943,17 @@ function regMov(acc,label,amt,plus,cat,group,mesIdOverride,fondoTag,extra){
   const __rec={id:nuevoMovId(),dt:ds,l:label,a:(plus?'+':'-')+fmtE(Math.abs(amt)),t:plus,cat:cat||undefined,group:group||undefined,mesId:mesIdOverride||ACTIVE_ID,fondo:fondoTag||undefined};if(extra)Object.assign(__rec,extra);MOVS[acc].unshift(__rec);
   updTile();
 }
+// v173 -- Fondo Emergencia: movimientos VIRTUALES en BBVA (noCaja:true => no tocan BAL ni derivarSaldosDesdeMovs; noGasto:true => no son gasto).
+// regReposicionFE: la tarea ya fue pagada con el Fondo (salida real en su dia); al ejecutarla se REPONE el fondo (reduce lo consumido).
+// regConsumoFE: la tarea (en otra cuenta) se financia con el Fondo cuya plata ya salio de BBVA via 'Enviar a X'; se registra el consumo del fondo.
+function __movVirtualFE(p,esRepos){
+  const dt=__movDateOverride||new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
+  MOVS.BBVA=MOVS.BBVA||[];
+  MOVS.BBVA.unshift({id:nuevoMovId(),dt:ds,l:esRepos?p.l:(p.l+' · financiado con Fondo Emergencia'),a:(esRepos?'+':'-')+fmtE(Math.abs(p.amt)),t:esRepos,mesId:ACTIVE_ID,fondo:'emergencia',noCaja:true,noGasto:true,reposicionFE:esRepos?true:undefined,pagoId:p.id});
+  updTile();
+}
+function regReposicionFE(p){__movVirtualFE(p,true);}
+function regConsumoFE(p){__movVirtualFE(p,false);}
 function regCaixaCard(label,amt){
   CAIXA_TDC.disponible=Math.max(0,Math.round((CAIXA_TDC.disponible-amt)*100)/100);
   const dt=new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
@@ -1017,7 +1028,8 @@ async function markPago(id){
     regMov('BBVA',p.l,p.amt,true);renderPrevision();
   }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);}
   else if(p.cat==='retiro'){regMov('BBVA',p.l,p.amt,false);regMov('EFECTIVO',p.l,p.amt,true);}
-  else{regMov(p.acc,p.l,p.amt,false,undefined,undefined,undefined,undefined,(p.tdcRelease||p.dest)?{noGasto:true,pagoId:p.id}:{pagoId:p.id});if(p.dest){regMov(p.dest,p.l,p.amt,true,undefined,undefined,undefined,undefined,{noGasto:true,pagoId:p.id});}if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}
+  else if(p.reponeFE){regReposicionFE(p);} // v173: el cobro ya salio del Fondo Emergencia en su momento; ejecutar la tarea REPONE el fondo (sin mover caja)
+  else{regMov(p.acc,p.l,p.amt,false,undefined,undefined,undefined,undefined,(p.tdcRelease||p.dest)?{noGasto:true,pagoId:p.id}:{pagoId:p.id});if(p.pagaFE){regConsumoFE(p);}if(p.dest){regMov(p.dest,p.l,p.amt,true,undefined,undefined,undefined,undefined,{noGasto:true,pagoId:p.id});}if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}
     if(p.tdcLibera>0){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.tdcLibera)*100)/100);}}
   updBbvaBadge();updPrevCard();updTile();if(typeof renderMaTile==='function')renderMaTile();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
   // v69 (28-ago) -- el modal "Pendiente de cobro" (pndov, ej. abierto desde
@@ -1504,11 +1516,11 @@ function fondoEmergenciaAportadoTotal(){
 function fondoEmergenciaConsumidoTotal(){
   let c=0;
   (MOVS.BBVA||[]).forEach(mv=>{
-    if(mv.t)return; // solo salidas
+    if(mv.t){if(mv.reposicionFE&&mv.fondo==='emergencia')c-=Math.abs(moneyFromStr(mv.a));return;} // v173: la reposicion reduce lo consumido; el resto de entradas se ignora
     if(mv.fondo!=='emergencia'&&mv.cat!=='Fondo Emergencia')return; // v141: origen por flag O por categoría manual
     c+=Math.abs(moneyFromStr(mv.a));
   });
-  return Math.round(c*100)/100;
+  return Math.max(0,Math.round(c*100)/100);
 }
 function fondoEmergenciaEnCuenta(){
   return Math.max(0,Math.round((fondoEmergenciaAportadoTotal()-fondoEmergenciaConsumidoTotal())*100)/100);
@@ -1619,7 +1631,7 @@ function renderFondoEmergenciaDetail(){
     if(ent>0)rows+=rowHTML(MONTHS[mid]?MONTHS[mid].name.slice(0,3):mid,'Aporte mensual Fondo Emergencia','+'+fmtE(ent),true);
   });
   (MOVS.BBVA||[]).slice().reverse().forEach(mv=>{
-    if(mv.t)return;
+    if(mv.t){if(mv.reposicionFE&&mv.fondo==='emergencia')rows+=rowHTML(mv.dt,mv.l+' · reposición',mv.a,true);return;} // v173
     if(mv.fondo!=='emergencia'&&mv.cat!=='Fondo Emergencia')return; // v141: misma señal que fondoEmergenciaConsumidoTotal
     rows+=rowHTML(mv.dt,mv.l,mv.a,false);
   });
@@ -1697,7 +1709,7 @@ const RENTING_MENSUAL=375; // v99 -- YA NO se usa para la tarea real (ver DET.ca
 // editables: Renting 375 + Gasolina 25 = 400, ver DET.carromoto/
 // CAT_SUFFIX_KEY). Ya NO hay "buffer" oculto: ambos ítems son gasto real,
 // 50/50, a Caixa. Confirmado por Jofre 9-sep-2026.
-const CARRO_MOTO_PRESUPUESTO=400; // suma de referencia (375+25); el total real siempre se recalcula desde DET.carromoto
+const CARRO_MOTO_PRESUPUESTO=412.2; // v173: suma de referencia (Renting 387,20 + Gasolina 25); el total real siempre se recalcula desde DET.carromoto
 function moneyFromStr(s){return parseFloat(String(s).replace(/[^\d,.-]/g,'').replace(',','.'))||0;}
 function ordenarMovsPorFecha(arr){
   // BUG encontrado (18-jul): el listado de una cuenta tomaba los primeros 8
@@ -1788,7 +1800,7 @@ function buildMonthPagos(id){
   itemsForKey('servicios',id).forEach(it=>{
     if(it.l==='Luz'){if(it.a>0)malaraSum+=it.a;return;}
     if(it.tag==='EFECTIVO'){ if(it.a>0)efectivoItems.push({label:it.l,total:it.a,inc:it.efInc||30}); return; }
-    handleTaggedItem(it.l,it.tag,it.a);
+    handleTaggedItem(it.l,it.tag,it.a,it.reponeFE?{reponeFE:true}:undefined); // v173: reponeFE = tarea cuyo cobro ya salio del Fondo Emergencia
   });
   // Gimnasio On Air (desde agosto): tareas según ONAIR_SCHEDULE (cobros reales
   // por ciclo de nómina, ver onairCobrosDelMes).
@@ -1856,7 +1868,7 @@ function buildMonthPagos(id){
       const extra=Object.assign({autofinanciado:true},c.tdcRelease?{tdcRelease:true}:null);
       pushDirect(label,'CAIXA',moneyFromStr(c.amt),extra);
     }else{
-      handleTaggedItem(label,tag,moneyFromStr(c.amt),(c.tdcRelease||c.tdcLibera>0)?Object.assign({},c.tdcRelease?{tdcRelease:true}:null,c.tdcLibera>0?{tdcLibera:c.tdcLibera}:null):undefined);
+      handleTaggedItem(label,tag,moneyFromStr(c.amt),(c.tdcRelease||c.tdcLibera>0||c.fondoFE)?Object.assign({},c.tdcRelease?{tdcRelease:true}:null,c.tdcLibera>0?{tdcLibera:c.tdcLibera}:null,c.fondoFE?{pagaFE:true}:null):undefined); // v173: fondoFE -> pagaFE
     }
   });
   // Tareas de Hotel (gasto BBVA, cat Vacaciones). v67 -- redirigido de TRJ a
@@ -2635,7 +2647,7 @@ const DET={
   // REVEL, ver RENTING_MENSUAL) + Gasolina 25 (antes vivía como buffer
   // implícito dentro del presupuesto de 400, ahora es su propio ítem con
   // tarea real). Confirmado por Jofre 9-sep-2026.
-  carromoto:[{id:'car1',l:'Renting',a:375,d:'Caixa · 50/50',tag:'CB'},{id:'car2',l:'Gasolina',a:25,d:'Caixa · 50/50',tag:'CB'}],
+  carromoto:[{id:'car1',l:'Renting',a:387.2,d:'Caixa · 50/50',tag:'CB'},{id:'car2',l:'Gasolina',a:25,d:'Caixa · 50/50',tag:'CB'}],
   ahorro:[{id:'aho1',l:'Fondo Emergencia (TR J.A.)',a:100,d:'TR J.A.'},{id:'aho2',l:'Inversión Hipoteca (TR)',a:140,d:'Trade Republic'},{id:'aho3',l:'Fondo Mutuo (TR Jofre)',a:160,d:'TR Jofre'},{id:'aho4',l:'Inversión Bolsa (IBKR)',a:0,d:'IBKR'}],
   variables:[{id:'var1',l:'Compartir Fam. / Varios',a:509.80,d:'Detalle completo en Base 06/26',fixed:true}]
 };
@@ -3144,6 +3156,7 @@ function repartoMes(id){
   // Cuotas: cada una por su responsabilidad real (tags)
   cuotasFor(id).forEach(c=>{
     if(c.autofinanciado)return; // v133: autofinanciado por reembolso propio -- no entra al reparto 50/50
+    if(c.fondoFE)return; // v173: financiada por el Fondo Emergencia -- no entra al reparto (su reposicion va por Ahorro)
     if((c.tags||[]).includes('Mercado'))return; // v172: cargo a la asignacion de Mercado -- no suma aporte extra
     const amt=moneyFromStr(c.amt);
     const sp=splitFromCuotaTags(c.tags);
@@ -3937,7 +3950,7 @@ function gastoFijoVariable(id,cats){
 // Asignación mensual por categoría para el semáforo. Prioridad: (1) asignación
 // fijada por Jofre (CAT_ASIGNACION), (2) lo previsto en Previsión, (3) promedio
 // de los meses anteriores con registro en esa categoría.
-const CAT_ASIGNACION={'Carro/Moto':400};
+const CAT_ASIGNACION={'Carro/Moto':412.2}; // v173: Renting 387,20 + Gasolina 25
 function asignacionCategoria(cat,id){
   if(cat==='Ahorro'||cat==='Fondo Emergencia')return null; // ahorrar de más no es sobregasto: sin semáforo
   if(CAT_ASIGNACION[cat]>0)return CAT_ASIGNACION[cat];
