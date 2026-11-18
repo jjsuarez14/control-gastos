@@ -3585,9 +3585,16 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
   }else if(cat==='Personales'){
     itemsForKey('personales',id).filter(x=>x.id!=='per1'&&x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }
+  const _antesCuotas=out.length;
   cuotasFor(id).filter(c=>!(c.tdcRelease||c.liquidacion)).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
     out.push({l:c.l,a:moneyFromStr(c.amt),drill:null});
   });
+  // v176 -- categorias POOL (Mercado / Compartir Familiar): el monto fijo es un deposito y las cuotas con esa etiqueta SALEN de esa misma plata, no se suman encima
+  // (antes Mercado de diciembre mostraba 750 + 59,35 de HSN = 809,35). La asignacion se muestra neta de las cuotas y el total de la categoria queda igual al deposito.
+  if(CATEGORIAS_POOL.includes(cat)&&_antesCuotas>0&&out.length>_antesCuotas){
+    const cargoPool=out.slice(_antesCuotas).reduce((t,x)=>t+x.a,0);
+    out[0]=Object.assign({},out[0],{a:Math.round((out[0].a-cargoPool)*100)/100,l:out[0].l+' · disponible tras cuotas'});
+  }
   return out.filter(x=>x.a>0);
 }
 // Reglas dadas por Jofre (17-jul) para limpiar movimientos manuales viejos
