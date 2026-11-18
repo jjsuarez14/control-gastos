@@ -259,15 +259,28 @@ body.role-massiel #nb-i,body.role-massiel #nb-p,body.role-massiel #nb-h,body.rol
       </div>
     </div>
   </div>
-  <div style="padding:5px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    <div class="ts" onclick="showA('TRM')"><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#FF375F22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-heart-handshake" style="font-size:12px;color:#FF375F"></i></div><div style="font-size:10px;font-weight:700;color:#FF375F;letter-spacing:.04em">TR MASSIEL</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:24px;font-weight:800;color:var(--t1);line-height:1" id="d-trm">€0,10</div><div style="font-size:10px;color:var(--t2);margin-top:5px">Mercado</div></div></div>
-    <div class="ts" onclick="showA('CAIXA')"><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#FF9F0A22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-credit-card" style="font-size:12px;color:#FF9F0A"></i></div><div style="font-size:10px;font-weight:700;color:#FF9F0A;letter-spacing:.04em">CAIXA</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:24px;font-weight:800;color:var(--t1);line-height:1" id="d-caixa">€4,14</div><div style="font-size:9px;color:var(--rd);margin-top:3px">Disp. real: <span id="d-caixa-disp">€0,00</span></div><div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center"><span style="font-size:9px;color:var(--t3)">Disp. TDC</span><span id="d-caixa-tarjeta" style="font-size:13px;font-weight:700;color:var(--or)">€391,53</span></div></div></div>
+  <div style="padding:5px 18px 0">
+    <div class="tp" onclick="showA('CAIXA')" style="background:linear-gradient(135deg,#2a1c08,#1f1a14);padding:15px">
+      <div style="position:relative;z-index:1">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div style="display:flex;align-items:center;gap:10px"><div style="width:34px;height:34px;border-radius:11px;background:#FF9F0A22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-credit-card" style="font-size:17px;color:#FF9F0A"></i></div><div><div style="font-size:10px;font-weight:700;color:#FF9F0A;letter-spacing:.06em;margin-bottom:4px">CAIXA · RENTING + TDC</div><div style="font-family:var(--fd);font-size:30px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1" id="d-caixa">€0,00</div></div></div><i class="ti ti-chevron-right" style="font-size:14px;color:var(--t3);margin-top:6px"></i></div>
+      <div style="border-top:1px solid var(--bd);padding-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+        <div style="cursor:pointer" onclick="event.stopPropagation();showA('CAIXA')"><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Disp. real</div><div style="font-size:13px;font-weight:700;color:var(--tl)" id="d-caixa-disp">€0,00</div></div>
+        <div style="cursor:pointer" onclick="event.stopPropagation();showPendienteAccount('CAIXA')"><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Pdte. pagar</div><div style="font-size:13px;font-weight:700;color:var(--rd)" id="caixa-pendiente">€0,00</div></div>
+      </div>
+      <div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 5px 1px">Fondos dentro de Caixa</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="cursor:pointer;background:rgba(255,255,255,.06);border-radius:12px;padding:8px 10px;position:relative;overflow:hidden" onclick="event.stopPropagation();showA('CAIXA')"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:#FF9F0A"></div><div style="font-size:10px;color:var(--t2);font-weight:600;margin-bottom:3px">Tarjeta (TDC)</div><div style="font-size:15px;font-weight:800;color:#FF9F0A" id="d-caixa-tarjeta">€0,00</div><div style="font-size:9px;color:var(--t3);margin-top:2px" id="d-caixa-tarjeta-note"></div></div>
+        <div style="cursor:pointer;background:rgba(255,255,255,.06);border-radius:12px;padding:8px 10px;position:relative;overflow:hidden" onclick="event.stopPropagation();showBolsoGasolinaDetail()"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:#64D2FF"></div><div style="font-size:10px;color:var(--t2);font-weight:600;margin-bottom:3px">Bolso Gasolina</div><div style="font-size:15px;font-weight:800;color:#64D2FF" id="caixa-tile-gasolina">€0,00</div><div style="font-size:9px;color:var(--t3);margin-top:2px" id="caixa-tile-gasolina-note">Sin iniciar</div></div>
+      </div>
+      </div>
+    </div>
   </div>
   <div style="padding:6px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div class="ts" onclick="showA('TRM')"><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#FF375F22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-heart-handshake" style="font-size:12px;color:#FF375F"></i></div><div style="font-size:10px;font-weight:700;color:#FF375F;letter-spacing:.04em">TR MASSIEL</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:24px;font-weight:800;color:var(--t1);line-height:1" id="d-trm">€0,10</div><div style="font-size:10px;color:var(--t2);margin-top:5px">Mercado</div></div></div>
     <div class="ts" onclick="showA('TRJ')"><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#BF5AF222;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-users-group" style="font-size:12px;color:#BF5AF2"></i></div><div style="font-size:10px;font-weight:700;color:#BF5AF2;letter-spacing:.04em">TR JOFRE</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-trj">€0,00</div><div style="font-size:10px;color:var(--rd);margin-top:5px">Pdte: <span id="d-trj-pend">€209,44</span></div></div></div>
     <div class="ts" onclick="showA('TRJA')"><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#30D15822;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pig-money" style="font-size:12px;color:#30D158"></i></div><div style="font-size:10px;font-weight:700;color:#30D158;letter-spacing:.04em">My Box</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-trja">€0,00</div><div style="font-size:11px;color:var(--t2);margin-top:5px">Jubilación</div></div></div>
     <div class="ts" onclick="showA('IBKR')"><div style="position:relative;z-index:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:7px;background:#0A84FF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-chart-line" style="font-size:12px;color:#0A84FF"></i></div><div style="font-size:10px;font-weight:700;color:#0A84FF;letter-spacing:.04em">IBKR</div></div><i class="ti ti-chevron-right" style="font-size:12px;color:var(--t3)"></i></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-ibkr">$0,00</div><div style="font-size:11px;color:var(--t2);margin-top:5px">≈ €0 · cerrada</div></div></div>
-    <div class="ts" onclick="showA('EFECTIVO')"><div style="position:relative;z-index:1"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><div style="width:22px;height:22px;border-radius:7px;background:#9CA3AF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-cash" style="font-size:12px;color:#9CA3AF"></i></div><div style="font-size:10px;font-weight:700;color:var(--t3);letter-spacing:.04em">EFECTIVO</div></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-efectivo">€0,00</div><div style="font-size:9px;color:var(--t3);margin-top:5px">Disp. real: <span id="d-efectivo-disp">€0,00</span></div></div></div>
+    <div class="ts" style="grid-column:1/-1" onclick="showA('EFECTIVO')"><div style="position:relative;z-index:1"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><div style="width:22px;height:22px;border-radius:7px;background:#9CA3AF22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-cash" style="font-size:12px;color:#9CA3AF"></i></div><div style="font-size:10px;font-weight:700;color:var(--t3);letter-spacing:.04em">EFECTIVO</div></div><div style="font-family:var(--fd);font-size:23px;font-weight:800;color:var(--t1);line-height:1" id="d-efectivo">€0,00</div><div style="font-size:9px;color:var(--t3);margin-top:5px">Disp. real: <span id="d-efectivo-disp">€0,00</span></div></div></div>
   </div>
   <div style="padding:10px 18px 0">
     <button onclick="showMaMonthDetail(ACTIVE_ID,'close')" style="width:100%;background:var(--s2);border:1px solid var(--bd2);border-radius:18px;padding:16px 18px;display:flex;align-items:center;gap:14px;cursor:pointer"><div style="width:42px;height:42px;border-radius:13px;background:var(--pu2);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-layout-grid" style="font-size:21px;color:var(--pu)"></i></div><div style="flex:1;text-align:left"><div style="font-size:14px;font-weight:700;color:var(--t1)">Categorías</div><div style="font-size:11px;color:var(--t2);margin-top:2px">Desglose del mes por categoría</div></div><svg id="cat-donut" width="50" height="50" viewBox="0 0 40 40" style="flex-shrink:0"></svg><i class="ti ti-chevron-right" style="font-size:16px;color:var(--t3)"></i></button>
@@ -610,7 +623,8 @@ function disponibleCuenta(acc){
   // reservada en BBVA (fondoMutuoEfectivoPend), ni antes ni despues del retiro.
   const fmReservado=(acc==='BBVA')?Math.max(0,Math.round((fondoMutuoEnCuenta(ACTIVE_ID)-fondoMutuoEfectivoPend(ACTIVE_ID))*100)/100):0;
   const feReservado=(acc==='BBVA')?fondoEmergenciaEnCuenta():0; // v92 -- reservado del Fondo Emergencia, mismo patrón que fmReservado
-  const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc)-fmReservado-feReservado;
+  const bgReservado=(acc==='CAIXA')?bolsoGasolinaReservado():0; // v177 -- Bolso Gasolina reservado en Caixa (mismo patron que feReservado en BBVA)
+  const d=saldo-gastosPropiosPend(acc)-fondeoSalientePend(acc)+fondeoEntrantePend(acc)-fmReservado-feReservado-bgReservado;
   return Math.round(d*100)/100;
 }
 const MONTH_NUM={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
@@ -820,6 +834,7 @@ function toggleSaldosOcultos(){
   if(fmovEl&&fmovEl.style.display==='block'){
     if(fmovLastFn==='mutuo')renderFondoMutuoMassiel();
     else if(fmovLastFn==='emergencia')renderFondoEmergenciaDetail();
+    else if(fmovLastFn==='gasolina')renderBolsoGasolinaDetail();
   }
 }
 function updEyeIcons(){
@@ -851,6 +866,10 @@ function updTile(){
   const cDisp=disponibleCuenta('CAIXA');
   const cd=document.getElementById('d-caixa-disp');if(cd){cd.textContent=fmtSaldo(cDisp);cd.style.color=colorSaldo(cDisp,'var(--rd)','var(--tl)');}
   const ct=document.getElementById('d-caixa-tarjeta');if(ct)ct.textContent=fmtSaldo(CAIXA_TDC.disponible);
+  const ctN=document.getElementById('d-caixa-tarjeta-note');if(ctN)ctN.textContent='Disp. de '+fmtSaldo(CAIXA_TDC.limite);
+  const cpE=document.getElementById('caixa-pendiente');if(cpE)cpE.textContent=fmtSaldo(caixaPend);
+  const bgE=document.getElementById('caixa-tile-gasolina');if(bgE)bgE.textContent=fmtSaldo(bolsoGasolinaSaldo());
+  const bgN=document.getElementById('caixa-tile-gasolina-note');if(bgN){const _pr=bolsoGasolinaPorReembolsar(),_ap=bolsoGasolinaAportePend();bgN.textContent=_pr>0?fmtSaldo(_pr)+' por reembolsar':(_ap>0?fmtSaldo(_ap)+' en camino':(bolsoGasolinaSaldo()>0?'Reservado en Caixa':'Sin iniciar'));}
   const ef=document.getElementById('d-efectivo');if(ef)ef.textContent=fmtSaldo(BAL.EFECTIVO);
   // v157 -- Efectivo tambien muestra su Disponible real (saldo - gastos en efectivo pendientes + retiro en camino),
   // con la misma formula unica que el resto de cuentas: negativo (rojo) si lo retirado no alcanza para lo que falta pagar.
@@ -954,6 +973,60 @@ function __movVirtualFE(p,esRepos){
 }
 function regReposicionFE(p){__movVirtualFE(p,true);}
 function regConsumoFE(p){__movVirtualFE(p,false);}
+// v177 -- BOLSO GASOLINA: fondo dentro de Caixa (mismo patron que Fondo Emergencia/Fondo Mutuo en BBVA).
+//  Aportes   = movimientos VIRTUALES (noCaja/noGasto, fondo:'gasolina', aporteGasolina) que crea 'Enviar a Caixa' (linea Gasolina del plan) o el boton 'Reservar al bolso'.
+//  Consumo   = salidas en Caixa (debito o TDC) cuya descripcion empieza por 'Gasolina' (cae en Carro/Moto por la regla de categorias).
+//  Reembolso = entradas 'Reembolso Gasolina...' (la empresa reembolsa desde ene-2027, el 21 del mes siguiente).
+const BOLSO_GAS_RE=/^\s*gasolina\b/i;
+const BOLSO_GAS_REEMB_RE=/^\s*reembolso\s+gasolina/i;
+function __bgMovs(){return MOVS.CAIXA||[];}
+function bolsoGasolinaAportado(){let a=0;__bgMovs().forEach(mv=>{if(mv.aporteGasolina&&mv.fondo==='gasolina')a+=Math.abs(moneyFromStr(mv.a))*(mv.t?1:-1);});return Math.round(a*100)/100;}
+function bolsoGasolinaConsumido(){let c=0;__bgMovs().forEach(mv=>{if(mv.t||mv.aporteGasolina)return;if(BOLSO_GAS_RE.test(mv.l||''))c+=Math.abs(moneyFromStr(mv.a));});return Math.round(c*100)/100;}
+function bolsoGasolinaReembolsado(){let r=0;__bgMovs().forEach(mv=>{if(mv.t&&BOLSO_GAS_REEMB_RE.test(mv.l||''))r+=Math.abs(moneyFromStr(mv.a));});return Math.round(r*100)/100;}
+function bolsoGasolinaSaldo(){return Math.round((bolsoGasolinaAportado()-bolsoGasolinaConsumido()+bolsoGasolinaReembolsado())*100)/100;}
+function bolsoGasolinaAportePend(){let a=0;(typeof PAGOS!=='undefined'?PAGOS:[]).forEach(p=>{if(p.cat==='enviar'&&p.acc==='CAIXA'&&!p.done&&p.gasolinaAporte>0)a+=p.gasolinaAporte;});return Math.round(a*100)/100;}
+// Reservado en Caixa para el Disponible real: lo que ya es del bolso + lo que viaja en el 'Enviar a Caixa' pendiente.
+function bolsoGasolinaReservado(){return Math.round((Math.max(0,bolsoGasolinaSaldo())+bolsoGasolinaAportePend())*100)/100;}
+function bolsoGasolinaConsumoReembolsable(){let c=0;__bgMovs().forEach(mv=>{if(mv.t||mv.aporteGasolina)return;if(!BOLSO_GAS_RE.test(mv.l||''))return;const y=monthYear(mv.mesId);if(y!=null&&y>=2027)c+=Math.abs(moneyFromStr(mv.a));});return Math.round(c*100)/100;}
+function bolsoGasolinaPorReembolsar(){return Math.max(0,Math.round((bolsoGasolinaConsumoReembolsable()-bolsoGasolinaReembolsado())*100)/100);}
+function bolsoGasolinaConsumoMensualMedio(){const por={};__bgMovs().forEach(mv=>{if(mv.t||mv.aporteGasolina)return;if(!BOLSO_GAS_RE.test(mv.l||''))return;const k=mv.mesId||'?';por[k]=(por[k]||0)+Math.abs(moneyFromStr(mv.a));});const ks=Object.keys(por);if(!ks.length)return 0;return Math.round(ks.reduce((t,k)=>t+por[k],0)/ks.length*100)/100;}
+function regAporteGasolina(amt,label){
+  const dt=__movDateOverride||new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
+  MOVS.CAIXA=MOVS.CAIXA||[];
+  MOVS.CAIXA.unshift({id:nuevoMovId(),dt:ds,l:label||'Aporte al bolso de gasolina',a:'+'+fmtE(Math.abs(amt)),t:true,mesId:ACTIVE_ID,fondo:'gasolina',aporteGasolina:true,noCaja:true,noGasto:true});
+  updTile();
+}
+async function reservarBolsoGasolina(){
+  const v=await askAmount('Reservar al bolso de gasolina','Monto que YA esta en Caixa y pasa a ser del bolso (no mueve caja)');
+  if(v===null)return;
+  const num=parseFloat((v||'').replace(',','.'));
+  if(!v||isNaN(num)||num<=0){toast('Monto inválido','var(--rd)');return;}
+  regAporteGasolina(Math.round(num*100)/100,'Reserva manual al bolso de gasolina');
+  saveState();renderBolsoGasolinaDetail();
+}
+function renderBolsoGasolinaDetail(){
+  const saldo=bolsoGasolinaSaldo(),aportado=bolsoGasolinaAportado(),consumido=bolsoGasolinaConsumido(),reemb=bolsoGasolinaReembolsado();
+  const porReemb=bolsoGasolinaPorReembolsar(),pend=bolsoGasolinaAportePend(),medio=bolsoGasolinaConsumoMensualMedio();
+  const H=v=>SALDOS_OCULTOS?'••••':fmtE(v);
+  let html='<div style="padding:16px 16px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:10px;background:#FF9F0A22;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-gas-station" style="font-size:17px;color:#FF9F0A"></i></div><div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--t1)">Bolso Gasolina</div><div style="font-size:11px;color:var(--t2)">Fondo · dentro de Caixa</div></div><button onclick="document.getElementById(\'fmov\').style.display=\'none\'" style="background:var(--bd);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-x" style="font-size:13px;color:var(--t2)"></i></button></div>';
+  html+='<div style="padding:14px 16px 8px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.09em;margin-bottom:4px">SALDO DEL BOLSO</div><div style="font-size:36px;font-weight:800;color:#FF9F0A">'+H(saldo)+'</div>'+(pend>0?'<div style="font-size:10px;color:var(--t3);margin-top:3px">+ '+H(pend)+' en camino con "Enviar a Caixa"</div>':'')+'</div>';
+  const box=(t,v,c)=>'<div style="flex:1;background:var(--s1);border-radius:10px;padding:9px"><div style="font-size:9px;color:var(--t3);margin-bottom:3px">'+t+'</div><div style="font-size:14px;font-weight:700;color:'+c+'">'+H(v)+'</div></div>';
+  html+='<div style="padding:0 16px 10px;display:flex;gap:10px">'+box('APORTADO',aportado,'var(--t1)')+box('CONSUMIDO',consumido,'var(--rd)')+box('REEMBOLSADO',reemb,'#30D158')+'</div>';
+  html+='<div style="padding:0 16px 14px"><div style="background:var(--s1);border-radius:10px;padding:9px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:9px;color:var(--t3);margin-bottom:3px">POR REEMBOLSAR (desde ene-2027)</div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+H(porReemb)+'</div></div><div style="font-size:9px;color:var(--t3);text-align:right">La empresa reembolsa<br>el 21 del mes siguiente</div></div>'+(medio>0&&saldo<medio*2?'<div style="margin-top:8px;font-size:11px;color:var(--rd)">Bolso bajo: menos de 2 meses de consumo medio ('+H(medio)+'/mes)</div>':'')+'</div>';
+  html+='<div style="padding:4px 16px 16px"><div style="font-size:9px;color:var(--t3);font-weight:700;letter-spacing:.07em;margin-bottom:6px">MOVIMIENTOS DEL BOLSO</div>';
+  const row=(dt,l,aStr,pos)=>'<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">'+dt+'</div><div style="flex:1;font-size:12px;color:var(--t1)">'+l+'</div><div style="font-size:13px;font-weight:700;color:'+(pos?'#30D158':'var(--rd)')+'">'+(SALDOS_OCULTOS?'••••':aStr)+'</div></div>';
+  let rows='';
+  __bgMovs().forEach(mv=>{
+    if(mv.aporteGasolina)rows+=row(mv.dt,mv.l,mv.a,true);
+    else if(mv.t&&BOLSO_GAS_REEMB_RE.test(mv.l||''))rows+=row(mv.dt,mv.l,mv.a,true);
+    else if(!mv.t&&BOLSO_GAS_RE.test(mv.l||''))rows+=row(mv.dt,mv.l,mv.a,false);
+  });
+  html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos todavia</div>';
+  html+='</div>';
+  html+='<div style="padding:14px 16px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:8px"><button class="btng" onclick="document.getElementById(\'fmov\').style.display=\'none\';openReg(\'CAIXA\');">+ Registrar llenado (descripcion: Gasolina)</button><button class="btng" onclick="reservarBolsoGasolina()">+ Reservar al bolso (monto ya en Caixa)</button></div>';
+  document.getElementById('fmov-c').innerHTML=html;
+}
+function showBolsoGasolinaDetail(){fmovLastFn='gasolina';renderBolsoGasolinaDetail();document.getElementById('fmov').style.display='block';}
 function regCaixaCard(label,amt){
   CAIXA_TDC.disponible=Math.max(0,Math.round((CAIXA_TDC.disponible-amt)*100)/100);
   const dt=new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
@@ -1026,7 +1099,7 @@ async function markPago(id){
     nominaReg=true;
     if(p.nextId){advanceMonth(p.nextId,p.amt);return;}
     regMov('BBVA',p.l,p.amt,true);renderPrevision();
-  }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);if(p.feConsumo>0){regConsumoFE({id:p.id,l:p.l+' (parte del Fondo Emergencia)',amt:p.feConsumo});}} // v175: el dinero del FE sale de BBVA con este envio -> registra el consumo del fondo
+  }else if(p.cat==='enviar'){regMov('BBVA',p.l,p.amt,false);regMov(p.acc,p.l,p.amt,true);if(p.feConsumo>0){regConsumoFE({id:p.id,l:p.l+' (parte del Fondo Emergencia)',amt:p.feConsumo});}if(p.gasolinaAporte>0){regAporteGasolina(p.gasolinaAporte,'Aporte mensual al bolso de gasolina');}} // v175: el dinero del FE sale de BBVA con este envio -> registra el consumo del fondo
   else if(p.cat==='retiro'){regMov('BBVA',p.l,p.amt,false);regMov('EFECTIVO',p.l,p.amt,true);}
   else if(p.reponeFE){regReposicionFE(p);} // v173: el cobro ya salio del Fondo Emergencia en su momento; ejecutar la tarea REPONE el fondo (sin mover caja)
   else{regMov(p.acc,p.l,p.amt,false,undefined,undefined,undefined,undefined,(p.tdcRelease||p.dest)?{noGasto:true,pagoId:p.id}:{pagoId:p.id});if(p.pagaFE){regConsumoFE(p);}if(p.dest){regMov(p.dest,p.l,p.amt,true,undefined,undefined,undefined,undefined,{noGasto:true,pagoId:p.id});}if(p.tdcRelease){CAIXA_TDC.disponible=Math.min(CAIXA_TDC.limite,Math.round((CAIXA_TDC.disponible+p.amt)*100)/100);}
@@ -1754,7 +1827,7 @@ function myBoxMensual(id){return vacacionesVanATRJ(id)?MY_BOX_MENSUAL:0;}
 // Vacaciones acumuladas en TR Jofre: suma de los meses desde dic cuyo "Enviar a TR Jofre" ya se ejecuto (monto = asignacion de Ahorro de ese mes, dinamica). Hoy = 0.
 function vacacionesAcumuladas(){try{let t=0;MONTH_ORDER.forEach(mid=>{if(!vacacionesVanATRJ(mid))return;const tk=(MONTH_PAGOS[mid]||[]).find(p=>p.id===mid+'-eac-tr');if(!tk||!(tk.done||(mid===ACTIVE_ID&&!tareaPendiente(tk))))return;const v=itemsForKey('ahorro',mid).find(x=>x.key==='vacaciones');if(v&&v.a>0)t+=v.a;});return Math.round(t*100)/100;}catch(e){return 0;}}
 function buildMonthPagos(id){
-  const list=[];const p=id+'-';let caixaSum=0,trjSum=0,malaraSum=0,trjaSum=0,feSum=0; // v175: feSum = parte de lo que viaja a Caixa financiada por el Fondo Emergencia
+  const list=[];const p=id+'-';let caixaSum=0,trjSum=0,malaraSum=0,trjaSum=0,feSum=0,gasSum=0; // v175: feSum = parte de lo que viaja a Caixa financiada por el Fondo Emergencia
   // Tareas eliminadas a mano por Jofre desde una cuenta ("TAREAS DEL MES" ->
   // ícono de papelera). Se filtran ACÁ, en el punto donde se generan, para que
   // el monto eliminado tampoco quede sumado en su agregado "Enviar a X" — igual
@@ -1939,7 +2012,10 @@ function buildMonthPagos(id){
   if(carCat){
     itemsForKey('carromoto',id).forEach(x=>{
       if(!(x.a>0))return;
-      handleTaggedItem(x.l,x.tag||'CB',x.a);
+      // v177 -- Gasolina NO es una tarea de gasto: es el APORTE mensual al Bolso Gasolina (fondo dentro de Caixa). Viaja dentro de 'Enviar a Caixa' y suma al bolso al marcarlo;
+      // el gasto real son los llenados que se registran como 'Gasolina' (ver bolsoGasolinaConsumido).
+      if((x.tag||'CB')==='CB'&&/^\s*gasolina\b/i.test(x.l||'')){caixaSum+=x.a;gasSum+=x.a;}
+      else handleTaggedItem(x.l,x.tag||'CB',x.a);
       if((x.tag||'CB')==='CB'&&x.feFin>0)feSum+=x.feFin; // v175: parte del item financiada por el Fondo Emergencia (feFin)
     });
   }else{
@@ -1991,7 +2067,7 @@ function buildMonthPagos(id){
   const inv=ahorroItems.find(x=>/Inversión/.test(x.l));
   if(inv&&inv.a>0)pushDirect('Enviar a IBKR','BBVA',inv.a,{cat:'enviar'});
   {const mb=myBoxMensual(id);if(mb>0&&!removedSet.has(p+'mybox')){caixaSum+=mb;list.push({id:p+'mybox',l:'My Box Jubilación',acc:'CAIXA',amt:mb,cat:'gasto',done:false,dest:'TRJA',sistema:true});}}
-  if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false,feConsumo:feSum>0?Math.round(feSum*100)/100:undefined}); // v175: feConsumo = parte de este envio que sale del Fondo Emergencia
+  if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false,feConsumo:feSum>0?Math.round(feSum*100)/100:undefined,gasolinaAporte:gasSum>0?Math.round(gasSum*100)/100:undefined}); // v175: feConsumo = parte de este envio que sale del Fondo Emergencia
   if(trjSum>0)list.unshift({id:p+'eac-tr',l:'Enviar a TR Jofre',acc:'TRJ',src:'BBVA',amt:Math.round(trjSum*100)/100,cat:'enviar',done:false});
   if(trjaSum>0)list.unshift({id:p+'eac-ja',l:'Enviar a TR J.A.',acc:'TRJA',src:'BBVA',amt:Math.round(trjaSum*100)/100,cat:'enviar',done:false});
   if(malaraSum>0)list.unshift({id:p+'eac-malara',l:'Enviar a Ma. Lara',acc:'BBVA',amt:Math.round(malaraSum*100)/100,cat:'gasto',done:false,sistema:true});
