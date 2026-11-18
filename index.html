@@ -980,16 +980,19 @@ function regConsumoFE(p){__movVirtualFE(p,false);}
 const BOLSO_GAS_RE=/^\s*gasolina\b/i;
 const BOLSO_GAS_REEMB_RE=/^\s*reembolso\s+gasolina/i;
 function __bgMovs(){return MOVS.CAIXA||[];}
+// El bolso arranca en 0 en diciembre-2026: solo cuentan llenados 'Gasolina' de ese mes en adelante (los anteriores a su creacion no restan) y se ignoran las lineas de cuotas '(aplazado)'.
+const BOLSO_GAS_DESDE=2026*12+11;
+function __bgEsConsumo(mv){if(mv.t||mv.aporteGasolina)return false;if(!BOLSO_GAS_RE.test(mv.l||''))return false;if(/aplazado/i.test(mv.l||''))return false;const i=monthIdxAbs(mv.mesId);return i!=null&&i>=BOLSO_GAS_DESDE;}
 function bolsoGasolinaAportado(){let a=0;__bgMovs().forEach(mv=>{if(mv.aporteGasolina&&mv.fondo==='gasolina')a+=Math.abs(moneyFromStr(mv.a))*(mv.t?1:-1);});return Math.round(a*100)/100;}
-function bolsoGasolinaConsumido(){let c=0;__bgMovs().forEach(mv=>{if(mv.t||mv.aporteGasolina)return;if(BOLSO_GAS_RE.test(mv.l||''))c+=Math.abs(moneyFromStr(mv.a));});return Math.round(c*100)/100;}
+function bolsoGasolinaConsumido(){let c=0;__bgMovs().forEach(mv=>{if(__bgEsConsumo(mv))c+=Math.abs(moneyFromStr(mv.a));});return Math.round(c*100)/100;}
 function bolsoGasolinaReembolsado(){let r=0;__bgMovs().forEach(mv=>{if(mv.t&&BOLSO_GAS_REEMB_RE.test(mv.l||''))r+=Math.abs(moneyFromStr(mv.a));});return Math.round(r*100)/100;}
 function bolsoGasolinaSaldo(){return Math.round((bolsoGasolinaAportado()-bolsoGasolinaConsumido()+bolsoGasolinaReembolsado())*100)/100;}
 function bolsoGasolinaAportePend(){let a=0;(typeof PAGOS!=='undefined'?PAGOS:[]).forEach(p=>{if(p.cat==='enviar'&&p.acc==='CAIXA'&&!p.done&&p.gasolinaAporte>0)a+=p.gasolinaAporte;});return Math.round(a*100)/100;}
 // Reservado en Caixa para el Disponible real: lo que ya es del bolso + lo que viaja en el 'Enviar a Caixa' pendiente.
 function bolsoGasolinaReservado(){return Math.round((Math.max(0,bolsoGasolinaSaldo())+bolsoGasolinaAportePend())*100)/100;}
-function bolsoGasolinaConsumoReembolsable(){let c=0;__bgMovs().forEach(mv=>{if(mv.t||mv.aporteGasolina)return;if(!BOLSO_GAS_RE.test(mv.l||''))return;const y=monthYear(mv.mesId);if(y!=null&&y>=2027)c+=Math.abs(moneyFromStr(mv.a));});return Math.round(c*100)/100;}
+function bolsoGasolinaConsumoReembolsable(){let c=0;__bgMovs().forEach(mv=>{if(!__bgEsConsumo(mv))return;const y=monthYear(mv.mesId);if(y!=null&&y>=2027)c+=Math.abs(moneyFromStr(mv.a));});return Math.round(c*100)/100;}
 function bolsoGasolinaPorReembolsar(){return Math.max(0,Math.round((bolsoGasolinaConsumoReembolsable()-bolsoGasolinaReembolsado())*100)/100);}
-function bolsoGasolinaConsumoMensualMedio(){const por={};__bgMovs().forEach(mv=>{if(mv.t||mv.aporteGasolina)return;if(!BOLSO_GAS_RE.test(mv.l||''))return;const k=mv.mesId||'?';por[k]=(por[k]||0)+Math.abs(moneyFromStr(mv.a));});const ks=Object.keys(por);if(!ks.length)return 0;return Math.round(ks.reduce((t,k)=>t+por[k],0)/ks.length*100)/100;}
+function bolsoGasolinaConsumoMensualMedio(){const por={};__bgMovs().forEach(mv=>{if(!__bgEsConsumo(mv))return;const k=mv.mesId||'?';por[k]=(por[k]||0)+Math.abs(moneyFromStr(mv.a));});const ks=Object.keys(por);if(!ks.length)return 0;return Math.round(ks.reduce((t,k)=>t+por[k],0)/ks.length*100)/100;}
 function regAporteGasolina(amt,label){
   const dt=__movDateOverride||new Date();const ds=dt.getDate()+'/'+(dt.getMonth()+1);
   MOVS.CAIXA=MOVS.CAIXA||[];
@@ -1019,7 +1022,7 @@ function renderBolsoGasolinaDetail(){
   __bgMovs().forEach(mv=>{
     if(mv.aporteGasolina)rows+=row(mv.dt,mv.l,mv.a,true);
     else if(mv.t&&BOLSO_GAS_REEMB_RE.test(mv.l||''))rows+=row(mv.dt,mv.l,mv.a,true);
-    else if(!mv.t&&BOLSO_GAS_RE.test(mv.l||''))rows+=row(mv.dt,mv.l,mv.a,false);
+    else if(__bgEsConsumo(mv))rows+=row(mv.dt,mv.l,mv.a,false);
   });
   html+=rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos todavia</div>';
   html+='</div>';
