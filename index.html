@@ -970,9 +970,10 @@ const BOLSO_GAS_DESDE=2026*12+11;
 function __bgEsConsumo(mv){if(mv.t||mv.aporteGasolina)return false;if(!BOLSO_GAS_RE.test(mv.l||''))return false;if(/aplazado/i.test(mv.l||''))return false;const i=monthIdxAbs(mv.mesId);return i!=null&&i>=BOLSO_GAS_DESDE;}
 function bolsoGasolinaAportado(){let a=0;__bgMovs().forEach(mv=>{if(mv.aporteGasolina&&mv.fondo==='gasolina')a+=Math.abs(moneyFromStr(mv.a))*(mv.t?1:-1);});return Math.round(a*100)/100;}
 function bolsoGasolinaConsumido(){let c=0;__bgMovs().forEach(mv=>{if(__bgEsConsumo(mv))c+=Math.abs(moneyFromStr(mv.a));});return Math.round(c*100)/100;}
-function __bgEsIngreso(mv){return !!mv.t&&(!!mv.gasolinaIngreso||BOLSO_GAS_REEMB_RE.test(mv.l||''));}
+function __bgEsReembolsoEmpresa(mv){return !!mv.t&&(!!mv.gasolinaReembolso||BOLSO_GAS_REEMB_RE.test(mv.l||''));} // v180: solo lo que la empresa devuelve baja 'Por reembolsar'
+function __bgEsIngreso(mv){return !!mv.t&&(!!mv.gasolinaIngreso||__bgEsReembolsoEmpresa(mv));} // suma al saldo: reembolso de la empresa, aporte propio o devolucion de ARVAL
 function bolsoGasolinaReembolsado(){let r=0;__bgMovs().forEach(mv=>{if(__bgEsIngreso(mv))r+=Math.abs(moneyFromStr(mv.a));});return Math.round(r*100)/100;} // todo ingreso al fondo (ARVAL, reembolsos de la empresa)
-function bolsoGasolinaIngresos2027(){let r=0;__bgMovs().forEach(mv=>{if(!__bgEsIngreso(mv))return;const i=monthIdxAbs(mv.mesId);if(i!=null&&i>=2027*12)r+=Math.abs(moneyFromStr(mv.a));});return Math.round(r*100)/100;}
+function bolsoGasolinaIngresos2027(){let r=0;__bgMovs().forEach(mv=>{if(!__bgEsReembolsoEmpresa(mv))return;const i=monthIdxAbs(mv.mesId);if(i!=null&&i>=2027*12)r+=Math.abs(moneyFromStr(mv.a));});return Math.round(r*100)/100;} // solo reembolsos de la empresa; el neto corrido arrastra cualquier excedente
 function bolsoGasolinaSaldo(){return Math.round((bolsoGasolinaAportado()-bolsoGasolinaConsumido()+bolsoGasolinaReembolsado())*100)/100;}
 function bolsoGasolinaAportePend(){let a=0;(typeof PAGOS!=='undefined'?PAGOS:[]).forEach(p=>{if(p.cat==='enviar'&&p.acc==='CAIXA'&&!p.done&&p.gasolinaAporte>0)a+=p.gasolinaAporte;});return Math.round(a*100)/100;}
 // Reservado en Caixa para el Disponible real: lo que ya es del bolso + lo que viaja en el 'Enviar a Caixa' pendiente.
@@ -994,12 +995,13 @@ async function registrarLlenadoGasolina(){
   regMov('CAIXA','Gasolina',Math.round(num*100)/100,false);
   saveState();renderBolsoGasolinaDetail();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
 }
-async function registrarIngresoGasolina(){
-  const v=await askAmount('Registrar ingreso','Monto en euros que entra a Caixa y suma a Gasolina');
+async function registrarIngresoGasolina(tipo){
+  const empresa=tipo==='empresa';
+  const v=await askAmount(empresa?'Reembolso de la empresa':'Aporte propio / devolución','Monto en euros que entra a Caixa y suma a Gasolina');
   if(v===null)return;
   const num=parseFloat((v||'').replace(',','.'));
   if(!v||isNaN(num)||num<=0){toast('Monto inválido','var(--rd)');return;}
-  regMov('CAIXA','Ingreso a Gasolina',Math.round(num*100)/100,true,undefined,undefined,undefined,undefined,{noGasto:true,gasolinaIngreso:true});
+  regMov('CAIXA',empresa?'Reembolso Gasolina':'Aporte a Gasolina',Math.round(num*100)/100,true,undefined,undefined,undefined,undefined,empresa?{noGasto:true,gasolinaReembolso:true}:{noGasto:true,gasolinaIngreso:true});
   saveState();renderBolsoGasolinaDetail();if(currentOverlayAcc)renderAccountOverlay(currentOverlayAcc);
 }
 function renderBolsoGasolinaDetail(){
@@ -1014,7 +1016,7 @@ function renderBolsoGasolinaDetail(){
   let rows='';
   ordenarMovsPorFecha(items).forEach(mv=>{const pos=!!mv.t;rows+='<div style="display:flex;gap:9px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)"><div style="font-size:9px;color:var(--t3);width:42px;flex-shrink:0;text-align:center">'+mv.dt+'</div><div style="flex:1;font-size:12px;color:var(--t1)">'+mv.l+'</div><div style="font-size:13px;font-weight:700;color:'+(pos?'#30D158':'var(--rd)')+'">'+(SALDOS_OCULTOS?'••••':mv.a)+'</div></div>';});
   html+=(rows||'<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Sin movimientos todavia</div>')+'</div>';
-  html+='<div style="padding:14px 16px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:8px"><button class="btng" onclick="registrarLlenadoGasolina()">− Registrar llenado</button><button class="btng" onclick="registrarIngresoGasolina()">+ Registrar ingreso</button></div>';
+  html+='<div style="padding:14px 16px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:8px"><button class="btng" onclick="registrarLlenadoGasolina()">− Registrar llenado</button><button class="btng" onclick="registrarIngresoGasolina(&quot;empresa&quot;)">+ Reembolso de la empresa</button><button class="btng" onclick="registrarIngresoGasolina(&quot;propio&quot;)">+ Aporte propio / devolución</button></div>';
   document.getElementById('fmov-c').innerHTML=html;
 }
 function esMovFondoCaixa(mv){return !!mv.aporteGasolina||/\((TDC|aplazado)\)\s*$/i.test(mv.l||'');}
