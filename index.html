@@ -499,6 +499,8 @@ function tieneMovEjecutado(p){
   const a=Math.round(Math.abs(p.amt)*100)/100;
   const movsMatch=list.filter(mv=>{
     if(!movBelongsToMonth(mv,ACTIVE_ID))return false;
+    // v181 -- FIX RAIZ: un movimiento ligado (pagoId) a una tarea de OTRO mes (ej. la Limpieza de diciembre pagada por adelantado en noviembre) no cuenta como ejecucion de las tareas de este mes aunque tenga la misma etiqueta y monto; antes ocultaba como 'ya pagada' la Limpieza 2/2 de noviembre.
+    if(mv.pagoId&&!(MONTH_PAGOS[ACTIVE_ID]||[]).some(t=>t.id===mv.pagoId))return false;
     const mAbs=Math.round(Math.abs(parseEuro(mv.a))*100)/100;
     return mAbs===a && normLabelCG(mv.l)===nl;
   }).length;
