@@ -1807,6 +1807,9 @@ const RENTING_MENSUAL=375; // v99 -- YA NO se usa para la tarea real (ver DET.ca
 // editables: Renting 375 + Gasolina 25 = 400, ver DET.carromoto/
 // CAT_SUFFIX_KEY). Ya NO hay "buffer" oculto: ambos ítems son gasto real,
 // 50/50, a Caixa. Confirmado por Jofre 9-sep-2026.
+// v182 -- desde ENERO 2027 Carro/Moto baja a 250 (Renting 140 + Estacionamiento 110, sin Gasolina) y los 150 sobrantes pasan a Ahorro (550). Los ITEMS de Carro/Moto viven como reglas 'desde ene' (DET_REGLAS_DESDE); estas funciones solo fijan el total de referencia.
+function esDesde2027(id){const i=monthIdxAbs(id);return i!=null&&i>=2027*12;}
+function carroMotoPresupuestoFor(id){return esDesde2027(id)?250:CARRO_MOTO_PRESUPUESTO;}
 const CARRO_MOTO_PRESUPUESTO=400; // v175: asignacion mensual = Renting ARVAL 387,20 + Gasolina 12,80; el total real siempre se recalcula desde DET.carromoto
 function moneyFromStr(s){return parseFloat(String(s).replace(/[^\d,.-]/g,'').replace(',','.'))||0;}
 function ordenarMovsPorFecha(arr){
@@ -2136,7 +2139,7 @@ function ensureMonthDefined(id){
     {id:id+'-gym',l:'Gimnasios',a:gymLast,rule:'Split',drill:true,confirmed:false},
     {id:id+'-rem',l:'Remesas',a:rem,rule:'Solo Jofre',drill:true,confirmed:true},
     {id:id+'-per',l:'Personales',a:perLast,rule:'Split',drill:true,confirmed:false},
-    {id:id+'-car',l:'Carro/Moto',a:CARRO_MOTO_PRESUPUESTO,rule:'50/50',drill:true,confirmed:true},
+    {id:id+'-car',l:'Carro/Moto',a:carroMotoPresupuestoFor(id),rule:'50/50',drill:true,confirmed:true},
     {id:id+'-aho',l:'Ahorro',a:ahoTarget,rule:'50/50',drill:true,confirmed:true}
   ];
   MONTHS[id]={name:meta.name+' '+yr,badge:'Estimado · revisar montos',badgeC:'var(--t3)',badgeBg:'rgba(107,133,168,.14)',jofre:'—',massiel:'—',cuotas:[],partial:true,cats};
@@ -2522,6 +2525,7 @@ function ahorroItemsFromSplit(total,id){
 }
 function ahorroTargetFor(id){
   if(id==='oct')return 400; // excepción confirmada por Jofre
+  if(esDesde2027(id))return 550; // v182: 400 + 150 que dejan de ir a Carro/Moto desde ene-2027 (Jofre 23-nov-2026)
   return 400; // v151: Jofre 3-oct-2026 -- se mantiene en 400 desde noviembre HASTA NUEVO AVISO (no subir a 500). Reparto 40/20/20/20.
 }
 function itemsForKey(key,id){
@@ -2538,7 +2542,14 @@ function itemsForKey(key,id){
     // El override de ahorro se regenera entero por ahorroItemsFromSplit()
     // (ids/etiquetas propios, no calcados de DET.ahorro) — reconciliar contra
     // la plantilla base aquí duplicaría fondos. Se mantiene 100% autoritativo.
-    if(ov)return ov;
+    if(ov){
+      // v182 -- FIX RAIZ: los meses ya materializados (ene-2027+) conservaban el reparto de 400. Si el override es 100% derivado del reparto (sin ajustes manuales) y su total no cuadra con el objetivo del mes, se regenera.
+      if(esDesde2027(id)&&ov.length&&ov.every(x=>/^aho-(emerg|fmutuo|vac|inv)-/.test(x.id||'')&&!x.man)){
+        const t=ahorroTargetFor(id);
+        if(Math.abs(ov.reduce((a,x)=>a+(x.a||0),0)-t)>0.005){ov.length=0;ahorroItemsFromSplit(t,id).forEach(x=>ov.push(x));}
+      }
+      return ov;
+    }
     return (DET.ahorro||[]).map(x=>Object.assign({},x));
   }
   if(key==='gimnasios'){
@@ -3494,7 +3505,7 @@ const TAREA_CAT_RULES=[
   {re:/On Air|^Sweat|^Odontolog/i,cat:'Salud'},
   {re:/^GENUA|CB Xirivella|^Deporte|^Fisiosalud/i,cat:'Deporte'},
   {re:/^Claude/i,cat:'Trabajo'},
-  {re:/^Renting|^Gasolina/i,cat:'Carro/Moto'},
+  {re:/^Renting|^Gasolina|^Estacionamiento/i,cat:'Carro/Moto'},
   {re:/^Vacaciones/i,cat:'Compartir Familiar'},
   {re:/^Hotel|Restante - Hotel/i,cat:'Vacaciones'},
   {re:/^Remesa/i,cat:'Remesas'},
@@ -4067,6 +4078,7 @@ function gastoFijoVariable(id,cats){
 const CAT_ASIGNACION={'Carro/Moto':400}; // v175: Renting ARVAL 387,20 + Gasolina 12,80
 function asignacionCategoria(cat,id){
   if(cat==='Ahorro'||cat==='Fondo Emergencia')return null; // ahorrar de más no es sobregasto: sin semáforo
+  if(cat==='Carro/Moto')return carroMotoPresupuestoFor(id); // v182
   if(CAT_ASIGNACION[cat]>0)return CAT_ASIGNACION[cat];
   const prev=categoriaPrevistoMes(cat,id);
   if(prev>0)return prev;
