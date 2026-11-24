@@ -2739,6 +2739,10 @@ function badgeForTotal(total){
 // v175 -- feFin = parte de un item financiada por la asignacion de Fondo Emergencia del mes (ej. Renting prop. Nov). El item SIGUE sumando al total de su categoria (control real);
 // solo se descuenta del REPARTO (repartoMes) porque esa plata ya esta en Ahorro > Fondo Emergencia y contarla dos veces cobraria de mas.
 function sumFeFin(items){return items.reduce((s,x)=>s+(x.feFin||0),0);}
+// v183 -- FIX RAIZ: lo que el Fondo Emergencia financia en Carro/Moto (feFin) se contaba DOS veces en las vistas de categorias: en Carro/Moto (560) y de nuevo en Ahorro (400) => 960 en vez de 800. El reparto en efectivo ya lo descontaba (v175), las vistas no. Ahora Ahorro se muestra NETO de lo financiado por el FE (el libro del FE sigue con el aporte bruto: aportado 160, consumido 160).
+function feFinDelMes(id){return Math.round(sumFeFin(itemsForKey('carromoto',id))*100)/100;}
+function catAmtNeto(c,id){const key=keyMap[c.id];let a=key?itemsForKey(key,id).reduce((s,x)=>s+x.a,0):c.a;if(key==='ahorro')a=Math.max(0,Math.round((a-feFinDelMes(id))*100)/100);return a;}
+function feNetoItem(id,x){return /Fondo Emergencia/i.test(x.l||'')||x.key==='emergencia'?Math.max(0,Math.round((x.a-feFinDelMes(id))*100)/100):x.a;}
 function recalcMonthTotals(id){
   const m=MONTHS[id];if(!m)return;
   // Refrescar c.a de cada categoría desde su detalle real (efecto secundario
@@ -2781,7 +2785,7 @@ function openMov(id){
    document.getElementById('mov-jofre-total').textContent=fmtAporte(_ap.jofre);
    document.getElementById('mov-massiel-total').textContent=fmtAporte(_ap.massiel);}
   const catsView=d.cats.map(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);return c;});
-  document.getElementById('mov-cats').innerHTML=catsView.map(c=>{const isCustom=c.id.indexOf('custom-')===0;return `<div class="fxr" onclick="${c.drill?'showFx(\''+c.id+'\',\''+c.l+'\')':'void(0)'}"><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--t1)" id="lblc-${c.id}">${c.l}${c.confirmed===false?' <span style="font-size:9px;font-weight:700;color:var(--gd);background:var(--gd2);padding:1px 6px;border-radius:5px;vertical-align:middle">SIN CONFIRMAR</span>':''}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${c.rule}</div></div><div style="font-size:14px;font-weight:700;color:${c.confirmed===false?'var(--gd)':'var(--t1)'};margin-right:8px" id="ca-${c.id}">${fmtE(c.a)}</div>${c.drill?'<i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i>':'<button onclick="event.stopPropagation();openEdit(\''+c.id+'\',\''+c.l+'\','+c.a+')" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button>'}${isCustom?'<button onclick="event.stopPropagation();deleteCat(\''+c.id+'\',\''+c.l.replace(/'/g,"\\\\'")+'\')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px"><i class="ti ti-trash" style="font-size:13px;color:var(--rd)"></i></button>':''}</div>`;}).join('')+`<div style="padding:10px 0 4px"><button class="btng" style="background:var(--s2);color:var(--t1);border:1px dashed var(--bd2)" onclick="openAddItem('cat')">+ Agregar gasto fijo</button></div>`;
+  document.getElementById('mov-cats').innerHTML=catsView.map(c=>{const isCustom=c.id.indexOf('custom-')===0;return `<div class="fxr" onclick="${c.drill?'showFx(\''+c.id+'\',\''+c.l+'\')':'void(0)'}"><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--t1)" id="lblc-${c.id}">${c.l}${c.confirmed===false?' <span style="font-size:9px;font-weight:700;color:var(--gd);background:var(--gd2);padding:1px 6px;border-radius:5px;vertical-align:middle">SIN CONFIRMAR</span>':''}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${c.rule}</div></div><div style="font-size:14px;font-weight:700;color:${c.confirmed===false?'var(--gd)':'var(--t1)'};margin-right:8px" id="ca-${c.id}">${fmtE(catAmtNeto(c,id))}</div>${c.drill?'<i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i>':'<button onclick="event.stopPropagation();openEdit(\''+c.id+'\',\''+c.l+'\','+c.a+')" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button>'}${isCustom?'<button onclick="event.stopPropagation();deleteCat(\''+c.id+'\',\''+c.l.replace(/'/g,"\\\\'")+'\')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px"><i class="ti ti-trash" style="font-size:13px;color:var(--rd)"></i></button>':''}</div>`;}).join('')+`<div style="padding:10px 0 4px"><button class="btng" style="background:var(--s2);color:var(--t1);border:1px dashed var(--bd2)" onclick="openAddItem('cat')">+ Agregar gasto fijo</button></div>`;
   const cuotasView=cuotasFor(id);
   const customCount=(d.cuotas||[]).length;
   const customStart=cuotasView.length-customCount;
@@ -3427,7 +3431,7 @@ function massielViewActive(){return isMassielRole()||(document.getElementById('p
 const CATS_COLORS={'Mercado':'#30D158','Baby J.A.':'#FF375F','Deporte':'#0A84FF','Salud':'#FF453A','Casa':'#FF9F0A','Trabajo':'#BF5AF2','Carro/Moto':'#64D2FF','Remesas':'#FFD60A','Compartir Familiar':'#A855F7','Personales':'#EC4899','Ahorro':'#64D2FF','Adicionales':'#6B85A8','Fondo Emergencia':'#30D158'};
 function totalGastoMes(id){
   const d=MONTHS[id];if(!d)return 0;
-  return (d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0);
+  return (d.cats||[]).reduce((s,c)=>s+catAmtNeto(c,id),0);
 }
 function catsBySuffix(id){
   const d=MONTHS[id];const map={};
@@ -3605,7 +3609,7 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
         if(/Fondo Emergencia/i.test(x.l))hecho=true; // v97 -- vive en BBVA, disponible de inmediato (igual que Fondo Mutuo), ya no depende de una tarea "Enviar"
         else if(/Inversión|Inversion|IBKR|Bolsa|Hipoteca/i.test(x.l))hecho=tareaEnviarDone(id,/IBKR/i);
         else hecho=tareaEnviarDone(id,new RegExp(x.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'));
-        if(hecho)out.push({l:x.l,a:x.a,drill:null});
+        if(hecho)out.push({l:x.l,a:feNetoItem(id,x),drill:null}); // v183: neto de lo que financia Carro/Moto
       });
     }else if(cat==='Compartir Familiar'){
       // Fondo Mutuo: esto es la ASIGNACIÓN mensual (v67 -- ya disponible en
@@ -3694,7 +3698,7 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
     // Familiar acá, quedan como categorías propias (ver D8).
     itemsForKey('ahorro',id).forEach(x=>{
       if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
-      out.push({l:x.l,a:x.a,drill:null});
+      out.push({l:x.l,a:feNetoItem(id,x),drill:null}); // v183: neto de lo que financia Carro/Moto
     });
   }else if(cat==='Personales'){
     itemsForKey('personales',id).filter(x=>x.id!=='per1'&&x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
@@ -4202,7 +4206,7 @@ function showMaMonthDetail(id,backTo){
   // estimación (previsión), porque aún no hay ejecución. Así, en el mes actual
   // Massiel ve el gasto real (0 si nada se ejecutó), no el presupuesto.
   const total=esMesFuturo(id)
-    ?(d.cats||[]).reduce((s,c)=>{const key=keyMap[c.id];return s+(key?itemsForKey(key,id).reduce((ss,x)=>ss+x.a,0):c.a);},0)
+    ?(d.cats||[]).reduce((s,c)=>s+catAmtNeto(c,id),0)
     :mesGastoTotalReal(id);
   // v51 — CORRECCIÓN de v49: Massiel NO debe ver montos partidos a la mitad
   // en NADA — el criterio de Jofre es que ella vea el monto TOTAL real de
@@ -4374,7 +4378,7 @@ function updPrevCard(){
   const totalAll=PAGOS.filter(p=>p.acc!=='MASSIEL').length+MASSIEL_TASKS.length+1;
   const pct=Math.max(0,Math.round(((totalAll-totalPend)/totalAll)*100));
   const wrap=document.getElementById('prev-active-wrap');if(!wrap)return;
-  const total=active.cats.reduce((s,c)=>s+c.a,0);
+  const total=active.cats.reduce((s,c)=>s+catAmtNeto(c,ACTIVE_ID),0); // v183
   const pendTxt=[totalPend>0?totalPend+' pagos pendientes':null,nominaPend?'nómina por registrar':null].filter(Boolean).join(' · ')||'✓ Todas las tareas completadas';
   wrap.innerHTML=`<div class="tp" onclick="openMov('${ACTIVE_ID}')" style="background:rgba(255,159,10,.06);border-color:rgba(255,159,10,.25);cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><div style="font-size:9px;color:var(--or);font-weight:700;letter-spacing:.09em;margin-bottom:4px">${active.name.toUpperCase()} — EN CURSO</div><div style="font-size:30px;font-weight:800;color:var(--t1);line-height:1">€${total.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0,useGrouping:true})}</div></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(255,159,10,.15);display:flex;align-items:center;justify-content:center"><i class="ti ti-clock-hour-3" style="font-size:20px;color:var(--or)"></i></div></div><div style="font-size:11px;color:var(--or);opacity:.85;margin-bottom:8px">${pendTxt}</div><div style="height:4px;border-radius:2px;background:rgba(255,159,10,.15);overflow:hidden"><div class="bfl" style="width:${pct}%;background:var(--or)"></div></div></div>`;
 }
