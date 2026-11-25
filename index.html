@@ -782,7 +782,7 @@ function auditarCuenta(acc,monthId){
   const cierrePrevio=mesAnterior&&MONTH_CIERRE[mesAnterior]?MONTH_CIERRE[mesAnterior][acc]:undefined;
   const apertura=cierrePrevio!=null?cierrePrevio:(SALDO_APERTURA[acc]||0);
   const {entradas,salidas,neto}=sumaNetaMovsMes(acc,monthId);
-  const cierreEsteMes=MONTH_CIERRE[monthId]?MONTH_CIERRE[monthId][acc]:undefined;
+  const cierreEsteMes=(monthId!==ACTIVE_ID&&MONTH_CIERRE[monthId])?MONTH_CIERRE[monthId][acc]:undefined; // v185: el mes activo aun no esta cerrado
   const saldo=cierreEsteMes!=null?Math.round(cierreEsteMes*100)/100:Math.round((BAL[acc]||0)*100)/100;
   // Esperado = apertura (cierre del mes anterior, o SALDO_APERTURA) + neto del
   // mes. Desfase real = saldo − esperado, acotado a este mes.
@@ -2189,7 +2189,7 @@ async function advanceMonth(newId,nominaAmt){
   // v143 -- cierre automatico por cuenta del mes que termina, ANTES de registrar la nomina
   // del mes nuevo (asi el cierre es el saldo real previo a la nomina). No pisa un cierre
   // ya confirmado a mano.
-  if(!MONTH_CIERRE[oldId])cerrarMes(oldId,null,{noSave:true});
+  cerrarMes(oldId,null,{noSave:true}); // v185: siempre recalcula al avanzar (antes 'if(!MONTH_CIERRE[oldId])' dejaba un cierre prematuro congelando saldos viejos)
   HISTORIAL.unshift({id:oldId,name:MONTHS[oldId].name,jofre:MONTHS[oldId].jofre,massiel:MONTHS[oldId].massiel});
   ensureMonthDefined(newId);
   // TC del mes (v56): se busca y congela ACÁ, al registrar la nómina / iniciar
