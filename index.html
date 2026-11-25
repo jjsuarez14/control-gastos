@@ -1857,7 +1857,7 @@ function myBoxMensual(id){return vacacionesVanATRJ(id)?MY_BOX_MENSUAL:0;}
 // Vacaciones acumuladas en TR Jofre: suma de los meses desde dic cuyo "Enviar a TR Jofre" ya se ejecuto (monto = asignacion de Ahorro de ese mes, dinamica). Hoy = 0.
 function vacacionesAcumuladas(){try{let t=0;MONTH_ORDER.forEach(mid=>{if(!vacacionesVanATRJ(mid))return;const tk=(MONTH_PAGOS[mid]||[]).find(p=>p.id===mid+'-eac-tr');if(!tk||!(tk.done||(mid===ACTIVE_ID&&!tareaPendiente(tk))))return;const v=itemsForKey('ahorro',mid).find(x=>x.key==='vacaciones');if(v&&v.a>0)t+=v.a;});return Math.round(t*100)/100;}catch(e){return 0;}}
 function buildMonthPagos(id){
-  const list=[];const p=id+'-';let caixaSum=0,trjSum=0,malaraSum=0,trjaSum=0,feSum=0,gasSum=0; // v175: feSum = parte de lo que viaja a Caixa financiada por el Fondo Emergencia
+  const list=[];const p=id+'-';let caixaSum=0,trjSum=0,malaraSum=0,trjaSum=0,gasSum=0;
   // Tareas eliminadas a mano por Jofre desde una cuenta ("TAREAS DEL MES" ->
   // ícono de papelera). Se filtran ACÁ, en el punto donde se generan, para que
   // el monto eliminado tampoco quede sumado en su agregado "Enviar a X" — igual
@@ -2046,7 +2046,6 @@ function buildMonthPagos(id){
       // el gasto real son los llenados que se registran como 'Gasolina' (ver bolsoGasolinaConsumido).
       if((x.tag||'CB')==='CB'&&/^\s*gasolina\b/i.test(x.l||'')){caixaSum+=x.a;gasSum+=x.a;}
       else handleTaggedItem(x.l,x.tag||'CB',x.a);
-      if((x.tag||'CB')==='CB'&&x.feFin>0)feSum+=x.feFin; // v175: parte del item financiada por el Fondo Emergencia (feFin)
     });
   }else{
     const rentingLegacy=ahorroItems.find(x=>x.l==='Renting');
@@ -2097,7 +2096,7 @@ function buildMonthPagos(id){
   const inv=ahorroItems.find(x=>/Inversión/.test(x.l));
   if(inv&&inv.a>0)pushDirect('Enviar a IBKR','IBKR',inv.a,{cat:'enviar',src:'BBVA'}); // v184: destino IBKR, origen BBVA (antes acc:'BBVA' => movimiento BBVA->BBVA de neto 0: el saldo de BBVA quedaba inflado)
   {const mb=myBoxMensual(id);if(mb>0&&!removedSet.has(p+'mybox')){caixaSum+=mb;list.push({id:p+'mybox',l:'My Box Jubilación',acc:'CAIXA',amt:mb,cat:'gasto',done:false,dest:'TRJA',sistema:true});}}
-  if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false,feConsumo:feSum>0?Math.round(feSum*100)/100:undefined,gasolinaAporte:gasSum>0?Math.round(gasSum*100)/100:undefined}); // v175: feConsumo = parte de este envio que sale del Fondo Emergencia
+  if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false,gasolinaAporte:gasSum>0?Math.round(gasSum*100)/100:undefined});
   if(trjSum>0)list.unshift({id:p+'eac-tr',l:'Enviar a TR Jofre',acc:'TRJ',src:'BBVA',amt:Math.round(trjSum*100)/100,cat:'enviar',done:false});
   if(trjaSum>0)list.unshift({id:p+'eac-ja',l:'Enviar a TR J.A.',acc:'TRJA',src:'BBVA',amt:Math.round(trjaSum*100)/100,cat:'enviar',done:false});
   if(malaraSum>0)list.unshift({id:p+'eac-malara',l:'Enviar a Ma. Lara',acc:'BBVA',amt:Math.round(malaraSum*100)/100,cat:'gasto',done:false,sistema:true});
@@ -2532,6 +2531,7 @@ function itemsForKey(key,id){
   if(key==='servicios')return serviciosFor(id);
   const ov=DET_MONTH_OVERRIDES[key]&&DET_MONTH_OVERRIDES[key][id];
   if(key==='colegio')migrateLegacyColegioIds(ov);
+  if(key==='carromoto'&&Array.isArray(ov))migrarFeFinCarro(ov); // v186
   if(key==='personales'&&Array.isArray(ov)){
     // Claude se mudó de Personales a Servicios > Suscripciones. Si una foto
     // vieja todavía trae "per4" (Claude Code), se retira para no contarlo
@@ -2736,13 +2736,10 @@ function badgeForTotal(total){
   if(total<=3500)return{badge:'Ajustado',badgeC:'var(--or)',badgeBg:'var(--or2)'};
   return{badge:'Crítico',badgeC:'var(--rd)',badgeBg:'var(--rd2)'};
 }
-// v175 -- feFin = parte de un item financiada por la asignacion de Fondo Emergencia del mes (ej. Renting prop. Nov). El item SIGUE sumando al total de su categoria (control real);
-// solo se descuenta del REPARTO (repartoMes) porque esa plata ya esta en Ahorro > Fondo Emergencia y contarla dos veces cobraria de mas.
-function sumFeFin(items){return items.reduce((s,x)=>s+(x.feFin||0),0);}
-// v183 -- FIX RAIZ: lo que el Fondo Emergencia financia en Carro/Moto (feFin) se contaba DOS veces en las vistas de categorias: en Carro/Moto (560) y de nuevo en Ahorro (400) => 960 en vez de 800. El reparto en efectivo ya lo descontaba (v175), las vistas no. Ahora Ahorro se muestra NETO de lo financiado por el FE (el libro del FE sigue con el aporte bruto: aportado 160, consumido 160).
-function feFinDelMes(id){return Math.round(sumFeFin(itemsForKey('carromoto',id))*100)/100;}
-function catAmtNeto(c,id){const key=keyMap[c.id];let a=key?itemsForKey(key,id).reduce((s,x)=>s+x.a,0):c.a;if(key==='ahorro')a=Math.max(0,Math.round((a-feFinDelMes(id))*100)/100);return a;}
-function feNetoItem(id,x){return /Fondo Emergencia/i.test(x.l||'')||x.key==='emergencia'?Math.max(0,Math.round((x.a-feFinDelMes(id))*100)/100):x.a;}
+// v186 -- FIX RAIZ (25-nov-2026): se elimina el neteo del Fondo Emergencia (feFin, v175/v183). Cuando el FE financia Carro/Moto se MUEVE LA ASIGNACION en los datos (Carro/Moto sube, el item de Ahorro baja o desaparece) y despues se repone: asi lo que se muestra, lo que hay dentro y el reparto salen de la MISMA lista de items, sin descontar nada en las vistas (el neteo en vistas dejaba Ahorro en 80 con 240 dentro y el reparto en 640 en vez de 800).
+function catAmt(c,id){const key=keyMap[c.id];return key?itemsForKey(key,id).reduce((s,x)=>s+x.a,0):c.a;}
+// v186 -- limpia el marcador feFin (ya no existe) de los items de Carro/Moto y su leyenda
+function migrarFeFinCarro(ov){ov.forEach(x=>{if(x&&x.feFin!=null){delete x.feFin;if(typeof x.d==='string')x.d=x.d.replace(' · cubierto con el Fondo Emergencia','').replace('sobrante de los 160 del FE','adicionales');}});}
 function recalcMonthTotals(id){
   const m=MONTHS[id];if(!m)return;
   // Refrescar c.a de cada categoría desde su detalle real (efecto secundario
@@ -2785,7 +2782,7 @@ function openMov(id){
    document.getElementById('mov-jofre-total').textContent=fmtAporte(_ap.jofre);
    document.getElementById('mov-massiel-total').textContent=fmtAporte(_ap.massiel);}
   const catsView=d.cats.map(c=>{const key=keyMap[c.id];if(key)c.a=itemsForKey(key,id).reduce((s,x)=>s+x.a,0);return c;});
-  document.getElementById('mov-cats').innerHTML=catsView.map(c=>{const isCustom=c.id.indexOf('custom-')===0;return `<div class="fxr" onclick="${c.drill?'showFx(\''+c.id+'\',\''+c.l+'\')':'void(0)'}"><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--t1)" id="lblc-${c.id}">${c.l}${c.confirmed===false?' <span style="font-size:9px;font-weight:700;color:var(--gd);background:var(--gd2);padding:1px 6px;border-radius:5px;vertical-align:middle">SIN CONFIRMAR</span>':''}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${c.rule}</div></div><div style="font-size:14px;font-weight:700;color:${c.confirmed===false?'var(--gd)':'var(--t1)'};margin-right:8px" id="ca-${c.id}">${fmtE(catAmtNeto(c,id))}</div>${c.drill?'<i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i>':'<button onclick="event.stopPropagation();openEdit(\''+c.id+'\',\''+c.l+'\','+c.a+')" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button>'}${isCustom?'<button onclick="event.stopPropagation();deleteCat(\''+c.id+'\',\''+c.l.replace(/'/g,"\\\\'")+'\')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px"><i class="ti ti-trash" style="font-size:13px;color:var(--rd)"></i></button>':''}</div>`;}).join('')+`<div style="padding:10px 0 4px"><button class="btng" style="background:var(--s2);color:var(--t1);border:1px dashed var(--bd2)" onclick="openAddItem('cat')">+ Agregar gasto fijo</button></div>`;
+  document.getElementById('mov-cats').innerHTML=catsView.map(c=>{const isCustom=c.id.indexOf('custom-')===0;return `<div class="fxr" onclick="${c.drill?'showFx(\''+c.id+'\',\''+c.l+'\')':'void(0)'}"><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--t1)" id="lblc-${c.id}">${c.l}${c.confirmed===false?' <span style="font-size:9px;font-weight:700;color:var(--gd);background:var(--gd2);padding:1px 6px;border-radius:5px;vertical-align:middle">SIN CONFIRMAR</span>':''}</div><div style="font-size:10px;color:var(--t3);margin-top:2px">${c.rule}</div></div><div style="font-size:14px;font-weight:700;color:${c.confirmed===false?'var(--gd)':'var(--t1)'};margin-right:8px" id="ca-${c.id}">${fmtE(catAmt(c,id))}</div>${c.drill?'<i class="ti ti-chevron-right" style="font-size:13px;color:var(--t3)"></i>':'<button onclick="event.stopPropagation();openEdit(\''+c.id+'\',\''+c.l+'\','+c.a+')" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-pencil" style="font-size:13px;color:var(--t2)"></i></button>'}${isCustom?'<button onclick="event.stopPropagation();deleteCat(\''+c.id+'\',\''+c.l.replace(/'/g,"\\\\'")+'\')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:6px"><i class="ti ti-trash" style="font-size:13px;color:var(--rd)"></i></button>':''}</div>`;}).join('')+`<div style="padding:10px 0 4px"><button class="btng" style="background:var(--s2);color:var(--t1);border:1px dashed var(--bd2)" onclick="openAddItem('cat')">+ Agregar gasto fijo</button></div>`;
   const cuotasView=cuotasFor(id);
   const customCount=(d.cuotas||[]).length;
   const customStart=cuotasView.length-customCount;
@@ -3272,7 +3269,7 @@ function repartoMes(id){
       });
       return;
     }
-    const sp=splitAmount(c.rule,c.a-(key?sumFeFin(itemsForKey(key,id)):0)); // v175: descuenta lo financiado por el Fondo Emergencia (ya esta en Ahorro)
+    const sp=splitAmount(c.rule,c.a); // v186: sin neteo del FE (la asignacion ya se movio en los items)
     if(sp){jofre+=sp.jofre;massiel+=sp.massiel;}
   });
   // Cuotas: cada una por su responsabilidad real (tags)
@@ -3431,7 +3428,7 @@ function massielViewActive(){return isMassielRole()||(document.getElementById('p
 const CATS_COLORS={'Mercado':'#30D158','Baby J.A.':'#FF375F','Deporte':'#0A84FF','Salud':'#FF453A','Casa':'#FF9F0A','Trabajo':'#BF5AF2','Carro/Moto':'#64D2FF','Remesas':'#FFD60A','Compartir Familiar':'#A855F7','Personales':'#EC4899','Ahorro':'#64D2FF','Adicionales':'#6B85A8','Fondo Emergencia':'#30D158'};
 function totalGastoMes(id){
   const d=MONTHS[id];if(!d)return 0;
-  return (d.cats||[]).reduce((s,c)=>s+catAmtNeto(c,id),0);
+  return (d.cats||[]).reduce((s,c)=>s+catAmt(c,id),0);
 }
 function catsBySuffix(id){
   const d=MONTHS[id];const map={};
@@ -3609,7 +3606,7 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
         if(/Fondo Emergencia/i.test(x.l))hecho=true; // v97 -- vive en BBVA, disponible de inmediato (igual que Fondo Mutuo), ya no depende de una tarea "Enviar"
         else if(/Inversión|Inversion|IBKR|Bolsa|Hipoteca/i.test(x.l))hecho=tareaEnviarDone(id,/IBKR/i);
         else hecho=tareaEnviarDone(id,new RegExp(x.l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'));
-        if(hecho)out.push({l:x.l,a:feNetoItem(id,x),drill:null}); // v183: neto de lo que financia Carro/Moto
+        if(hecho)out.push({l:x.l,a:x.a,drill:null});
       });
     }else if(cat==='Compartir Familiar'){
       // Fondo Mutuo: esto es la ASIGNACIÓN mensual (v67 -- ya disponible en
@@ -3698,7 +3695,7 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
     // Familiar acá, quedan como categorías propias (ver D8).
     itemsForKey('ahorro',id).forEach(x=>{
       if(x.key==='vacaciones'||/Renting|Fondo Mutuo/i.test(x.l)||!(x.a>0))return;
-      out.push({l:x.l,a:feNetoItem(id,x),drill:null}); // v183: neto de lo que financia Carro/Moto
+      out.push({l:x.l,a:x.a,drill:null});
     });
   }else if(cat==='Personales'){
     itemsForKey('personales',id).filter(x=>x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
@@ -4206,7 +4203,7 @@ function showMaMonthDetail(id,backTo){
   // estimación (previsión), porque aún no hay ejecución. Así, en el mes actual
   // Massiel ve el gasto real (0 si nada se ejecutó), no el presupuesto.
   const total=esMesFuturo(id)
-    ?(d.cats||[]).reduce((s,c)=>s+catAmtNeto(c,id),0)
+    ?(d.cats||[]).reduce((s,c)=>s+catAmt(c,id),0)
     :mesGastoTotalReal(id);
   // v51 — CORRECCIÓN de v49: Massiel NO debe ver montos partidos a la mitad
   // en NADA — el criterio de Jofre es que ella vea el monto TOTAL real de
@@ -4378,7 +4375,7 @@ function updPrevCard(){
   const totalAll=PAGOS.filter(p=>p.acc!=='MASSIEL').length+MASSIEL_TASKS.length+1;
   const pct=Math.max(0,Math.round(((totalAll-totalPend)/totalAll)*100));
   const wrap=document.getElementById('prev-active-wrap');if(!wrap)return;
-  const total=active.cats.reduce((s,c)=>s+catAmtNeto(c,ACTIVE_ID),0); // v183
+  const total=active.cats.reduce((s,c)=>s+catAmt(c,ACTIVE_ID),0); // v186
   const pendTxt=[totalPend>0?totalPend+' pagos pendientes':null,nominaPend?'nómina por registrar':null].filter(Boolean).join(' · ')||'✓ Todas las tareas completadas';
   wrap.innerHTML=`<div class="tp" onclick="openMov('${ACTIVE_ID}')" style="background:rgba(255,159,10,.06);border-color:rgba(255,159,10,.25);cursor:pointer"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><div style="font-size:9px;color:var(--or);font-weight:700;letter-spacing:.09em;margin-bottom:4px">${active.name.toUpperCase()} — EN CURSO</div><div style="font-size:30px;font-weight:800;color:var(--t1);line-height:1">€${total.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:0,useGrouping:true})}</div></div><div style="width:38px;height:38px;border-radius:50%;background:rgba(255,159,10,.15);display:flex;align-items:center;justify-content:center"><i class="ti ti-clock-hour-3" style="font-size:20px;color:var(--or)"></i></div></div><div style="font-size:11px;color:var(--or);opacity:.85;margin-bottom:8px">${pendTxt}</div><div style="height:4px;border-radius:2px;background:rgba(255,159,10,.15);overflow:hidden"><div class="bfl" style="width:${pct}%;background:var(--or)"></div></div></div>`;
 }
