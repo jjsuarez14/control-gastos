@@ -2095,7 +2095,7 @@ function buildMonthPagos(id){
   const vac=ahorroItems.find(x=>x.key==='vacaciones');
   if(vac&&vac.a>0){if(vacacionesVanATRJ(id))trjSum+=vac.a;else trjaSum+=vac.a;}
   const inv=ahorroItems.find(x=>/Inversión/.test(x.l));
-  if(inv&&inv.a>0)pushDirect('Enviar a IBKR','BBVA',inv.a,{cat:'enviar'});
+  if(inv&&inv.a>0)pushDirect('Enviar a IBKR','IBKR',inv.a,{cat:'enviar',src:'BBVA'}); // v184: destino IBKR, origen BBVA (antes acc:'BBVA' => movimiento BBVA->BBVA de neto 0: el saldo de BBVA quedaba inflado)
   {const mb=myBoxMensual(id);if(mb>0&&!removedSet.has(p+'mybox')){caixaSum+=mb;list.push({id:p+'mybox',l:'My Box Jubilación',acc:'CAIXA',amt:mb,cat:'gasto',done:false,dest:'TRJA',sistema:true});}}
   if(caixaSum>0)list.unshift({id:p+'eac-cb',l:'Enviar a Caixa',acc:'CAIXA',src:'BBVA',amt:Math.round(caixaSum*100)/100,cat:'enviar',done:false,feConsumo:feSum>0?Math.round(feSum*100)/100:undefined,gasolinaAporte:gasSum>0?Math.round(gasSum*100)/100:undefined}); // v175: feConsumo = parte de este envio que sale del Fondo Emergencia
   if(trjSum>0)list.unshift({id:p+'eac-tr',l:'Enviar a TR Jofre',acc:'TRJ',src:'BBVA',amt:Math.round(trjSum*100)/100,cat:'enviar',done:false});
@@ -3504,7 +3504,7 @@ function fijoCasaEjecutado(id,pattern){
 // Adicionales solo si llegaran sueltas. "Enviar a Ma. Lara" agrupa Arriendo+Luz
 // (Casa) — se trata en el desglose de ejecución, no acá.
 const TAREA_CAT_RULES=[
-  {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^Orange|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Limpieza|^YouTube/i,cat:'Casa'},
+  {re:/^Arriendo|^Luz$|^Agua$|^Awa$|^TuAwa$|^DIGI|^Orange|^T\.I\.|^iCloud|^Netflix|^Amazon Prime|^Disney\+|^Sky|^HBO|^Limpieza|^YouTube/i,cat:'Casa'}, // v184: Sky Showtime / HBO Max son Servicios (antes caian en Adicionales al pagarse)
   {re:/^Colegio/i,cat:'Baby J.A.'},
   {re:/On Air|^Sweat|^Odontolog/i,cat:'Salud'},
   {re:/^GENUA|CB Xirivella|^Deporte|^Fisiosalud/i,cat:'Deporte'},
@@ -3513,7 +3513,7 @@ const TAREA_CAT_RULES=[
   {re:/^Vacaciones/i,cat:'Compartir Familiar'},
   {re:/^Hotel|Restante - Hotel/i,cat:'Vacaciones'},
   {re:/^Remesa/i,cat:'Remesas'},
-  {re:/^Barber|^Uñas|^Bono|Transporte|Peluquer/i,cat:'Personales'}
+  {re:/^Barber|^Uñas|^Bono|Transporte|Peluquer|^Nutricionista/i,cat:'Personales'} // v184: Nutricionista es item de Personales (plan) -- antes caia en Adicionales al pagarse
 ];
 function categoriaDeTarea(label){
   const r=TAREA_CAT_RULES.find(x=>x.re.test(label));
@@ -3701,7 +3701,7 @@ function categoriaFijosDetalle(cat,id,forzarPlan){
       out.push({l:x.l,a:feNetoItem(id,x),drill:null}); // v183: neto de lo que financia Carro/Moto
     });
   }else if(cat==='Personales'){
-    itemsForKey('personales',id).filter(x=>x.id!=='per1'&&x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
+    itemsForKey('personales',id).filter(x=>x.id!=='per6').filter(x=>!maovEsVistaMassiel||x.group!=='jofre').forEach(x=>out.push({l:x.l,a:x.a,drill:null}));
   }
   const _antesCuotas=out.length;
   cuotasFor(id).filter(c=>!(c.tdcRelease||c.liquidacion)).filter(c=>(c.tags||[]).includes(cat)).filter(c=>!maovEsVistaMassiel||!(c.tags||[]).includes('Solo Jofre')).forEach(c=>{
